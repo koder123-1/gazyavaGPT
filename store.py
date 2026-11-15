@@ -605,7 +605,17 @@ class PostgresStore:
             "max_inactive_connection_lifetime": 60,
         }
         if self._ssl:
-            kwargs["ssl"] = True
+            # Supabase Pooler отдаёт самоподписанный сертификат: sslmode=require
+            # означает шифрование без проверки CA, как и в libpq.
+            if "supabase.co" in self._dsn or "pooler.supabase.com" in self._dsn:
+                import ssl as ssl_module
+
+                context = ssl_module.create_default_context()
+                context.check_hostname = False
+                context.verify_mode = ssl_module.CERT_NONE
+                kwargs["ssl"] = context
+            else:
+                kwargs["ssl"] = True
         # Пулер Neon/PgBouncer не умеет prepared statements.
         if "pooler" in self._dsn:
             kwargs["statement_cache_size"] = 0
