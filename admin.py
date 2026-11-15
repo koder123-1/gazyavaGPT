@@ -247,8 +247,6 @@ async def render_card(
     name = f"@{card['username']}" if card.get("username") else (card.get("first_name") or "без имени")
     status = "🚫 забанен" if card.get("banned") else "✅ активен"
     limit = "безлимит" if rt.daily_limit <= 0 else rt.daily_limit
-    sub_until = await store.get_subscription(card["user_id"])
-    sub_line = f"💎 Подписка: до <b>{sub_until:%d.%m.%Y}</b>\n" if sub_until else ""
     chosen = await store.get_model(card["user_id"])
     model_line = (
         f"🧠 Модель: <b>{escape(model_catalog.title(chosen))}</b>\n" if chosen else ""
@@ -260,7 +258,6 @@ async def render_card(
         f"Статус: {status}\n\n"
         f"Сегодня: {card.get('used_today', 0)} из {limit}\n"
         f"Бонусных запросов: <b>{card.get('bonus_requests', 0)}</b>\n"
-        f"{sub_line}"
         f"{model_line}"
         f"Всего запросов: {card.get('total_requests', 0)}\n"
         f"Сообщений в истории: {card.get('history_len', 0)}"
@@ -336,13 +333,28 @@ async def render_model_access(
 
 
 async def render_settings(
-    store: Store, settings: Settings
+    store: Store, settings: Settings, bot: Bot | None = None
 ) -> tuple[str, InlineKeyboardMarkup]:
     rt = await load_runtime(store, settings)
     overrides = await store.all_settings()
 
     def mark(key: str) -> str:
         return " ✏️" if key in overrides else ""
+
+    from subscription import channel_status, channel_display
+
+    gate_state, gate_note = (
+        await channel_status(bot, rt.required_channel)
+        if bot is not None
+        else ("unknown", "—")
+    )
+    gate_icon = {"ok": "✅", "off": "⏸", "error": "⚠️"}.get(gate_state, "⚠️")
+    channel_line = (
+        f"📢 Подписка: {channel_display(rt.required_channel) or 'выключена'} "
+        f"{gate_icon}{mark('required_channel')}\n"
+        f"🔗 Ссылка: {escape(rt.required_channel_url) or '—'}{mark('required_channel_url')}\n"
+        f"<i>{escape(gate_note)}</i>\n\n"
+    )
 
     prompt = rt.system_prompt.replace("\n", " ")
     if len(prompt) > 140:
@@ -356,8 +368,9 @@ async def render_settings(
         f"🖼 Модель для фото: <code>{escape(rt.vision_model)}</code>{mark('ai_vision_model')}\n"
         f"📝 Промпт: <i>{escape(prompt)}</i>{mark('system_prompt')}\n\n"
         f"⭐ Тарифы: <code>{escape(','.join(f'{n}:{s}' for n, s in rt.star_packages))}</code>{mark('star_packages')}\n"
-        f"💱 Курс свободной суммы: 1 ⭐ = <b>{rt.star_rate}</b> запросов{mark('star_rate')}\n"
-        "🛡 Защита: всегда включена — русский язык, анти-jailbreak, "
+        f"💱 Курс: 1 ⭐ = <b>{rt.star_rate}</b> запросов{mark('star_rate')}\n\n"
+        + channel_line
+        + "🛡 Защита: всегда включена — русский язык, анти-jailbreak, "
         "скрытие внутренних правил (изменить нельзя)."
     )
     buttons = [
@@ -378,6 +391,16 @@ async def render_settings(
         [
             InlineKeyboardButton(
                 text="✏️ Курс за звезду", callback_data="adm:set:edit:star_rate"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="✏️ Канал подписки", callback_data="adm:set:edit:required_channel"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="✏️ Ссылка на канал", callback_data="adm:set:edit:required_channel_url"
             )
         ],
     ]
@@ -537,6 +560,20 @@ HINTS = {
     "system_prompt": "Новый системный промпт — характер и правила ассистента.\n\nПришли текст:",
     "star_packages": "Тарифы в формате <code>запросы:звёзды</code> через запятую.\nПример: <code>30:3,60:6,100:10</code>\n\nПришли тарифы:",
     "star_rate": "Сколько запросов давать за 1 звезду, когда пользователь вводит свою сумму.\nПример: <code>10</code>\n\nПришли число:",
+    "required_channel": (
+        "Канал или группа, подписка на которую обязательна перед доступом к боту.\n\n"
+        "Форматы: <code>@gazyavaGPT</code>, <code>https://t.me/gazyavaGPT</code> "
+        "или ID вида <code>-1001234567890</code>.\n"
+        "<b>Важно:</b> бот должен быть добавлен в канал администратором "
+        "(или участником группы), иначе Telegram не даст проверить подписку.\n"
+        "Чтобы выключить проверку, пришли <code>off</code>.\n\nПришли канал:"
+    ),
+    "required_channel_url": (
+        "Ссылка, которая открывается кнопкой «Подписаться».\n"
+        "Пример: <code>https://t.me/gazyavaGPT</code> или ссылка-приглашение "
+        "<code>https://t.me/+AbCdEf</code>.\n"
+        "Если оставить пустым, бот сам соберёт ссылку из @username.\n\nПришли ссылку:"
+    ),
 }
 
 
@@ -1074,8 +1111,8 @@ async def run_broadcast(bot: Bot, store: Store, chat_id: int, message_id: int, t
 
 # --------------------------------------------------------------------------- настройки
 @router.callback_query(F.data == "adm:settings")
-async def cb_settings(call: CallbackQuery, store: Store, settings: Settings) -> None:
-    text, kb = await render_settings(store, settings)
+async def cb_settings(call: CallbackQuery, bot: Bot, store: Store, settings: Settings) -> None:
+    text, kb = await render_settings(store, settings, bot)
     with contextlib.suppress(TelegramAPIError):
         await call.message.edit_text(text, reply_markup=kb)
     await call.answer()
@@ -1097,20 +1134,27 @@ async def cb_set_edit(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "adm:set:cancel")
-async def cb_set_cancel(call: CallbackQuery, store: Store, settings: Settings, state: FSMContext) -> None:
+async def cb_set_cancel(
+    call: CallbackQuery, bot: Bot, store: Store, settings: Settings, state: FSMContext
+) -> None:
     await state.clear()
-    text, kb = await render_settings(store, settings)
+    text, kb = await render_settings(store, settings, bot)
     with contextlib.suppress(TelegramAPIError):
         await call.message.edit_text(text, reply_markup=kb)
     await call.answer()
 
 
 @router.callback_query(F.data == "adm:set:reset")
-async def cb_set_reset(call: CallbackQuery, store: Store, settings: Settings, state: FSMContext) -> None:
+async def cb_set_reset(
+    call: CallbackQuery, bot: Bot, store: Store, settings: Settings, state: FSMContext
+) -> None:
     await state.clear()
     for key in EDITABLE:
         await store.delete_setting(key)
-    text, kb = await render_settings(store, settings)
+    from subscription import reset_cache
+
+    reset_cache()
+    text, kb = await render_settings(store, settings, bot)
     with contextlib.suppress(TelegramAPIError):
         await call.message.edit_text(text, reply_markup=kb)
     await call.answer("Вернул значения из env")
@@ -1118,7 +1162,7 @@ async def cb_set_reset(call: CallbackQuery, store: Store, settings: Settings, st
 
 @router.message(Panel.edit, F.text)
 async def on_edit_value(
-    message: Message, store: Store, settings: Settings, state: FSMContext
+    message: Message, bot: Bot, store: Store, settings: Settings, state: FSMContext
 ) -> None:
     data = await state.get_data()
     key = data.get("edit_key")
@@ -1163,6 +1207,28 @@ async def on_edit_value(
             )
             return
         value = ",".join(f"{requests}:{stars}" for requests, stars in parsed)
+    elif key == "required_channel":
+        from subscription import normalize_channel
+
+        normalized = normalize_channel(value)
+        if value.strip() and value.strip().lower() not in {"0", "-", "off", "no", "none", "нет", "выкл"} and not normalized:
+            await message.answer(
+                "Не понял канал. Пришли <code>@username</code>, "
+                "ссылку <code>https://t.me/...</code> или ID <code>-100...</code>.\n"
+                "Чтобы выключить проверку — <code>off</code>."
+            )
+            return
+        value = normalized
+    elif key == "required_channel_url":
+        from subscription import normalize_channel_url
+
+        if value and " " in value:
+            await message.answer("В ссылке не должно быть пробелов. Пример: <code>https://t.me/gazyavaGPT</code>")
+            return
+        value = normalize_channel_url(value, "")
+        if value and not value.lower().startswith(("http://", "https://")):
+            await message.answer("Нужна ссылка вида <code>https://t.me/...</code>.")
+            return
     else:  # system_prompt
         if len(value) < 10:
             await message.answer("Слишком коротко — минимум 10 символов.")
@@ -1172,8 +1238,12 @@ async def on_edit_value(
             return
 
     await store.set_setting(key, value)
+    if key in {"required_channel", "required_channel_url"}:
+        from subscription import reset_cache
+
+        reset_cache()
     await state.clear()
-    text, kb = await render_settings(store, settings)
+    text, kb = await render_settings(store, settings, bot)
     await message.answer("✅ Сохранено.")
     await message.answer(text, reply_markup=kb)
 

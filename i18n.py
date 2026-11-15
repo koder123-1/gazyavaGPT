@@ -21,10 +21,16 @@ LANG_HUMAN = {
 TR: dict[str, dict[str, str]] = {
     # ------------------------------------------------------------------ общее
     "sub.required": {
-        "ru": "🔒 Чтобы пользоваться ботом, сначала подпишись на канал <b>gazyavaGPT</b>.",
-        "uk": "🔒 Щоб користуватися ботом, спочатку підпишись на канал <b>gazyavaGPT</b>.",
-        "be": "🔒 Каб карыстацца ботам, спачатку падпішыся на канал <b>gazyavaGPT</b>.",
-        "en": "🔒 Subscribe to the <b>gazyavaGPT</b> channel to use the bot.",
+        "ru": "🔒 Чтобы пользоваться ботом, сначала подпишись на канал {channel}.",
+        "uk": "🔒 Щоб користуватися ботом, спочатку підпишись на канал {channel}.",
+        "be": "🔒 Каб карыстацца ботам, спачатку падпішыся на канал {channel}.",
+        "en": "🔒 Subscribe to the channel {channel} to use the bot.",
+    },
+    "sub.disabled": {
+        "ru": "Проверка подписки сейчас выключена.",
+        "uk": "Перевірка підписки зараз вимкнена.",
+        "be": "Праверка падпіскі зараз выключана.",
+        "en": "The subscription check is disabled right now.",
     },
     "sub.join": {
         "ru": "📢 Подписаться",
@@ -75,13 +81,49 @@ TR: dict[str, dict[str, str]] = {
         "en": "🌍 Current language: <b>{name}</b>",
     },
     "btn.lang": {"ru": "🌍 Язык", "uk": "🌍 Мова", "be": "🌍 Мова", "en": "🌍 Language"},
+    "menu.model": {"ru": "🧠 Модель", "uk": "🧠 Модель", "be": "🧠 Мадэль", "en": "🧠 Model"},
+    "menu.profile": {"ru": "🎓 Профиль", "uk": "🎓 Профіль", "be": "🎓 Профіль", "en": "🎓 Profile"},
+    "menu.buy": {
+        "ru": "⭐ Купить запросы",
+        "uk": "⭐ Купити запити",
+        "be": "⭐ Купіць запыты",
+        "en": "⭐ Buy requests",
+    },
+    "menu.support": {
+        "ru": "🆘 Поддержка",
+        "uk": "🆘 Підтримка",
+        "be": "🆘 Падтрымка",
+        "en": "🆘 Support",
+    },
+    "menu.files": {
+        "ru": "📎 Файлы",
+        "uk": "📎 Файли",
+        "be": "📎 Файлы",
+        "en": "📎 Files",
+    },
+    "menu.lang": {"ru": "🌍 Язык", "uk": "🌍 Мова", "be": "🌍 Мова", "en": "🌍 Language"},
+    "menu.help": {"ru": "❓ Справка", "uk": "❓ Довідка", "be": "❓ Даведка", "en": "❓ Help"},
+    "menu.home": {"ru": "☰ Меню", "uk": "☰ Меню", "be": "☰ Меню", "en": "☰ Menu"},
+    "pay.disabled": {
+        "ru": "Пополнение сейчас отключено. Лимит обновится в полночь по UTC.",
+        "uk": "Поповнення зараз вимкнене. Ліміт оновиться опівночі за UTC.",
+        "be": "Папаўненне зараз выключана. Ліміт абновіцца апоўначы па UTC.",
+        "en": "Top-ups are disabled right now. The limit resets at midnight UTC.",
+    },
+    "menu.title": {
+        "ru": "☰ <b>Меню</b>\n\nВыбери, что нужно — или просто напиши вопрос.",
+        "uk": "☰ <b>Меню</b>\n\nОбери, що потрібно — або просто напиши питання.",
+        "be": "☰ <b>Меню</b>\n\nАбяры, што трэба — або проста напішы пытанне.",
+        "en": "☰ <b>Menu</b>\n\nPick an item — or just send your question.",
+    },
     "btn.model": {"ru": "🧠 Модель ИИ", "uk": "🧠 Модель ШІ", "be": "🧠 Мадэль ШІ", "en": "🧠 AI model"},
     "model.title": {
         "ru": (
             "🧠 <b>Выбор модели ИИ</b>\n\n"
             "Сейчас отвечает: <b>{current}</b>\n\n"
             "Бесплатная модель доступна всем. Платные открываются один раз за звёзды "
-            "и остаются у тебя навсегда — доплат за запросы нет.\n\n"
+            "и остаются у тебя навсегда — доплат за запросы нет. Цена — за силу: "
+            "чем мощнее модель, тем дороже, максимум 5 ⭐.\n\n"
             "Если модель недоступна, бот сам переключится на запасную. "
             "На фото и картинки это не влияет."
         ),
@@ -89,7 +131,8 @@ TR: dict[str, dict[str, str]] = {
             "🧠 <b>Вибір моделі ШІ</b>\n\n"
             "Зараз відповідає: <b>{current}</b>\n\n"
             "Безкоштовна модель доступна всім. Платні відкриваються один раз за зірки "
-            "й залишаються у тебе назавжди — доплат за запити немає.\n\n"
+            "й залишаються у тебе назавжди — доплат за запити немає. Ціна — за силу: "
+            "чим потужніша модель, тим дорожча, максимум 5 ⭐.\n\n"
             "Якщо модель недоступна, бот сам переключиться на запасну. "
             "На фото й картинки це не впливає."
         ),
@@ -97,7 +140,8 @@ TR: dict[str, dict[str, str]] = {
             "🧠 <b>Выбар мадэлі ШІ</b>\n\n"
             "Зараз адказвае: <b>{current}</b>\n\n"
             "Бясплатная мадэль даступная ўсім. Платныя адкрываюцца адзін раз за зоркі "
-            "і застаюцца ў цябе назаўжды — даплат за запыты няма.\n\n"
+            "і застаюцца ў цябе назаўжды — даплат за запыты няма. Цана — за сілу: "
+            "чым магутнейшая мадэль, тым даражэй, максімум 5 ⭐.\n\n"
             "Калі мадэль недаступная, бот сам пераключыцца на запасную. "
             "На фота і малюнкі гэта не ўплывае."
         ),
@@ -105,7 +149,8 @@ TR: dict[str, dict[str, str]] = {
             "🧠 <b>Choose an AI model</b>\n\n"
             "Currently answering: <b>{current}</b>\n\n"
             "The free model is available to everyone. Paid models are unlocked once "
-            "with Stars and stay yours forever — no per-request charges.\n\n"
+            "with Stars and stay yours forever — no per-request charges. Price follows "
+            "power: the stronger the model, the higher the price, up to 5 ⭐.\n\n"
             "If a model is unavailable, the bot switches to a backup automatically. "
             "Photos and images are not affected."
         ),
@@ -241,48 +286,24 @@ TR: dict[str, dict[str, str]] = {
     # ------------------------------------------------------------------ старт
     "start.body": {
         "ru": (
-            "👋 Привет! Я <b>{bot}</b> — ИИ-помощник этого сообщества.\n"
-            "📢 Канал проекта: https://t.me/gazyavaGPT\n\n"
-            "Просто напиши вопрос — отвечу. Помню контекст последних сообщений, "
-            "так что можно уточнять и продолжать диалог.\n\n"
-            "📷 Пришли фото задания — разберу условие, решу по шагам и объясню.\n"
-            "✅ <code>/check</code> — пришли своё решение, и я проверю, где ошибка.\n"
-            "🎓 <code>/profile</code> — укажи класс и предмет, подстрою объяснения.\n"
-            "🖌 <code>/imagine</code> — нарисую картинку по описанию.\n"
-            "🌍 <code>/lang</code> — сменить язык интерфейса.\n\n"
+            "👋 Привет! Я <b>{bot}</b> — ИИ-репетитор.\n\n"
+            "Пиши вопрос, присылай фото задания или файл — разберу по шагам.\n"
+            "Всё остальное — кнопками ниже 👇\n\n"
         ),
         "uk": (
-            "👋 Привіт! Я <b>{bot}</b> — ШІ-помічник цієї спільноти.\n"
-            "📢 Канал проєкту: https://t.me/gazyavaGPT\n\n"
-            "Просто напиши питання — відповім. Пам'ятаю контекст останніх повідомлень, "
-            "тож можна уточнювати й продовжувати діалог.\n\n"
-            "📷 Надішли фото завдання — розберу умову, розв'яжу покроково й поясню.\n"
-            "✅ <code>/check</code> — надішли своє рішення, і я перевірю, де помилка.\n"
-            "🎓 <code>/profile</code> — вкажи клас і предмет, підлаштую пояснення.\n"
-            "🖌 <code>/imagine</code> — намалюю картинку за описом.\n"
-            "🌍 <code>/lang</code> — змінити мову інтерфейсу.\n\n"
+            "👋 Привіт! Я <b>{bot}</b> — ШІ-репетитор.\n\n"
+            "Пиши питання, надсилай фото завдання або файл — розберу покроково.\n"
+            "Усе інше — кнопками нижче 👇\n\n"
         ),
         "be": (
-            "👋 Прывітанне! Я <b>{bot}</b> — ШІ-памочнік гэтай супольнасці.\n"
-            "📢 Канал праекта: https://t.me/gazyavaGPT\n\n"
-            "Проста напішы пытанне — адкажу. Памятаю кантэкст апошніх паведамленняў, "
-            "таму можна ўдакладняць і працягваць дыялог.\n\n"
-            "📷 Дашлі фота задання — разаберу ўмову, развяжу па кроках і паясьню.\n"
-            "✅ <code>/check</code> — дашлі сваё рашэнне, і я правяру, дзе памылка.\n"
-            "🎓 <code>/profile</code> — укажы клас і прадмет, падладжу паясьненні.\n"
-            "🖌 <code>/imagine</code> — намалюю малюнак па апісанні.\n"
-            "🌍 <code>/lang</code> — змяніць мову інтэрфейсу.\n\n"
+            "👋 Прывітанне! Я <b>{bot}</b> — ШІ-рэпетытар.\n\n"
+            "Пішы пытанне, дасылай фота задання або файл — разаберу па кроках.\n"
+            "Усё астатняе — кнопкамі ніжэй 👇\n\n"
         ),
         "en": (
-            "👋 Hi! I'm <b>{bot}</b> — the AI assistant of this community.\n"
-            "📢 Project channel: https://t.me/gazyavaGPT\n\n"
-            "Just send your question and I'll answer. I remember the recent context, "
-            "so you can keep asking follow-ups.\n\n"
-            "📷 Send a photo of a task — I'll read it, solve it step by step and explain.\n"
-            "✅ <code>/check</code> — send your own solution and I'll find the mistake.\n"
-            "🎓 <code>/profile</code> — set your grade and subject for tailored explanations.\n"
-            "🖌 <code>/imagine</code> — I'll draw a picture from your description.\n"
-            "🌍 <code>/lang</code> — change the interface language.\n\n"
+            "👋 Hi! I'm <b>{bot}</b> — an AI tutor.\n\n"
+            "Send a question, a photo of a task or a file — I'll solve it step by step.\n"
+            "Everything else is on the buttons below 👇\n\n"
         ),
     },
     "start.commands": {

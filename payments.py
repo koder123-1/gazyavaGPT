@@ -30,13 +30,9 @@ log = logging.getLogger("payments")
 router = Router(name="payments")
 
 PAYLOAD_PREFIX = "buy"
-SUB_PREFIX = "sub"
 MODEL_PREFIX = "model"
 MIN_STARS = 1
 MAX_STARS = 10_000
-# Что показываем в профиле подписчику. Отвечает всё равно DeepSeek —
-# подписка меняет только оформление профиля.
-SUBSCRIPTION_MODELS = "GPT-6 · Claude · Gemini · Grok · Kimi"
 
 
 class Purchase(StatesGroup):
@@ -59,20 +55,6 @@ def parse_payload(payload: str) -> tuple[int, int] | None:
 
 def requests_for_stars(stars: int, runtime: Runtime) -> int:
     return max(1, stars * max(1, runtime.star_rate))
-
-
-def parse_sub_payload(payload: str) -> tuple[int, int] | None:
-    """payload подписки: sub:<дней>:<звёзд>."""
-    parts = (payload or "").split(":")
-    if len(parts) != 3 or parts[0] != SUB_PREFIX:
-        return None
-    try:
-        days, stars = int(parts[1]), int(parts[2])
-    except ValueError:
-        return None
-    if not (0 < days <= 3650 and 0 < stars <= 1_000_000):
-        return None
-    return days, stars
 
 
 def parse_model_payload(payload: str) -> tuple[str, int] | None:
@@ -126,14 +108,6 @@ def buy_kb(runtime: Runtime, settings: Settings) -> InlineKeyboardMarkup:
         for requests, stars in runtime.star_packages
     ]
     rows.append(
-        [
-            InlineKeyboardButton(
-                text=f"💎 Подписка на ИИ — {settings.subscription_stars} ⭐",
-                callback_data="pay:sub",
-            )
-        ]
-    )
-    rows.append(
         [InlineKeyboardButton(text="✏️ Своё количество звёзд", callback_data="pay:custom")]
     )
     rows.append(
@@ -142,6 +116,7 @@ def buy_kb(runtime: Runtime, settings: Settings) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="✉️ Поддержка", callback_data="pay:support"),
         ]
     )
+    rows.append([InlineKeyboardButton(text="☰ Меню", callback_data="menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -157,16 +132,12 @@ async def render_buy(
     text = (
         "⭐ <b>Пополнение запросов</b>\n\n"
         f"Твой запас: <b>{bonus}</b> дополнительных запросов.\n\n"
-        "Готовые наборы:\n"
+        "Готовые наборы (выгоднее курса):\n"
         f"{packages}\n\n"
         f"Или своя сумма: <b>1 ⭐ = {runtime.star_rate} запросов</b> "
         f"(от {MIN_STARS} до {MAX_STARS} ⭐).\n\n"
         "Купленные запросы не сгорают и тратятся только после дневного лимита. "
         "Оплата проходит внутри Telegram — карта не нужна.\n\n"
-        f"💎 <b>Подписка на популярные ИИ</b> — {settings.subscription_stars} ⭐ "
-        f"на {settings.subscription_days} дн.\n"
-        f"В профиле появится значок подписки: {SUBSCRIPTION_MODELS}.\n"
-        "<i>Отвечать бот будет на DeepSeek — подписка меняет оформление профиля.</i>\n\n"
         "<i>Оплачивая, ты принимаешь условия покупки.</i>"
     )
     return text, buy_kb(runtime, settings)
@@ -185,23 +156,6 @@ async def send_stars_invoice(
         payload=f"{PAYLOAD_PREFIX}:{requests}:{stars}",
         currency="XTR",
         prices=[LabeledPrice(label=f"{requests} запросов", amount=stars)],
-        provider_token="",
-    )
-
-
-async def send_subscription_invoice(bot: Bot, chat_id: int, settings: Settings) -> None:
-    await bot.send_invoice(
-        chat_id=chat_id,
-        title=f"Подписка на популярные ИИ · {settings.subscription_days} дн.",
-        description=(
-            f"Значок подписки в профиле: {SUBSCRIPTION_MODELS}. "
-            "Отвечает DeepSeek — подписка меняет только оформление профиля."
-        ),
-        payload=f"{SUB_PREFIX}:{settings.subscription_days}:{settings.subscription_stars}",
-        currency="XTR",
-        prices=[
-            LabeledPrice(label="Подписка на ИИ", amount=settings.subscription_stars)
-        ],
         provider_token="",
     )
 
@@ -284,21 +238,6 @@ async def cb_terms(call: CallbackQuery, store: Store, settings: Settings) -> Non
 async def cmd_terms(message: Message, store: Store, settings: Settings) -> None:
     runtime = await load_runtime(store, settings)
     await message.answer(render_terms(settings, runtime))
-
-
-@router.callback_query(F.data == "pay:sub")
-async def cb_sub(call: CallbackQuery, bot: Bot, settings: Settings) -> None:
-    if call.from_user is None:
-        return
-    if not settings.payments_enabled:
-        await call.answer("Оплата сейчас отключена", show_alert=True)
-        return
-    await call.answer()
-    try:
-        await send_subscription_invoice(bot, call.from_user.id, settings)
-    except TelegramAPIError as exc:
-        log.warning("Не удалось выставить счёт на подписку %s: %s", call.from_user.id, exc)
-        await call.answer("Не смог выставить счёт. Напиши мне в личку /buy", show_alert=True)
 
 
 # --------------------------------------------------------------------------- наборы
@@ -399,19 +338,11 @@ async def on_pre_checkout(
     query: PreCheckoutQuery, store: Store, settings: Settings
 ) -> None:
     parsed = parse_payload(query.invoice_payload)
-    sub = parse_sub_payload(query.invoice_payload)
     model = parse_model_payload(query.invoice_payload)
     valid = False
     if model and query.currency == "XTR":
         _, stars = model
         valid = query.total_amount == stars
-    elif sub and query.currency == "XTR":
-        days, stars = sub
-        valid = (
-            days == settings.subscription_days
-            and stars == settings.subscription_stars
-            and query.total_amount == stars
-        )
     elif parsed and query.currency == "XTR":
         runtime = await load_runtime(store, settings)
         requests, stars = parsed
@@ -467,44 +398,6 @@ async def on_paid(message: Message, bot: Bot, store: Store, settings: Settings) 
             )
         else:
             await message.answer("✅ Эта оплата уже учтена. Модель уже открыта — /model.")
-        return
-
-    sub = parse_sub_payload(payment.invoice_payload)
-    if sub:
-        days, _ = sub
-        await store.ensure_user(user.id, user.username, user.first_name)
-        credited = await store.record_payment(
-            user.id,
-            days,
-            payment.total_amount,
-            payment.telegram_payment_charge_id,
-            kind="sub",
-        )
-        if credited:
-            until = await store.activate_subscription(user.id, days)
-            log.info(
-                "Оплата Stars: %s купил подписку на %s дней за %s звёзд",
-                user.id,
-                days,
-                payment.total_amount,
-            )
-            await message.answer(
-                f"💎 <b>Подписка активна!</b>\n\n"
-                f"Действует до: <b>{until:%d.%m.%Y}</b>\n"
-                f"В профиле: {SUBSCRIPTION_MODELS}\n"
-                "Отвечает: DeepSeek.\n\n"
-                "Посмотреть профиль — /me, продлить — /buy."
-            )
-            await notify_admins(
-                bot,
-                f"💎 <b>Подписка</b>\n"
-                f"Пользователь: {escape(user.full_name)} (<code>{user.id}</code>)\n"
-                f"Срок: {days} дн. за {payment.total_amount} ⭐",
-                store,
-                settings,
-            )
-        else:
-            await message.answer("✅ Эта оплата уже учтена. Подписка продлена не была.")
         return
 
     parsed = parse_payload(payment.invoice_payload)

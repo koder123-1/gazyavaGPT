@@ -41,7 +41,13 @@ postgresql://postgres.<ref>:<password>@aws-1-eu-north-1.pooler.supabase.com:5432
 - `AI_PROVIDER=reformboss`, `AI_MODEL=deepseek-v4.1-flash-1017`
 - `AI_MODELS` — каталог из `models.py`
 - `IMAGE_PROVIDER=reformboss`, `IMAGE_MODEL=grok-imagine-image-lite`
-- тарифы Stars, лимиты, язык
+- лимиты, язык
+- `STAR_PACKAGES=50:3,150:8,300:14`, `STAR_RATE=10`
+- `REQUIRED_CHANNEL=gazyavaGPT`, `REQUIRED_CHANNEL_URL=https://t.me/gazyavaGPT`
+
+Env в Render можно менять из бота: `/admin → ⚙️ Настройки` (канал, тарифы, курс).
+Через API `PUT /v1/services/<id>/env-vars` отправляйте **полный** список переменных —
+этот запрос заменяет все значения сразу.
 
 ## Обновление кода
 
@@ -68,14 +74,17 @@ Invoke-RestMethod -Method Post -Headers $h -ContentType "application/json" `
 
 ## Проверка после деплоя
 
-0. **Подписка на канал.** Бот требует подписку на https://t.me/gazyavaGPT перед
-   доступом в личку. Чтобы Telegram разрешил проверку, добавь **@gazyavagptbot**
-   в администраторы канала: канал → «Управление» → «Администраторы» → «Добавить
-   администратора». Без этого `getChatMember` отвечает `member list is inaccessible`,
-   и бот (чтобы не запереть всех) пропускает пользователей, а владельцу пишет
-   предупреждение. Проверка кешируется на 45 секунд.
+0. **Подписка на канал.** Бот требует подписку на канал, заданный в
+   `/admin → ⚙️ Настройки → ✏️ Канал подписки` (по умолчанию https://t.me/gazyavaGPT).
+   Канал и ссылку можно менять там без рестарта; `off` отключает гейт.
+   Чтобы Telegram разрешил проверку, добавь **@gazyavagptbot** в администраторы
+   канала: канал → «Управление» → «Администраторы» → «Добавить администратора».
+   Без этого `getChatMember` отвечает `member list is inaccessible`, и бот
+   (чтобы не запереть всех) пропускает пользователей, а владельцу пишет
+   предупреждение. Проверка кешируется на 45 секунд; после смены канала в админке
+   кеш сбрасывается сам.
 1. `https://gazyava-gpt.onrender.com/health` → `{"status":"ok","db":"up"}`.
-2. В Telegram: `/start`, `/model`, `/files`, `/me`, `/admin`.
+2. В Telegram: `/start` — короткое приветствие и постоянное меню; дальше пользуйся кнопками или командами. Проверь `/buy`, `/model` и `/admin → ⚙️ Настройки`.
 3. Если бот молчит — `getWebhookInfo` и логи Render:
    - `401` — неверный `BOT_TOKEN`;
    - `409 Conflict` — где-то остался локальный polling, останови его;

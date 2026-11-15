@@ -58,10 +58,10 @@ services:
       - key: PAYMENTS_ENABLED
         value: "1"
       - key: STAR_PACKAGES
-        value: "30:3,60:6,100:10"
+        value: "50:3,150:8,300:14"
       - key: STAR_RATE
         value: "10"
-      - key: SUBSCRIPTION_STARS
-        value: "50"
-      - key: SUBSCRIPTION_DAYS
-        value: "30"
+      - key: REQUIRED_CHANNEL
+        value: gazyavaGPT
+      - key: REQUIRED_CHANNEL_URL
+        value: https://t.me/gazyavaGPT

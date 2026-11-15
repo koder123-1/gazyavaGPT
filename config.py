@@ -79,20 +79,21 @@ DEFAULT_RULES = (
 )
 
 # Пары «сколько запросов : сколько звёзд». Меняются из /admin без рестарта.
-DEFAULT_STAR_PACKAGES = ((30, 3), (60, 6), (100, 10))
+DEFAULT_STAR_PACKAGES = ((50, 3), (150, 8), (300, 14))
 # Курс для любой суммы: сколько запросов даём за 1 звезду.
 DEFAULT_STAR_RATE = 10
+# Канал, подписка на который обязательна. Пусто — проверка выключена.
+DEFAULT_REQUIRED_CHANNEL = "gazyavaGPT"
+DEFAULT_REQUIRED_CHANNEL_URL = "https://t.me/gazyavaGPT"
 
 DEFAULT_TERMS = (
     "<b>Условия покупки</b>\n\n"
     "• Вы покупаете дополнительные запросы к ИИ-помощнику {bot}.\n"
-    "• Для доступа нужна подписка на канал https://t.me/gazyavaGPT.\n"
+    "• Если для бота включена обязательная подписка, нужно вступить в указанный канал.\n"
     "• Запросы не сгорают и тратятся после дневного бесплатного лимита.\n"
     "• Оплата — Telegram Stars. Возврат на карту невозможен: Telegram не проводит "
     "такие платежи за цифровые товары.\n"
-    "• Курс свободной суммы: <b>1 ⭐ = {rate} запросов</b>; в наборах — столько же.\n"
-    "• Подписка «на популярные ИИ» — это статус в профиле; отвечает по-прежнему "
-    "DeepSeek, лимиты и цены запросов не меняются.\n"
+    "• Курс: <b>1 ⭐ = {rate} запросов</b>. Наборы выгоднее курса.\n"
     "• Если запросы не начислились или покупка была по ошибке — напишите "
     "/paysupport, вернём звёзды.\n\n"
     "Оплачивая, вы соглашаетесь с этими условиями."
@@ -108,7 +109,7 @@ DEFAULT_SUPPORT = (
 
 
 def parse_packages(raw: str, default: tuple[tuple[int, int], ...]) -> tuple[tuple[int, int], ...]:
-    """Разбирает строку вида «30:3,60:6,100:10»."""
+    """Разбирает строку вида «50:3,150:8,300:14»."""
     if not raw or not raw.strip():
         return default
     result: list[tuple[int, int]] = []
@@ -167,8 +168,8 @@ class Settings:
     payments_enabled: bool = True
     star_packages: tuple[tuple[int, int], ...] = DEFAULT_STAR_PACKAGES
     star_rate: int = DEFAULT_STAR_RATE
-    subscription_stars: int = 50
-    subscription_days: int = 30
+    required_channel: str = DEFAULT_REQUIRED_CHANNEL
+    required_channel_url: str = DEFAULT_REQUIRED_CHANNEL_URL
     terms_text: str = DEFAULT_TERMS
     support_text: str = DEFAULT_SUPPORT
     support_contact: str = ""
@@ -228,7 +229,7 @@ def _packages_env(name: str, default: tuple[tuple[int, int], ...]) -> tuple[tupl
     try:
         return parse_packages(os.getenv(name, ""), default)
     except ValueError as exc:
-        raise SystemExit(f"{name}: {exc}. Пример: 30:3,60:6,100:10") from exc
+        raise SystemExit(f"{name}: {exc}. Пример: 50:3,150:8,300:14") from exc
 
 
 def _parse_admin_ids(raw: str) -> frozenset[int]:
@@ -342,8 +343,10 @@ def load_settings() -> Settings:
         payments_enabled=_bool_env("PAYMENTS_ENABLED", True),
         star_packages=_packages_env("STAR_PACKAGES", DEFAULT_STAR_PACKAGES),
         star_rate=_int_env("STAR_RATE", DEFAULT_STAR_RATE),
-        subscription_stars=max(1, _int_env("SUBSCRIPTION_STARS", 50)),
-        subscription_days=max(1, _int_env("SUBSCRIPTION_DAYS", 30)),
+        required_channel=os.getenv("REQUIRED_CHANNEL", "").strip()
+        or DEFAULT_REQUIRED_CHANNEL,
+        required_channel_url=os.getenv("REQUIRED_CHANNEL_URL", "").strip()
+        or DEFAULT_REQUIRED_CHANNEL_URL,
         terms_text=os.getenv("TERMS_TEXT", "").strip() or DEFAULT_TERMS,
         support_text=os.getenv("PAY_SUPPORT_TEXT", "").strip() or DEFAULT_SUPPORT,
         support_contact=os.getenv("PAY_SUPPORT_CONTACT", "").strip(),

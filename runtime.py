@@ -15,6 +15,8 @@ EDITABLE = {
     "system_prompt": "Системный промпт",
     "star_packages": "Тарифы: запросы за звёзды",
     "star_rate": "Курс: запросов за 1 звезду",
+    "required_channel": "Канал обязательной подписки",
+    "required_channel_url": "Ссылка на канал подписки",
 }
 
 
@@ -27,6 +29,8 @@ class Runtime:
     system_prompt: str
     star_packages: tuple[tuple[int, int], ...] = ()
     star_rate: int = 10
+    required_channel: str = ""
+    required_channel_url: str = ""
 
 
 def _safe_int(value: str | None, default: int) -> int:
@@ -55,4 +59,14 @@ async def load_runtime(store: Store, settings: Settings) -> Runtime:
         system_prompt=(overrides.get("system_prompt") or settings.system_prompt).strip(),
         star_packages=_safe_packages(overrides.get("star_packages"), settings.star_packages),
         star_rate=max(1, _safe_int(overrides.get("star_rate"), settings.star_rate)),
+        required_channel=(
+            overrides.get("required_channel")
+            if "required_channel" in overrides
+            else settings.required_channel
+        ).strip(),
+        required_channel_url=(
+            overrides.get("required_channel_url")
+            if "required_channel_url" in overrides
+            else settings.required_channel_url
+        ).strip(),
     )

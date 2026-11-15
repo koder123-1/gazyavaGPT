@@ -23,7 +23,9 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    KeyboardButton,
     Message,
+    ReplyKeyboardMarkup,
 )
 
 import files
@@ -185,6 +187,9 @@ def model_kb(
     rows.append(
         [InlineKeyboardButton(text=t(lang, "model.auto"), callback_data="mdl:auto")]
     )
+    rows.append(
+        [InlineKeyboardButton(text=t(lang, "menu.home"), callback_data="menu:home")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -198,6 +203,63 @@ async def send_model_menu(
     await message.answer(
         t(lang, "model.title", current=escape(model_title(current))),
         reply_markup=model_kb(None, current, lang, owned),
+    )
+
+
+MENU_KEYS = (
+    "menu.model",
+    "menu.profile",
+    "menu.buy",
+    "menu.support",
+    "menu.files",
+    "menu.lang",
+    "menu.help",
+)
+
+
+def menu_label_map() -> dict[str, str]:
+    """Подписи кнопок главного меню → ключ действия."""
+    return {t(lang, key): key for lang in LANGS for key in MENU_KEYS}
+
+
+def main_menu_kb(lang: str) -> ReplyKeyboardMarkup:
+    """Постоянная клавиатура: всё меню под рукой, команды помнить не надо."""
+    rows = [
+        [
+            KeyboardButton(text=t(lang, "menu.model")),
+            KeyboardButton(text=t(lang, "menu.profile")),
+        ],
+        [
+            KeyboardButton(text=t(lang, "menu.buy")),
+            KeyboardButton(text=t(lang, "menu.support")),
+        ],
+        [
+            KeyboardButton(text=t(lang, "menu.files")),
+            KeyboardButton(text=t(lang, "menu.lang")),
+        ],
+        [KeyboardButton(text=t(lang, "menu.help"))],
+    ]
+    return ReplyKeyboardMarkup(
+        keyboard=rows, resize_keyboard=True, is_persistent=True
+    )
+
+
+def menu_inline(lang: str) -> InlineKeyboardMarkup:
+    """Короткое меню кнопками — для случаев, когда клавиатура скрыта."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=t(lang, "menu.model"), callback_data="mdl:menu"),
+                InlineKeyboardButton(text=t(lang, "menu.profile"), callback_data="pf:menu"),
+            ],
+            [
+                InlineKeyboardButton(text=t(lang, "menu.buy"), callback_data="pay:menu"),
+                InlineKeyboardButton(text=t(lang, "menu.support"), callback_data="tick:menu"),
+            ],
+            [
+                InlineKeyboardButton(text=t(lang, "menu.lang"), callback_data="lang:menu"),
+            ],
+        ]
     )
 
 
@@ -729,27 +791,8 @@ async def send_welcome(
     else:
         extra = ""
 
-    text = t(lang, "start.body", bot=escape(settings.bot_name))
-    if settings.payments_enabled:
-        text += "⭐ <code>/buy</code>\n\n"
-    text += t(lang, "start.commands") + limit + extra
-
-    # Быстрые действия: не надо помнить команды.
-    rows = [
-        [
-            InlineKeyboardButton(text=t(lang, "btn.profile"), callback_data="pf:menu"),
-            InlineKeyboardButton(text=t(lang, "btn.model"), callback_data="mdl:menu"),
-        ],
-        [InlineKeyboardButton(text=t(lang, "btn.lang"), callback_data="lang:menu")],
-    ]
-    if settings.payments_enabled:
-        rows.append(
-            [InlineKeyboardButton(text=t(lang, "btn.buy"), callback_data="pay:menu")]
-        )
-    rows.append(
-        [InlineKeyboardButton(text=t(lang, "btn.support"), callback_data="tick:menu")]
-    )
-    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    text = t(lang, "start.body", bot=escape(settings.bot_name)) + limit + extra
+    await message.answer(text, reply_markup=main_menu_kb(lang))
 
 
 @router.message(CommandStart())
@@ -901,14 +944,11 @@ async def cb_model(
     await call.answer(t(lang, "model.saved", name=model_title(current)))
 
 
-@router.message(Command("help"))
-async def cmd_help(message: Message, store: Store, settings: Settings) -> None:
+async def help_text(store: Store, settings: Settings, lang: str, user_id: int | None) -> str:
     runtime = await load_runtime(store, settings)
-    user = message.from_user
-    lang = await user_lang(store, settings, user.id) if user else settings.default_lang
-    role = await resolve_role(user.id, settings, store) if user else None
+    role = await resolve_role(user_id, settings, store) if user_id else None
     current_model = (
-        await user_model(store, settings, runtime, user.id) if user else runtime.model
+        await user_model(store, settings, runtime, user_id) if user_id else runtime.model
     )
     if has_admin_access(role):
         staff_note = t(lang, "start.admin_extra", role=role_title(role))
@@ -916,11 +956,21 @@ async def cmd_help(message: Message, store: Store, settings: Settings) -> None:
         staff_note = t(lang, "start.support_extra", role=role_title(role))
     else:
         staff_note = ""
-    await message.answer(
+    return (
         t(lang, "help.body")
         + t(lang, "help.support")
         + t(lang, "help.tail", model=escape(model_title(current_model)), lang=LANG_NAMES[lang])
         + staff_note
+    )
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message, store: Store, settings: Settings) -> None:
+    user = message.from_user
+    lang = await user_lang(store, settings, user.id) if user else settings.default_lang
+    await message.answer(
+        await help_text(store, settings, lang, user.id if user else None),
+        reply_markup=main_menu_kb(lang) if message.chat.type == "private" else None,
     )
 
 
@@ -981,13 +1031,6 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
         bit for bit in (profile.get("grade"), profile.get("subject"), profile.get("style")) if bit
     ) or t(lang, "me.profile_empty")
 
-    sub_until = await store.get_subscription(user.id)
-    sub_line = (
-        t(lang, "me.sub_active", date=sub_until.strftime("%d.%m.%Y"))
-        if sub_until
-        else ""
-    )
-
     banned = await store.is_banned(user.id)
     note = t(lang, "me.banned_note") if banned else ""
     rows = []
@@ -1009,7 +1052,7 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
             "me.body",
             user_id=user.id,
             role_line=role_line,
-            sub_line=sub_line,
+            sub_line="",
             limit=limit_text,
             bonus=bonus,
             profile=escape(profile_text),
@@ -1047,6 +1090,7 @@ def profile_kb(lang: str = "ru") -> InlineKeyboardMarkup:
             for i in range(len(STYLE_KEYS))
         ],
         [InlineKeyboardButton(text=t(lang, "profile.reset"), callback_data="pf:reset")],
+        [InlineKeyboardButton(text=t(lang, "menu.home"), callback_data="menu:home")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1055,16 +1099,9 @@ async def render_profile(
     store: Store, user_id: int, lang: str = "ru"
 ) -> tuple[str, InlineKeyboardMarkup]:
     profile = await store.get_profile(user_id) or {}
-    sub_until = await store.get_subscription(user_id)
-    sub_line = (
-        t(lang, "me.sub_active", date=sub_until.strftime("%d.%m.%Y")) + "\n"
-        if sub_until
-        else ""
-    )
     text = (
         t(lang, "profile.title")
         + "\n\n"
-        + sub_line
         + f"{t(lang, 'profile.grade')}: <b>{escape(profile.get('grade') or '—')}</b>\n"
         f"{t(lang, 'profile.subject')}: <b>{escape(profile.get('subject') or '—')}</b>\n"
         f"{t(lang, 'profile.style')}: <b>{escape(profile.get('style') or '—')}</b>\n\n"
@@ -1462,6 +1499,75 @@ async def cb_feedback(
         return
     new_id = await store.add_exchange_record(owner, exchange["question"], answer, action)
     await send_answer(call.message, answer)
+
+
+# --------------------------------------------------------------------------- главное меню
+@router.message(F.text.in_(set(menu_label_map())))
+async def on_menu_button(
+    message: Message, bot: Bot, store: Store, settings: Settings
+) -> None:
+    """Кнопки постоянной клавиатуры: работают вместо команд."""
+    if message.chat.type != "private":
+        return
+    user = message.from_user
+    if user is None:
+        return
+    action = menu_label_map().get((message.text or "").strip())
+    if action is None:
+        return
+    await store.ensure_user(user.id, user.username, user.first_name)
+    lang = await user_lang(store, settings, user.id)
+
+    if action == "menu.model":
+        await send_model_menu(message, store, settings, lang, user.id)
+    elif action == "menu.profile":
+        text, kb = await render_profile(store, user.id, lang)
+        await message.answer(text, reply_markup=kb)
+    elif action == "menu.buy":
+        if not settings.payments_enabled:
+            await message.answer(t(lang, "pay.disabled"))
+            return
+        from payments import render_buy
+
+        text, kb = await render_buy(store, settings, user.id)
+        await message.answer(text, reply_markup=kb)
+    elif action == "menu.support":
+        from tickets import support_menu
+
+        text, kb = await support_menu(store, user.id)
+        await message.answer(text, reply_markup=kb)
+    elif action == "menu.files":
+        await message.answer(
+            t(
+                lang,
+                "file.help",
+                mb=settings.file_max_mb,
+                pages=settings.file_max_pdf_pages,
+            )
+        )
+    elif action == "menu.lang":
+        await message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))
+    else:
+        await message.answer(
+            await help_text(store, settings, lang, user.id),
+            reply_markup=main_menu_kb(lang),
+        )
+
+
+@router.callback_query(F.data == "menu:home")
+async def cb_menu_home(call: CallbackQuery, store: Store, settings: Settings) -> None:
+    if call.from_user is None:
+        return
+    lang = await user_lang(store, settings, call.from_user.id)
+    if call.message is not None:
+        try:
+            await call.message.answer(
+                t(lang, "menu.title"),
+                reply_markup=menu_inline(lang),
+            )
+        except TelegramAPIError:
+            pass
+    await call.answer()
 
 
 # --------------------------------------------------------------------------- обычный текст

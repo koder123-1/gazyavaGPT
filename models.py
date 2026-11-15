@@ -19,12 +19,12 @@ class ModelInfo:
 
 CATALOG: tuple[ModelInfo, ...] = (
     ModelInfo("deepseek-v4.1-flash-1017", "DeepSeek V4.1 Flash", 0, "бесплатно"),
-    ModelInfo("gpt-6-luna", "GPT-6 Luna", 5, "сильная"),
-    ModelInfo("glm-5.3", "GLM-5.3", 3),
-    ModelInfo("glm-5.3-flash", "GLM-5.3 Flash", 2, "быстрая"),
-    ModelInfo("grok-4.7", "Grok 4.7", 2),
-    ModelInfo("gemini-4-argon", "Gemini 4 Argon", 3),
-    ModelInfo("claude-sonnet-5-5", "Claude Sonnet 5.5", 4),
+    ModelInfo("gpt-6-luna", "GPT-6 Luna", 5, "самая сильная"),
+    ModelInfo("claude-sonnet-5-5", "Claude Sonnet 5.5", 4, "сильная"),
+    ModelInfo("gemini-4-argon", "Gemini 4 Argon", 3, "универсальная"),
+    ModelInfo("glm-5.3", "GLM-5.3", 3, "универсальная"),
+    ModelInfo("grok-4.7", "Grok 4.7", 2, "быстрая"),
+    ModelInfo("glm-5.3-flash", "GLM-5.3 Flash", 1, "самая быстрая"),
 )
 
 BY_ID: dict[str, ModelInfo] = {item.id: item for item in CATALOG}

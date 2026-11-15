@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from html import escape
 
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramAPIError
@@ -25,6 +26,7 @@ from images import ImageClient
 from moderation import FloodMiddleware, PrivateOnlyMiddleware, SpamMiddleware
 from moderation import router as moderation_router
 from payments import router as payments_router
+from runtime import load_runtime
 from store import Store, create_store
 from subscription import SubscriptionMiddleware, probe_channel
 from subscription import router as subscription_router
@@ -120,14 +122,15 @@ async def on_startup(
         await bot.delete_webhook(drop_pending_updates=True)
         log.info("RENDER_EXTERNAL_URL не задан -> режим polling")
 
-    if not await probe_channel(bot) and settings.owner_id:
+    runtime = await load_runtime(store, settings)
+    if not await probe_channel(bot, runtime.required_channel) and settings.owner_id:
         with contextlib.suppress(TelegramAPIError):
             await bot.send_message(
                 settings.owner_id,
                 "⚠️ <b>Подписка на канал не проверяется</b>\n\n"
-                "Telegram не даёт боту посмотреть участников @gazyavaGPT. "
-                "Добавь <b>@gazyavagptbot</b> в администраторы канала "
-                "(право «Управление участниками» не обязательно) — и гейт заработает.",
+                f"Бот не может посмотреть участников {escape(runtime.required_channel or 'канала')}. "
+                "Добавь бота в администраторы канала — и гейт заработает. "
+                "Сменить канал можно в /admin → ⚙️ Настройки → ✏️ Канал подписки.",
             )
 
 
