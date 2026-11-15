@@ -1,92 +1,88 @@
-# Деплой gazyavaGPT на Render + Neon (бесплатно)
+# gazyavaGPT в облаке: Render + Supabase
 
-Цель: бот работает 24/7, даже когда компьютер выключен. Локальный `.env` и база в памяти
-больше не нужны: на сервере данные живут в Neon, а секреты — в Render.
+Бот работает 24/7, компьютер можно выключать. Локальный `.env` больше не нужен:
+секреты лежат в Render, данные — в Supabase Postgres.
 
-## 0. Что уже готово в репозитории
+## Что уже развёрнуто
 
-- `render.yaml` — blueprint: web-сервис free, health-check `/health`, все настройки
-  провайдеров (ReformBoss + Coarena fallback + картинки).
-- `.env` в git не попадает (`.gitignore`).
-- `assets/DejaVuSans.ttf` лежит в репозитории — PDF с кириллицей соберётся и на Render.
-- Схему БД бот создаёт сам при первом запуске (`users`, `usage`, `messages`, `payments`,
-  `roles`, `tickets`, `ticket_messages`, `model_access`).
+| Что | Где |
+|---|---|
+| Код | https://github.com/koder123-1/gazyavaGPT (публичный, без секретов) |
+| Бот | https://gazyava-gpt.onrender.com (`/health` → `{"status":"ok","db":"up"}`) |
+| База | Supabase, проект `gazyava-gpt`, регион Stockholm (`eu-north-1`) |
+| Webhook | `https://gazyava-gpt.onrender.com/webhook` |
+| Keep-alive | GitHub Actions `.github/workflows/keepalive.yml`, ping каждые 5 минут |
 
-## 1. GitHub
+Render free: 512 МБ RAM, засыпает после 15 минут без запросов. Keep-alive не даёт
+ему заснуть; первый запрос после ручного рестарта всё равно может идти ~40–60 секунд.
 
-Репозиторий создаётся и пушится с этой машины. Нужен только вход в GitHub:
+## Почему Supabase, а не Neon
 
-```powershell
-gh auth login --hostname github.com --git-protocol https --web
+Neon отдаёт «Access Blocked in Your Region» для этого IP. Supabase открывается,
+даёт бесплатный Postgres 500 МБ и пулер для IPv4. Проект создан в Стокгольме.
+
+Подключение идёт через **Session pooler**:
+
+```
+postgresql://postgres.<ref>:<password>@aws-1-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=require
 ```
 
-Уже открыто отдельное окно PowerShell — следуй подсказкам: Enter → браузер → код.
+`store.py` умеет Supabase-пулер: убирает `sslmode` из DSN, включает SSL и отключает
+проверку CA (у пулера самоподписанный сертификат — как `sslmode=require` в libpq).
 
-## 2. Neon (база данных)
+## Переменные Render
 
-1. Открой https://neon.tech → **Sign up** → **Continue with GitHub**.
-2. Создай проект:
-   - Name: `gazyava-gpt`
-   - Region: **AWS eu-central-1 (Frankfurt)** — ближе к Render Frankfurt.
-3. На странице проекта нажми **Connect** и скопируй строку подключения.
-   Бери **Pooled connection** (в хосте есть `-pooler`), она выглядит так:
+Заданы в сервисе (Environment), в git не попадают:
 
-   ```
-   postgresql://USER:PASSWORD@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
-   ```
+- `BOT_TOKEN`, `REFORMBOSS_API_KEY`, `COARENA_API_KEY`
+- `DATABASE_URL` — строка Supabase Session pooler
+- `OWNER_ID`, `ADMIN_IDS`
+- `WEBHOOK_SECRET` — сгенерирован Render
+- `AI_PROVIDER=reformboss`, `AI_MODEL=deepseek-v4.1-flash-1017`
+- `AI_MODELS` — каталог из `models.py`
+- `IMAGE_PROVIDER=reformboss`, `IMAGE_MODEL=grok-imagine-image-lite`
+- тарифы Stars, лимиты, язык
 
-   Пароль уже внутри строки — ничего отдельно вводить не надо.
-4. Сохрани строку: она пойдёт в Render как `DATABASE_URL`.
-5. Ничего в SQL-редакторе выполнять не нужно, таблицы создаст бот.
+## Обновление кода
 
-## 3. Render
+```powershell
+cd D:\tg-bot-render
+git add -A
+git commit -m "что изменилось"
+git push
+```
 
-1. Открой https://render.com → **Get Started** → **GitHub** → разреши доступ.
-2. **New +** → **Blueprint**.
-3. Выбери репозиторий `gazyavaGPT` (или как назовём) → **Connect**.
-   Если Render попросит доступ к репозиторию — установи Render GitHub App
-   (можно только на этот репозиторий).
-4. Render прочитает `render.yaml` и спросит значения для секретов:
+Дальше вручную запустить деплой (для публичного репозитория авто-деплой по пушу
+может не срабатывать):
 
-| Переменная | Откуда взять |
-|---|---|
-| `BOT_TOKEN` | `D:\tg-bot-render\.env` → `BOT_TOKEN` |
-| `REFORMBOSS_API_KEY` | `.env` → `REFORMBOSS_API_KEY` |
-| `COARENA_API_KEY` | `.env` → `COARENA_API_KEY` (резерв, если лимит ReformBoss) |
-| `DATABASE_URL` | строка из Neon (шаг 2) |
-| `OWNER_ID` | `.env` → `OWNER_ID` (твой Telegram ID) |
-| `ADMIN_IDS` | `.env` → `ADMIN_IDS` |
+```powershell
+# ключ Render API лежит в файле, в чат его выводить нельзя
+$key = (Get-Content "C:\Users\asus\AppData\Local\Temp\opencode-browser-5TMQsY\0\render_api_key.txt" -Raw).Trim()
+$h = @{ Authorization = "Bearer $key"; Accept = "application/json" }
+Invoke-RestMethod -Method Post -Headers $h -ContentType "application/json" `
+  -Uri "https://api.render.com/v1/services/srv-dbstd9m7bikc73ceib5g/deploys" `
+  -Body '{"clearCache":"do_not_clear"}'
+```
 
-5. **Apply** → Render соберёт и запустит сервис (3–7 минут).
-6. В логах должно быть:
+Или в дашборде Render: сервис `gazyava-gpt` → **Manual Deploy → Deploy latest commit**.
 
-   ```
-   Webhook установлен: https://<service>.onrender.com/webhook
-   ```
+## Проверка после деплоя
 
-7. Проверь `https://<service>.onrender.com/health` — должно быть
-   `{"status":"ok","db":"up"}`.
+1. `https://gazyava-gpt.onrender.com/health` → `{"status":"ok","db":"up"}`.
+2. В Telegram: `/start`, `/model`, `/files`, `/me`, `/admin`.
+3. Если бот молчит — `getWebhookInfo` и логи Render:
+   - `401` — неверный `BOT_TOKEN`;
+   - `409 Conflict` — где-то остался локальный polling, останови его;
+   - `db: down` — проверь `DATABASE_URL`.
 
-## 4. После деплоя
+## Локальный запуск (для отладки)
 
-- **Останови локального бота**: два процесса на одном токене конфликтуют
-  (webhook и polling). На сервере бот сам ставит webhook.
-- Напиши боту `/start` — должен ответить уже из облака.
-- Проверь `/model`, `/files`, оплату Stars, `/admin`.
+Локальный polling и облачный webhook одновременно работать не могут: Telegram
+отдаёт апдейты только одному способу. Перед локальным запуском удали webhook:
 
-## 5. Чтобы Render free не засыпал
+```powershell
+.\.venv\Scripts\python.exe -u bot.py
+```
 
-Free-инстанс засыпает после 15 минут без запросов. Первый запрос после сна
-обрабатывается ~40–60 секунд. Чтобы этого не было:
-
-1. Зарегистрируйся на https://cron-job.org (бесплатно).
-2. Создай cron: URL `https://<service>.onrender.com/health`, интервал **каждые 5 минут**.
-3. 24/7 = ~730 часов в месяц, лимит Render free — 750 часов, так что хватает.
-
-## Если что-то пошло не так
-
-- **`db: down` в /health** — проверь `DATABASE_URL` (должен быть pooled и с `sslmode=require`).
-- **401/403 от ReformBoss** — ключ или дневной лимит; статус: `/key` в `@iishkogatewaybot`.
-- **Бот молчит, в логах 409 Conflict** — где-то ещё работает polling. Останови локального бота.
-- **Не собирается PDF** — проверь, что `assets/DejaVuSans.ttf` попал в репозиторий.
-- **Долгий первый ответ** — сервис проснулся; настрой cron из шага 5.
+Без `RENDER_EXTERNAL_URL` бот сам вызовет `delete_webhook` и перейдёт в polling.
+После отладки снова задеплой облако, чтобы вернуть webhook.
