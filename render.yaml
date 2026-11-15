@@ -1,0 +1,67 @@
+services:
+  - type: web
+    name: gazyava-gpt
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: python bot.py
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+
+      # --- секреты: значения задаются в дашборде Render, в git не попадают ---
+      - key: BOT_TOKEN
+        sync: false
+      - key: REFORMBOSS_API_KEY
+        sync: false
+      - key: COARENA_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+
+      # --- настройки со значениями по умолчанию ---
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: AI_PROVIDER
+        value: reformboss
+      - key: AI_MODEL
+        value: deepseek-v4.1-flash-1017
+      - key: AI_VISION_MODEL
+        value: deepseek-v4.1-flash-1017
+      - key: AI_MODELS
+        value: deepseek-v4.1-flash-1017,gpt-6-luna,glm-5.3,glm-5.3-flash,grok-4.7,gemini-4-argon,claude-sonnet-5-5
+      - key: AI_VISION_MODELS
+        value: deepseek-v4.1-flash-1017
+      - key: AI_FALLBACK_PROVIDER
+        value: coarena
+      - key: IMAGE_PROVIDER
+        value: reformboss
+      - key: IMAGE_MODEL
+        value: grok-imagine-image-lite
+      - key: IMAGE_FALLBACK
+        value: pollinations
+      - key: BOT_NAME
+        value: gazyavaGPT
+      - key: DEFAULT_LANG
+        value: ru
+      - key: DAILY_LIMIT
+        value: "30"
+      - key: MAX_CONTEXT
+        value: "12"
+      - key: PAYMENTS_ENABLED
+        value: "1"
+      - key: STAR_PACKAGES
+        value: "30:15,60:25,100:30"
+      - key: STAR_RATE
+        value: "2"
+      - key: SUBSCRIPTION_STARS
+        value: "50"
+      - key: SUBSCRIPTION_DAYS
+        value: "30"
