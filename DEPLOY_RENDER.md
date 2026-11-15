@@ -68,6 +68,12 @@ Invoke-RestMethod -Method Post -Headers $h -ContentType "application/json" `
 
 ## Проверка после деплоя
 
+0. **Подписка на канал.** Бот требует подписку на https://t.me/gazyavaGPT перед
+   доступом в личку. Чтобы Telegram разрешил проверку, добавь **@gazyavagptbot**
+   в администраторы канала: канал → «Управление» → «Администраторы» → «Добавить
+   администратора». Без этого `getChatMember` отвечает `member list is inaccessible`,
+   и бот (чтобы не запереть всех) пропускает пользователей, а владельцу пишет
+   предупреждение. Проверка кешируется на 45 секунд.
 1. `https://gazyava-gpt.onrender.com/health` → `{"status":"ok","db":"up"}`.
 2. В Telegram: `/start`, `/model`, `/files`, `/me`, `/admin`.
 3. Если бот молчит — `getWebhookInfo` и логи Render:
