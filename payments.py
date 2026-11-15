@@ -157,7 +157,7 @@ async def render_buy(
     text = (
         "⭐ <b>Пополнение запросов</b>\n\n"
         f"Твой запас: <b>{bonus}</b> дополнительных запросов.\n\n"
-        "Готовые наборы (выгоднее):\n"
+        "Готовые наборы:\n"
         f"{packages}\n\n"
         f"Или своя сумма: <b>1 ⭐ = {runtime.star_rate} запросов</b> "
         f"(от {MIN_STARS} до {MAX_STARS} ⭐).\n\n"
