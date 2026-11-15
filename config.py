@@ -79,13 +79,14 @@ DEFAULT_RULES = (
 )
 
 # Пары «сколько запросов : сколько звёзд». Меняются из /admin без рестарта.
-DEFAULT_STAR_PACKAGES = ((30, 15), (60, 25), (100, 30))
-# Курс для свободной суммы: сколько запросов даём за 1 звезду.
-DEFAULT_STAR_RATE = 2
+DEFAULT_STAR_PACKAGES = ((30, 3), (60, 6), (100, 10))
+# Курс для любой суммы: сколько запросов даём за 1 звезду.
+DEFAULT_STAR_RATE = 10
 
 DEFAULT_TERMS = (
     "<b>Условия покупки</b>\n\n"
     "• Вы покупаете дополнительные запросы к ИИ-помощнику {bot}.\n"
+    "• Для доступа нужна подписка на канал https://t.me/gazyavaGPT.\n"
     "• Запросы не сгорают и тратятся после дневного бесплатного лимита.\n"
     "• Оплата — Telegram Stars. Возврат на карту невозможен: Telegram не проводит "
     "такие платежи за цифровые товары.\n"
@@ -107,7 +108,7 @@ DEFAULT_SUPPORT = (
 
 
 def parse_packages(raw: str, default: tuple[tuple[int, int], ...]) -> tuple[tuple[int, int], ...]:
-    """Разбирает строку вида «30:15,60:25,100:30»."""
+    """Разбирает строку вида «30:3,60:6,100:10»."""
     if not raw or not raw.strip():
         return default
     result: list[tuple[int, int]] = []
@@ -227,7 +228,7 @@ def _packages_env(name: str, default: tuple[tuple[int, int], ...]) -> tuple[tupl
     try:
         return parse_packages(os.getenv(name, ""), default)
     except ValueError as exc:
-        raise SystemExit(f"{name}: {exc}. Пример: 30:15,60:25,100:30") from exc
+        raise SystemExit(f"{name}: {exc}. Пример: 30:3,60:6,100:10") from exc
 
 
 def _parse_admin_ids(raw: str) -> frozenset[int]:

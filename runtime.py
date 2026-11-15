@@ -26,7 +26,7 @@ class Runtime:
     vision_model: str
     system_prompt: str
     star_packages: tuple[tuple[int, int], ...] = ()
-    star_rate: int = 2
+    star_rate: int = 10
 
 
 def _safe_int(value: str | None, default: int) -> int:

@@ -26,6 +26,8 @@ from moderation import FloodMiddleware, PrivateOnlyMiddleware, SpamMiddleware
 from moderation import router as moderation_router
 from payments import router as payments_router
 from store import Store, create_store
+from subscription import SubscriptionMiddleware, probe_channel
+from subscription import router as subscription_router
 from tickets import router as tickets_router
 
 WEBHOOK_PATH = "/webhook"
@@ -118,6 +120,16 @@ async def on_startup(
         await bot.delete_webhook(drop_pending_updates=True)
         log.info("RENDER_EXTERNAL_URL не задан -> режим polling")
 
+    if not await probe_channel(bot) and settings.owner_id:
+        with contextlib.suppress(TelegramAPIError):
+            await bot.send_message(
+                settings.owner_id,
+                "⚠️ <b>Подписка на канал не проверяется</b>\n\n"
+                "Telegram не даёт боту посмотреть участников @gazyavaGPT. "
+                "Добавь <b>@gazyavagptbot</b> в администраторы канала "
+                "(право «Управление участниками» не обязательно) — и гейт заработает.",
+            )
+
 
 async def on_shutdown(bot: Bot, store: Store, ai: AIClient, images: ImageClient) -> None:
     await ai.close()
@@ -137,6 +149,8 @@ def create_dispatcher(
     dispatcher["store"] = store
     dispatcher["ai"] = ai
     dispatcher["images"] = images or ImageClient(settings)
+    # Гейт подписки — до всех: без подписки в личку не пускает.
+    dispatcher.include_router(subscription_router)
     # Админ-роутер первым: его фильтр по роли отсекает остальных.
     dispatcher.include_router(admin_router)
     dispatcher.include_router(tickets_router)
@@ -145,6 +159,8 @@ def create_dispatcher(
     dispatcher.include_router(payments_router)
     dispatcher.include_router(user_router)
     # Спам, антифлуд и «личные» команды — до всех хендлеров.
+    dispatcher.message.outer_middleware(SubscriptionMiddleware())
+    dispatcher.callback_query.outer_middleware(SubscriptionMiddleware())
     dispatcher.message.outer_middleware(PrivateOnlyMiddleware(settings))
     dispatcher.message.outer_middleware(MutedMiddleware())
     dispatcher.message.outer_middleware(FloodMiddleware(settings))

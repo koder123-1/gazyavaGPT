@@ -535,8 +535,8 @@ HINTS = {
     "ai_model": "Имя модели провайдера.\nПримеры: <code>openrouter/free</code>, <code>google/gemma-4-31b-it:free</code>, <code>gemini-3.8-flash</code>.\n\nПришли название:",
     "ai_vision_model": "Модель, которая читает изображения.\nПримеры: <code>openrouter/free</code>, <code>inclusionai/ling-3.2-flash:free</code>, <code>nvidia/nemotron-3.5-super-vl:free</code>.\nЕсли модель занята, бот сам пробует резервные.\n\nПришли название:",
     "system_prompt": "Новый системный промпт — характер и правила ассистента.\n\nПришли текст:",
-    "star_packages": "Тарифы в формате <code>запросы:звёзды</code> через запятую.\nПример: <code>30:15,60:25,100:30</code>\n\nПришли тарифы:",
-    "star_rate": "Сколько запросов давать за 1 звезду, когда пользователь вводит свою сумму.\nПример: <code>2</code>\n\nПришли число:",
+    "star_packages": "Тарифы в формате <code>запросы:звёзды</code> через запятую.\nПример: <code>30:3,60:6,100:10</code>\n\nПришли тарифы:",
+    "star_rate": "Сколько запросов давать за 1 звезду, когда пользователь вводит свою сумму.\nПример: <code>10</code>\n\nПришли число:",
 }
 
 
@@ -1159,7 +1159,7 @@ async def on_edit_value(
         except ValueError as exc:
             await message.answer(
                 f"Не получилось разобрать тарифы: {escape(str(exc))}.\n"
-                "Пример: <code>30:15,60:25,100:30</code>"
+                "Пример: <code>30:3,60:6,100:10</code>"
             )
             return
         value = ",".join(f"{requests}:{stars}" for requests, stars in parsed)
