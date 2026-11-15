@@ -4,4 +4,7 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-.DS_Store.render-key
+.DS_Store
+.render-key
+.env.local
+*.local
