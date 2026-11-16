@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import platform
+import random
+import time
 from html import escape
 
 from aiogram import Bot, F, Router
@@ -38,6 +41,7 @@ from store import Store
 
 log = logging.getLogger("admin")
 PAGE = 5
+PANEL_STARTED = time.time()
 
 
 router = Router(name="admin")
@@ -68,10 +72,13 @@ def main_kb(role: str | None = ROLE_ADMIN) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🎫 Тикеты", callback_data="tick:list:0"),
             InlineKeyboardButton(text="⭐ Платежи", callback_data="adm:payments"),
         ],
+        [
+            InlineKeyboardButton(text="🎉 Фишки", callback_data="adm:fun"),
+            InlineKeyboardButton(text="🔍 Найти по ID", callback_data="adm:find"),
+        ],
     ]
     if can_manage_roles(role):
         rows.append([InlineKeyboardButton(text="👑 Роли", callback_data="adm:roles")])
-    rows.append([InlineKeyboardButton(text="🔍 Найти по ID", callback_data="adm:find")])
     rows.append([InlineKeyboardButton(text="🧪 Проверить ИИ", callback_data="adm:aitest")])
     rows.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="adm:close")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -1426,6 +1433,388 @@ async def cb_role_card(call: CallbackQuery, store: Store, settings: Settings) ->
     with contextlib.suppress(TelegramAPIError):
         await call.message.edit_text(text, reply_markup=kb)
     await call.answer()
+
+
+# --------------------------------------------------------------------------- фишки
+FUN_GIFTS = (1, 3, 5, 10)
+WHEEL_PRIZES = (1, 2, 3, 5, 7, 10)
+FUN_FORTUNES = (
+    "Сегодня отличный день, чтобы закрыть самый старый тикет 😉",
+    "Если сомневаешься — посмотри логи. Там всегда честнее, чем в графике.",
+    "Вселенная за тебя: сделай бэкап, пока она добрая.",
+    "Твой бот сегодня особенно хорош. Не забудь сказать ему спасибо.",
+    "Один маленький фикс сегодня лучше большого релиза в пятницу.",
+    "Не всё то баг, что не работает с первого раза.",
+    "Пользователи придут, запросы пойдут, звёзды зазвенят ✨",
+    "Хороший админ — тот, кто вовремя нажимает «Обновить».",
+    "Сегодня можно позволить себе один эксперимент. Только один 😄",
+    "Правило трёх «П»: проверил, подождал, перезапустил.",
+)
+
+
+def _fun_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🎲 Рулетка бонуса", callback_data="adm:fun:wheel"),
+                InlineKeyboardButton(text="🎁 Бонус всем", callback_data="adm:fun:gift"),
+            ],
+            [
+                InlineKeyboardButton(text="📈 Активность", callback_data="adm:fun:chart"),
+                InlineKeyboardButton(text="🏆 Зал славы", callback_data="adm:fun:hall"),
+            ],
+            [
+                InlineKeyboardButton(text="🩺 Диагностика", callback_data="adm:fun:diag"),
+                InlineKeyboardButton(text="🔮 Предсказание", callback_data="adm:fun:fortune"),
+            ],
+            [InlineKeyboardButton(text="🎆 Салют", callback_data="adm:fun:party")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:main")],
+        ]
+    )
+
+
+def _fun_name(row: dict) -> str:
+    username = row.get("username")
+    if username:
+        return "@" + escape(str(username))
+    return escape(str(row.get("first_name") or row.get("user_id")))
+
+
+async def render_fun(store: Store) -> tuple[str, InlineKeyboardMarkup]:
+    stats = await store.stats()
+    feedback = await store.feedback_stats()
+    recipients = max(0, stats["users"] - stats["banned"])
+    text = (
+        "🎉 <b>Фишки админки</b>\n"
+        "<i>Немного магии, чтобы панель не была скучной.</i>\n\n"
+        f"👥 Получателей подарков: <b>{recipients}</b>\n"
+        f"💬 Запросов сегодня: <b>{stats['requests_today']}</b>\n"
+        f"👍/👎 за ответы: {feedback['up']} / {feedback['down']}\n\n"
+        "🎲 <b>Рулетка</b> — случайному пользователю случайный бонус.\n"
+        "🎁 <b>Бонус всем</b> — подарить запросы всем сразу.\n"
+        "📈 <b>Активность</b> — график запросов за 7 дней.\n"
+        "🏆 <b>Зал славы</b> — лучшие по запросам и покупкам.\n"
+        "🩺 <b>Диагностика</b> — БД, ИИ, webhook и аптайм.\n"
+        "🔮 <b>Предсказание</b> — что день грядущий нам готовит.\n"
+        "🎆 <b>Салют</b> — просто красиво."
+    )
+    return text, _fun_kb()
+
+
+async def render_fun_gift(store: Store) -> tuple[str, InlineKeyboardMarkup]:
+    stats = await store.stats()
+    recipients = max(0, stats["users"] - stats["banned"])
+    text = (
+        "🎁 <b>Бонус всем</b>\n\n"
+        f"Получателей: <b>{recipients}</b> (без забаненных).\n"
+        "Нажми сумму — бонус выдастся сразу, без подтверждения.\n"
+        "Забаненные пользователи подарок не получат."
+    )
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"+{amount} всем", callback_data=f"adm:fun:gift:{amount}"
+            )
+            for amount in FUN_GIFTS[:2]
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"+{amount} всем", callback_data=f"adm:fun:gift:{amount}"
+            )
+            for amount in FUN_GIFTS[2:]
+        ],
+        [InlineKeyboardButton(text="⬅️ К фишкам", callback_data="adm:fun")],
+    ]
+    return text, InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _bar(value: int, maximum: int, width: int = 12) -> str:
+    if value <= 0:
+        return "·"
+    filled = max(1, round(value / maximum * width)) if maximum > 0 else width
+    return "█" * filled + "░" * max(0, width - filled)
+
+
+async def render_activity(store: Store) -> tuple[str, InlineKeyboardMarkup]:
+    rows = await store.activity_by_day(7)
+    total = sum(int(row.get("total", 0)) for row in rows)
+    best = max(rows, key=lambda row: int(row.get("total", 0))) if rows else None
+    lines = ["📈 <b>Активность за 7 дней</b>\n"]
+    if total <= 0:
+        lines.append("Данных пока нет — как только пойдут запросы, график заполнится.")
+    else:
+        maximum = max(int(row.get("total", 0)) for row in rows) or 1
+        chart = []
+        for row in rows:
+            day = row.get("day")
+            label = day.strftime("%d.%m") if hasattr(day, "strftime") else str(day)
+            mark = "👑" if best and row is best else "  "
+            chart.append(f"{label}  {_bar(int(row.get('total', 0)), maximum)}  {int(row.get('total', 0)):>4} {mark}")
+        lines.append("<pre>" + "\n".join(chart) + "</pre>")
+        lines.append("")
+        lines.append(f"Всего: <b>{total}</b> запросов · в среднем <b>{total / max(1, len(rows)):.1f}</b> в день")
+    return "\n".join(lines), InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="adm:fun:chart")],
+            [InlineKeyboardButton(text="⬅️ К фишкам", callback_data="adm:fun")],
+        ]
+    )
+
+
+async def render_hall(store: Store) -> tuple[str, InlineKeyboardMarkup]:
+    top = await store.top_users(5)
+    payers = await store.top_payers(5)
+    feedback = await store.feedback_stats()
+    medals = ("🥇", "🥈", "🥉", "4.", "5.")
+    lines = ["🏆 <b>Зал славы</b>\n", "<b>💬 По запросам</b>"]
+    if top:
+        for index, row in enumerate(top):
+            lines.append(f"{medals[index]} {_fun_name(row)} — <b>{row['total']}</b>")
+    else:
+        lines.append("Пока пусто.")
+    lines.append("\n<b>⭐ По покупкам</b>")
+    if payers:
+        for index, row in enumerate(payers):
+            lines.append(f"{medals[index]} {_fun_name(row)} — <b>{row['stars']}</b> ⭐")
+    else:
+        lines.append("Покупок пока не было.")
+    lines.append(
+        f"\n👍/👎 за ответы: <b>{feedback['up']}</b> / <b>{feedback['down']}</b>"
+    )
+    return "\n".join(lines), InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="adm:fun:hall")],
+            [InlineKeyboardButton(text="⬅️ К фишкам", callback_data="adm:fun")],
+        ]
+    )
+
+
+def _uptime_text(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes = seconds // 60
+    if days:
+        return f"{days} д {hours} ч"
+    if hours:
+        return f"{hours} ч {minutes} м"
+    return f"{minutes} м"
+
+
+async def render_diag(
+    bot: Bot, store: Store, settings: Settings, ai: AIClient
+) -> tuple[str, InlineKeyboardMarkup]:
+    from subscription import channel_display, channel_status
+
+    started = time.perf_counter()
+    db_ok = await store.ping()
+    db_ms = (time.perf_counter() - started) * 1000
+    rt = await load_runtime(store, settings)
+    stats = await store.stats()
+    tickets = await store.tickets_stats()
+
+    db_line = f"✅ работает · {db_ms:.0f} мс" if db_ok else "❌ нет связи"
+    ai_line = f"✅ <code>{escape(rt.model)}</code>" if ai.configured else "❌ ключ не задан"
+    vision_line = f"✅ <code>{escape(rt.vision_model)}</code>"
+
+    try:
+        info = await bot.get_webhook_info()
+        url = getattr(info, "url", "") or ""
+        error = getattr(info, "last_error_message", None)
+        pending = int(getattr(info, "pending_update_count", 0) or 0)
+        if not url:
+            webhook_line = "⚠️ не задан — бот работает через polling"
+        elif error:
+            webhook_line = f"⚠️ {escape(str(error)[:100])}"
+        else:
+            webhook_line = f"✅ {escape(url)} · в очереди {pending}"
+    except Exception as exc:  # noqa: BLE001 — диагностика не должна падать
+        webhook_line = f"⚠️ не проверить: {escape(str(exc)[:100])}"
+
+    gate_state, gate_note = await channel_status(bot, rt.required_channel)
+    gate_icon = {"ok": "✅", "off": "⏸", "error": "⚠️"}.get(gate_state, "⚠️")
+    channel_line = (
+        f"{gate_icon} {channel_display(rt.required_channel) or 'выключена'} · "
+        f"<i>{escape(gate_note)}</i>"
+    )
+
+    text = (
+        "🩺 <b>Диагностика</b>\n\n"
+        f"🗄 БД: {db_line}\n"
+        f"🧠 ИИ: {ai_line}\n"
+        f"🖼 Фото: {vision_line}\n"
+        f"🔗 Webhook: {webhook_line}\n"
+        f"📢 Канал: {channel_line}\n\n"
+        f"👥 Пользователей: <b>{stats['users']}</b> · 🚫 {stats['banned']}\n"
+        f"🎫 Тикеты: {tickets['open']} открыто · {tickets['closed']} закрыто\n"
+        f"💬 Запросов сегодня: <b>{stats['requests_today']}</b>\n"
+        f"⏱ Аптайм панели: {_uptime_text(time.time() - PANEL_STARTED)}\n"
+        f"🐍 Python {platform.python_version()}"
+    )
+    return text, InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="adm:fun:diag")],
+            [InlineKeyboardButton(text="⬅️ К фишкам", callback_data="adm:fun")],
+        ]
+    )
+
+
+def render_fortune() -> tuple[str, InlineKeyboardMarkup]:
+    text = (
+        "🔮 <b>Предсказание дня</b>\n\n"
+        f"<blockquote>{escape(random.choice(FUN_FORTUNES))}</blockquote>"
+    )
+    return text, InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔮 Ещё предсказание", callback_data="adm:fun:fortune")],
+            [InlineKeyboardButton(text="⬅️ К фишкам", callback_data="adm:fun")],
+        ]
+    )
+
+
+@router.message(Command("fun"))
+async def cmd_fun(message: Message, store: Store) -> None:
+    text, kb = await render_fun(store)
+    await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data == "adm:fun")
+async def cb_fun(call: CallbackQuery, store: Store) -> None:
+    text, kb = await render_fun(store)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm:fun:gift")
+async def cb_fun_gift(call: CallbackQuery, store: Store) -> None:
+    text, kb = await render_fun_gift(store)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:fun:gift:"))
+async def cb_fun_gift_do(call: CallbackQuery, store: Store) -> None:
+    try:
+        amount = int(call.data.rsplit(":", 1)[1])
+    except (AttributeError, IndexError, ValueError):
+        await call.answer("Непонятная сумма", show_alert=True)
+        return
+    if amount not in FUN_GIFTS:
+        await call.answer("Такой суммы нет", show_alert=True)
+        return
+    count = await store.add_bonus_all(amount)
+    text = (
+        "🎁 <b>Подарок разлетелся</b>\n\n"
+        f"Каждому активному пользователю: <b>+{amount}</b> запросов.\n"
+        f"Получателей: <b>{count}</b>.\n\n"
+        "<i>Забаненные и удалённые не учитывались.</i>"
+    )
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="🎁 Ещё раз", callback_data="adm:fun:gift")],
+                    [InlineKeyboardButton(text="⬅️ К фишкам", callback_data="adm:fun")],
+                ]
+            ),
+        )
+    await call.answer(f"Выдано {count} пользователям")
+
+
+@router.callback_query(F.data == "adm:fun:wheel")
+async def cb_fun_wheel(
+    call: CallbackQuery, bot: Bot, store: Store, settings: Settings
+) -> None:
+    candidates = await store.user_ids(only_active=True)
+    staff = set(settings.admin_ids) | set(await store.role_ids())
+    if settings.owner_id:
+        staff.add(settings.owner_id)
+    regular = [uid for uid in candidates if uid not in staff]
+    candidates = regular or candidates
+    if not candidates:
+        await call.answer("Пока нет пользователей — некого одаривать", show_alert=True)
+        return
+    winner = random.choice(candidates)
+    amount = random.choice(WHEEL_PRIZES)
+    balance = await store.add_bonus(winner, amount)
+    card = await store.user_card(winner) or {"user_id": winner}
+    name = _fun_name(card)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.answer_dice(emoji="🎰")
+    with contextlib.suppress(TelegramAPIError):
+        await bot.send_message(
+            winner,
+            f"🎉 <b>Рулетка бонуса!</b>\n\n"
+            f"Тебе выпало <b>+{amount}</b> запросов.\n"
+            f"Теперь у тебя <b>{balance}</b> бонусных запросов.",
+        )
+    text = (
+        "🎲 <b>Рулетка бонуса</b>\n\n"
+        f"Победитель: {name} (<code>{winner}</code>)\n"
+        f"Приз: <b>+{amount}</b> запросов\n"
+        f"Баланс: <b>{balance}</b>\n\n"
+        "<i>Пользователь получил уведомление.</i>"
+    )
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.answer(
+            text,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="🎲 Ещё раз", callback_data="adm:fun:wheel")],
+                    [InlineKeyboardButton(text="⬅️ К фишкам", callback_data="adm:fun")],
+                ]
+            ),
+        )
+    await call.answer("Крутим…")
+
+
+@router.callback_query(F.data == "adm:fun:chart")
+async def cb_fun_chart(call: CallbackQuery, store: Store) -> None:
+    text, kb = await render_activity(store)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm:fun:hall")
+async def cb_fun_hall(call: CallbackQuery, store: Store) -> None:
+    text, kb = await render_hall(store)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm:fun:diag")
+async def cb_fun_diag(
+    call: CallbackQuery, bot: Bot, store: Store, settings: Settings, ai: AIClient
+) -> None:
+    text, kb = await render_diag(bot, store, settings, ai)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm:fun:fortune")
+async def cb_fun_fortune(call: CallbackQuery) -> None:
+    text, kb = render_fortune()
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm:fun:party")
+async def cb_fun_party(call: CallbackQuery) -> None:
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.answer_dice(emoji="🎲")
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.answer(
+            "🎆 <b>Салют в честь админа!</b>\n\n"
+            "<i>Панель работает, запросы идут, тикеты закрываются.</i>"
+        )
+    await call.answer("🎉")
 
 
 # --------------------------------------------------------------------------- fallback

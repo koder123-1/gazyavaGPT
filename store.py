@@ -34,6 +34,7 @@ class Store(Protocol):
     async def consume(self, user_id: int, daily_limit: int = 0) -> int: ...
     async def bonus_requests(self, user_id: int) -> int: ...
     async def add_bonus(self, user_id: int, count: int) -> int: ...
+    async def add_bonus_all(self, count: int) -> int: ...
     async def record_payment(
         self, user_id: int, requests: int, stars: int, charge_id: str, kind: str = "requests"
     ) -> bool: ...
@@ -53,6 +54,8 @@ class Store(Protocol):
     async def list_users(self, offset: int, limit: int) -> list[dict]: ...
     async def user_card(self, user_id: int) -> dict | None: ...
     async def top_users(self, limit: int) -> list[dict]: ...
+    async def top_payers(self, limit: int) -> list[dict]: ...
+    async def activity_by_day(self, days: int = 7) -> list[dict]: ...
     async def user_ids(self, only_active: bool = False) -> list[int]: ...
 
     async def get_setting(self, key: str) -> str | None: ...
@@ -107,6 +110,7 @@ class MemoryStore:
         self._settings: dict[str, str] = {}
         self._exchanges: dict[int, dict] = {}
         self._profiles: dict[int, dict] = {}
+        self._daily: dict[date, int] = defaultdict(int)
         self._styles: dict[int, str] = {}
         self._payments: dict[str, dict] = {}
         self._model_access: dict[int, set[str]] = {}
@@ -204,6 +208,7 @@ class MemoryStore:
         count = self._used_today(user_id) + 1
         self._usage[user_id] = (date.today(), count)
         self._total_requests[user_id] += 1
+        self._daily[date.today()] += 1
         # Дневной лимит израсходован — списываем купленный/выданный бонус.
         if daily_limit > 0 and count > daily_limit:
             user = self._users.get(user_id)
@@ -221,6 +226,15 @@ class MemoryStore:
         )
         user["bonus_requests"] = max(0, int(user.get("bonus_requests", 0)) + count)
         return int(user["bonus_requests"])
+
+    async def add_bonus_all(self, count: int) -> int:
+        total = 0
+        for info in self._users.values():
+            if info.get("banned"):
+                continue
+            info["bonus_requests"] = max(0, int(info.get("bonus_requests", 0)) + count)
+            total += 1
+        return total
 
     async def record_payment(
         self,
@@ -394,6 +408,30 @@ class MemoryStore:
         if only_active:
             return [uid for uid, info in self._users.items() if not info.get("banned")]
         return list(self._users)
+
+    async def top_payers(self, limit: int) -> list[dict]:
+        totals: dict[int, int] = defaultdict(int)
+        for payment in self._payments.values():
+            if payment.get("refunded_at"):
+                continue
+            totals[int(payment["user_id"])] += int(payment.get("stars", 0))
+        rows = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)[:limit]
+        return [
+            {
+                "user_id": uid,
+                "username": self._users.get(uid, {}).get("username"),
+                "stars": stars,
+            }
+            for uid, stars in rows
+        ]
+
+    async def activity_by_day(self, days: int = 7) -> list[dict]:
+        today = date.today()
+        result = []
+        for offset in range(days - 1, -1, -1):
+            day = today - timedelta(days=offset)
+            result.append({"day": day, "total": int(self._daily.get(day, 0))})
+        return result
 
     async def get_setting(self, key: str) -> str | None:
         return self._settings.get(key)
@@ -817,6 +855,17 @@ class PostgresStore:
         )
         return int(value or 0)
 
+    async def add_bonus_all(self, count: int) -> int:
+        assert self._pool is not None
+        status = await self._pool.execute(
+            "UPDATE users SET bonus_requests = GREATEST(0, bonus_requests + $1) WHERE NOT banned",
+            count,
+        )
+        try:
+            return int(str(status).rsplit(" ", 1)[-1])
+        except (TypeError, ValueError):
+            return 0
+
     async def record_payment(
         self,
         user_id: int,
@@ -1058,6 +1107,40 @@ class PostgresStore:
         if only_active:
             query += " WHERE NOT banned"
         return [r["user_id"] for r in await self._pool.fetch(query)]
+
+    async def top_payers(self, limit: int) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            """
+            SELECT p.user_id, u.username, sum(p.stars) AS stars
+            FROM payments p
+            LEFT JOIN users u ON u.user_id = p.user_id
+            WHERE p.refunded_at IS NULL
+            GROUP BY p.user_id, u.username
+            ORDER BY stars DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+        return [dict(r) for r in rows]
+
+    async def activity_by_day(self, days: int = 7) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            """
+            SELECT day, coalesce(sum(count), 0) AS total
+            FROM usage
+            WHERE day >= CURRENT_DATE - ($1::int - 1)
+            GROUP BY day
+            """,
+            max(1, days),
+        )
+        totals = {row["day"]: int(row["total"] or 0) for row in rows}
+        today = date.today()
+        return [
+            {"day": today - timedelta(days=offset), "total": totals.get(today - timedelta(days=offset), 0)}
+            for offset in range(days - 1, -1, -1)
+        ]
 
     async def get_setting(self, key: str) -> str | None:
         assert self._pool is not None
