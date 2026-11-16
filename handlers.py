@@ -29,6 +29,7 @@ from aiogram.types import (
 )
 
 import files
+import media
 import models as model_catalog
 from ai import AIClient, AIError
 from config import Settings
@@ -686,6 +687,8 @@ async def send_generated(
     lang: str,
     prompt: str,
     *,
+    store: Store | None = None,
+    actor: User | None = None,
     source: bytes | None = None,
     mime: str = "image/png",
 ) -> None:
@@ -698,6 +701,26 @@ async def send_generated(
         await message.reply(t(lang, "img.not_configured"))
         return
 
+    user = actor or message.from_user
+    runtime = await load_runtime(store, settings) if store else None
+    free_left = 0
+    credits = 0
+    charge = False
+    if store is not None and user is not None:
+        await store.ensure_user(user.id, user.username, user.first_name)
+        admin = await is_admin(user.id, settings, store)
+        limit = runtime.image_daily_limit if runtime else 0
+        used = await store.image_used_today(user.id)
+        credits = await store.image_credits(user.id)
+        free_left = max(0, limit - used)
+        if not admin and free_left <= 0 and credits <= 0:
+            await message.reply(
+                t(lang, "img.quota_exhausted", limit=limit),
+                reply_markup=image_more_kb(prompt, lang),
+            )
+            return
+        charge = not admin
+
     status = await message.reply(t(lang, "img.generating"))
     markup = image_more_kb(prompt, lang) if source is None else None
     try:
@@ -707,6 +730,11 @@ async def send_generated(
             data = await images.generate(prompt)
         if not data:
             raise ImageError("empty")
+        if charge and user is not None and store is not None:
+            if free_left > 0:
+                await store.consume_image(user.id)
+            else:
+                await store.add_image_credits(user.id, -1)
         await message.reply_photo(
             photo=BufferedInputFile(data, filename=image_filename(data)),
             caption=t(lang, "img.done", prompt=escape(prompt[:500])),
@@ -745,7 +773,7 @@ async def cmd_imagine(
     lang = await user_lang(store, settings, user.id)
     parts = (message.text or "").split(maxsplit=1)
     prompt = parts[1].strip() if len(parts) > 1 else ""
-    await send_generated(message, images, settings, lang, prompt)
+    await send_generated(message, images, settings, lang, prompt, store=store)
 
 
 @router.message(
@@ -765,7 +793,9 @@ async def on_imagine_prompt(
     await state.clear()
     user = message.from_user
     lang = await user_lang(store, settings, user.id) if user else settings.default_lang
-    await send_generated(message, images, settings, lang, (message.text or "").strip())
+    await send_generated(
+        message, images, settings, lang, (message.text or "").strip(), store=store
+    )
 
 
 @router.message(Command("edit"))
@@ -790,7 +820,9 @@ async def cb_image_more(
     if call.message is None:
         return
     lang = await user_lang(store, settings, call.from_user.id)
-    await send_generated(call.message, images, settings, lang, prompt)
+    await send_generated(
+        call.message, images, settings, lang, prompt, store=store, actor=call.from_user
+    )
 
 
 # --------------------------------------------------------------------------- ядро
@@ -1541,12 +1573,13 @@ async def on_image(
             settings,
             lang,
             (caption or "")[draw_match.end() :].strip(),
+            store=store,
         )
         return
 
     if caption and EDIT_RE.search(caption):
         await send_generated(
-            message, images, settings, lang, caption, source=data, mime=mime
+            message, images, settings, lang, caption, source=data, mime=mime, store=store
         )
         return
 
@@ -1572,6 +1605,158 @@ async def on_image(
     finally:
         with contextlib.suppress(Exception):
             await status.delete()
+
+
+# --------------------------------------------------------------------------- картинки (фото)
+VIDEO_PROMPT = "Разбери, что происходит на видео: опиши события, текст и главное."
+STICKER_PROMPT = "Опиши этот стикер: что на нём и какое настроение он передаёт."
+VIDEO_INSTRUCTION = (
+    "Пользователь прислал видео. Тебе передали несколько кадров, склеенных в сетку. "
+    "Разбери, что происходит: события по порядку, люди и предметы, надписи на экране. "
+    "Если кадров мало, честно скажи, что видно не всё."
+)
+STICKER_INSTRUCTION = (
+    "Пользователь прислал стикер. Опиши, что на нём изображено, и объясни смысл или настроение."
+)
+
+
+async def _download_bytes(bot: Bot, file, limit: int) -> tuple[bytes | None, str | None]:
+    """Скачивает файл Telegram в память с проверкой размера."""
+    if file is None:
+        return None, "empty"
+    if (getattr(file, "file_size", 0) or 0) > limit:
+        return None, "too_big"
+    buffer = io.BytesIO()
+    try:
+        await bot.download(file, destination=buffer)
+    except Exception:  # noqa: BLE001
+        log.exception("Не удалось скачать медиа из Telegram")
+        return None, "download"
+    data = buffer.getvalue()
+    return (data, None) if data else (None, "empty")
+
+
+@router.message(F.video | F.video_note | F.animation)
+async def on_video(
+    message: Message,
+    bot: Bot,
+    store: Store,
+    settings: Settings,
+    ai: AIClient,
+) -> None:
+    text = await addressed_text(message, bot, settings)
+    if text is None:
+        return
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+
+    video = message.video or message.animation or message.video_note
+    limit = media.VIDEO_MAX_BYTES
+    status = await message.reply(t(lang, "media.video_reading"))
+
+    try:
+        data, error = await _download_bytes(bot, video, limit)
+        if error == "too_big":
+            await status.delete()
+            await message.reply(t(lang, "media.too_big", mb=limit // (1024 * 1024)))
+            return
+        if error or not data:
+            await status.delete()
+            await message.reply(t(lang, "media.video_failed"))
+            return
+
+        frames = await asyncio.to_thread(media.video_frames, data)
+        image = await asyncio.to_thread(media.contact_sheet, frames) if frames else b""
+        mime = "image/jpeg"
+        if not image:
+            thumb = getattr(video, "thumbnail", None)
+            thumb_data, _ = await _download_bytes(bot, thumb, 5 * 1024 * 1024)
+            image = thumb_data or b""
+
+        if not image:
+            await status.delete()
+            await message.reply(t(lang, "media.video_failed"))
+            return
+
+        duration = int(getattr(video, "duration", 0) or 0)
+        hint = f" Длительность: {duration} с." if duration else ""
+        question = text.strip() or VIDEO_PROMPT
+        with contextlib.suppress(Exception):
+            await status.delete()
+        await answer_with_ai(
+            message,
+            bot=bot,
+            store=store,
+            settings=settings,
+            ai=ai,
+            question=question + hint,
+            image=image,
+            image_mime=mime,
+            instruction=VIDEO_INSTRUCTION,
+            store_question=f"[видео] {question[:160]}",
+        )
+    finally:
+        with contextlib.suppress(Exception):
+            await status.delete()
+
+
+@router.message(F.sticker)
+async def on_sticker(
+    message: Message,
+    bot: Bot,
+    store: Store,
+    settings: Settings,
+    ai: AIClient,
+) -> None:
+    text = await addressed_text(message, bot, settings)
+    if text is None:
+        return
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    sticker = message.sticker
+
+    # Анимированный .tgs — это gzip с векторами, его нельзя отдать vision-модели.
+    if getattr(sticker, "is_animated", False):
+        await message.reply(t(lang, "media.sticker_animated"))
+        return
+
+    data: bytes | None = None
+    if getattr(sticker, "is_video", False):
+        thumb_data, _ = await _download_bytes(
+            bot, getattr(sticker, "thumbnail", None), 5 * 1024 * 1024
+        )
+        data = thumb_data
+    else:
+        raw, error = await _download_bytes(bot, sticker, 5 * 1024 * 1024)
+        if error == "too_big":
+            await message.reply(t(lang, "media.too_big", mb=5))
+            return
+        data = await asyncio.to_thread(media.sticker_image, raw) if raw else None
+
+    if not data:
+        await message.reply(t(lang, "media.sticker_failed"))
+        return
+
+    emoji = getattr(sticker, "emoji", None)
+    question = text.strip() or STICKER_PROMPT
+    if emoji:
+        question += f" Эмодзи стикера: {emoji}."
+    await answer_with_ai(
+        message,
+        bot=bot,
+        store=store,
+        settings=settings,
+        ai=ai,
+        question=question,
+        image=data,
+        image_mime="image/jpeg",
+        instruction=STICKER_INSTRUCTION,
+        store_question=f"[стикер] {question[:160]}",
+    )
 
 
 # --------------------------------------------------------------------------- кнопки под ответом
@@ -1899,7 +2084,7 @@ async def on_text(
     draw_match = DRAW_RE.match(text)
     if draw_match:
         await send_generated(
-            message, images, settings, lang, text[draw_match.end() :].strip()
+            message, images, settings, lang, text[draw_match.end() :].strip(), store=store
         )
         return
 

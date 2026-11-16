@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import platform
 import random
+import re
 import time
 from html import escape
 
@@ -54,7 +56,11 @@ class Panel(StatesGroup):
     search = State()
     edit = State()
     grant = State()
+    image_grant = State()
     role_user = State()
+    channel_add = State()
+    channel_text = State()
+    channel_button = State()
 
 
 # --------------------------------------------------------------------------- клавиатуры
@@ -65,6 +71,10 @@ def main_kb(role: str | None = ROLE_ADMIN) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="👥 Пользователи", callback_data="adm:users:0"),
         ],
         [
+            InlineKeyboardButton(text="📢 Канал", callback_data="adm:ch"),
+            InlineKeyboardButton(text="🎉 Фишки", callback_data="adm:fun"),
+        ],
+        [
             InlineKeyboardButton(text="📢 Рассылка", callback_data="adm:bcast"),
             InlineKeyboardButton(text="⚙️ Настройки", callback_data="adm:settings"),
         ],
@@ -73,13 +83,12 @@ def main_kb(role: str | None = ROLE_ADMIN) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="⭐ Платежи", callback_data="adm:payments"),
         ],
         [
-            InlineKeyboardButton(text="🎉 Фишки", callback_data="adm:fun"),
             InlineKeyboardButton(text="🔍 Найти по ID", callback_data="adm:find"),
+            InlineKeyboardButton(text="🧪 Проверить ИИ", callback_data="adm:aitest"),
         ],
     ]
     if can_manage_roles(role):
         rows.append([InlineKeyboardButton(text="👑 Роли", callback_data="adm:roles")])
-    rows.append([InlineKeyboardButton(text="🧪 Проверить ИИ", callback_data="adm:aitest")])
     rows.append([InlineKeyboardButton(text="❌ Закрыть", callback_data="adm:close")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -265,6 +274,7 @@ async def render_card(
         f"Статус: {status}\n\n"
         f"Сегодня: {card.get('used_today', 0)} из {limit}\n"
         f"Бонусных запросов: <b>{card.get('bonus_requests', 0)}</b>\n"
+        f"🖼 Бонусных генераций картинок: <b>{card.get('image_credits', 0)}</b>\n"
         f"{model_line}"
         f"Всего запросов: {card.get('total_requests', 0)}\n"
         f"Сообщений в истории: {card.get('history_len', 0)}"
@@ -287,6 +297,11 @@ async def render_card(
             [
                 InlineKeyboardButton(
                     text="⭐ Выдать запросы", callback_data=f"adm:grant:{user_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🖼 Выдать генерации", callback_data=f"adm:ig:{user_id}"
                 )
             ],
             [InlineKeyboardButton(text="⬅️ К списку", callback_data="adm:users:0")],
@@ -567,6 +582,11 @@ HINTS = {
     "system_prompt": "Новый системный промпт — характер и правила ассистента.\n\nПришли текст:",
     "star_packages": "Тарифы в формате <code>запросы:звёзды</code> через запятую.\nПример: <code>30:3,60:6,100:10</code>\n\nПришли тарифы:",
     "star_rate": "Сколько запросов давать за 1 звезду, когда пользователь вводит свою сумму.\nПример: <code>10</code>\n\nПришли число:",
+    "image_daily_limit": (
+        "Сколько картинок в день пользователь может сгенерировать бесплатно.\n"
+        "<code>0</code> — только выданные администратором генерации.\n"
+        "Выданные генерации тратятся после бесплатных.\n\nПришли число:"
+    ),
     "required_channel": (
         "Канал или группа, подписка на которую обязательна перед доступом к боту.\n\n"
         "Форматы: <code>@gazyavaGPT</code>, <code>https://t.me/gazyavaGPT</code> "
@@ -668,6 +688,63 @@ async def on_grant_amount(
 @router.message(Panel.grant)
 async def on_grant_non_text(message: Message) -> None:
     await message.answer("Пришли количество запросов числом или нажми /cancel.")
+
+
+@router.callback_query(F.data.startswith("adm:ig:"))
+async def cb_image_grant_start(call: CallbackQuery, state: FSMContext) -> None:
+    user_id = int(call.data.rsplit(":", 1)[1])
+    await state.set_state(Panel.image_grant)
+    await state.update_data(image_user_id=user_id)
+    await call.message.edit_text(
+        f"🖼 <b>Выдать генерации картинок</b> пользователю <code>{user_id}</code>\n\n"
+        "Пришли количество целым числом. Чтобы отозвать, укажи отрицательное число.\n"
+        "Например: <code>5</code> или <code>-1</code>.\n/cancel — отмена.",
+        reply_markup=back_kb("adm:main"),
+    )
+    await call.answer()
+
+
+@router.message(Panel.image_grant, F.text)
+async def on_image_grant_amount(
+    message: Message, bot: Bot, store: Store, settings: Settings, state: FSMContext
+) -> None:
+    raw = (message.text or "").strip()
+    if not raw.lstrip("+-").isdigit():
+        await message.answer("Пришли целое число, например <code>5</code> или <code>-1</code>.")
+        return
+    amount = int(raw)
+    if amount == 0 or abs(amount) > 10_000:
+        await message.answer("Число должно быть от -10000 до 10000, кроме нуля.")
+        return
+    data = await state.get_data()
+    user_id = int(data.get("image_user_id", 0))
+    if user_id <= 0 or not await store.user_card(user_id):
+        await state.clear()
+        await message.answer("Пользователь не найден. Открой карточку заново.")
+        return
+    balance = await store.add_image_credits(user_id, amount)
+    await state.clear()
+    await message.answer(
+        f"✅ Изменение: {amount:+d} генераций картинок.\n"
+        f"Баланс пользователя <code>{user_id}</code>: <b>{balance}</b>."
+    )
+    try:
+        await bot.send_message(
+            user_id,
+            "🖼 Администратор "
+            f"{'начислил' if amount > 0 else 'списал'} <b>{abs(amount)}</b> "
+            "генераций картинок.\n"
+            f"Твой запас генераций: <b>{balance}</b>.",
+        )
+    except TelegramAPIError:
+        pass
+    text, kb = await render_card(store, user_id, settings)
+    await message.answer(text, reply_markup=kb)
+
+
+@router.message(Panel.image_grant)
+async def on_image_grant_non_text(message: Message) -> None:
+    await message.answer("Пришли количество генераций числом или нажми /cancel.")
 
 
 # --------------------------------------------------------------------------- статистика
@@ -1180,13 +1257,16 @@ async def on_edit_value(
 
     value = (message.text or "").strip()
 
-    if key in {"daily_limit", "max_context"}:
+    if key in {"daily_limit", "max_context", "image_daily_limit"}:
         if not value.isdigit():
             await message.answer("Нужно целое число, например <code>30</code>. 0 — без ограничений.")
             return
         number = int(value)
         if key == "daily_limit" and number > 10000:
             await message.answer("Слишком много. Поставь до 10000.")
+            return
+        if key == "image_daily_limit" and number > 1000:
+            await message.answer("Слишком много. Поставь до 1000 картинок в день.")
             return
         if key == "max_context" and number > 100:
             await message.answer("Слишком много. Поставь до 100.")
@@ -1815,6 +1895,440 @@ async def cb_fun_party(call: CallbackQuery) -> None:
             "<i>Панель работает, запросы идут, тикеты закрываются.</i>"
         )
     await call.answer("🎉")
+
+
+# --------------------------------------------------------------------------- канал
+CHANNEL_SETTING = "managed_channels"
+REQUIRED_CHANNEL_SETTING = "required_channel"
+MAX_POST_BUTTONS = 10
+MAX_CHANNELS = 8
+_BUTTON_URL_RE = re.compile(r"^(?:https?://|tg://)\S+$", re.IGNORECASE)
+
+
+def _stored_channels(raw: str | None) -> list[str]:
+    """Разбирает сохранённый список каналов, поддерживая старый текстовый формат."""
+    try:
+        values = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        values = (raw or "").splitlines()
+    if not isinstance(values, list):
+        return []
+    result = []
+    for value in values:
+        channel = str(value or "").strip()
+        if channel and channel not in result:
+            result.append(channel)
+    return result[:MAX_CHANNELS]
+
+
+async def _managed_channels(store: Store) -> list[str]:
+    channels = _stored_channels(await store.get_setting(CHANNEL_SETTING))
+    required = (await store.get_setting(REQUIRED_CHANNEL_SETTING) or "").strip()
+    if required and required.lower() not in {"off", "none", "no", "0", "нет", "выкл"}:
+        if required not in channels:
+            channels.insert(0, required)
+    return channels[:MAX_CHANNELS]
+
+
+async def _verify_channel(bot: Bot, raw: str) -> tuple[str | None, str | None]:
+    """Возвращает каноничный ID и ошибку; проверяет права публикации бота."""
+    value = raw.strip()
+    match = re.search(r"(?:https?://)?t\.me/([A-Za-z0-9_]+)", value, re.I)
+    if match:
+        value = "@" + match.group(1)
+    elif not value.startswith("@") and not value.lstrip("-").isdigit():
+        return None, "Пришли @username, ссылку https://t.me/username или числовой ID канала."
+    try:
+        chat = await bot.get_chat(value)
+        member = await bot.get_chat_member(chat.id, bot.id)
+    except TelegramAPIError:
+        return None, "Не удалось открыть канал. Проверь username/ID и добавь бота администратором."
+    status = getattr(member, "status", "")
+    if status not in {"administrator", "creator", "owner"}:
+        return None, "Бот не администратор этого канала. Выдай ему права администратора и попробуй снова."
+    if getattr(chat, "type", "") != "channel":
+        return None, "Это не канал. Укажи именно Telegram-канал."
+    if status == "administrator" and getattr(member, "can_post_messages", True) is False:
+        return None, "У бота нет права публиковать сообщения. Включи «Публикация сообщений»."
+    username = getattr(chat, "username", None)
+    return ("@" + username if username else str(chat.id)), None
+
+
+def _channel_title(channel: str) -> str:
+    return escape(channel)
+
+
+def _post_kb(post: dict) -> InlineKeyboardMarkup | None:
+    buttons = post.get("buttons") or []
+    if not buttons:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=item["text"], url=item["url"])]
+            for item in buttons
+        ]
+    )
+
+
+def _post_text(post: dict) -> str:
+    text = str(post.get("text") or "").strip()
+    if text:
+        return text
+    return str(post.get("caption") or "").strip()
+
+
+async def _deliver_post(bot: Bot, channel: str, post: dict, reply_markup=None):
+    """Отправляет пост без parse_mode: админский текст не интерпретируется как HTML."""
+    text = _post_text(post)
+    markup = reply_markup if reply_markup is not None else _post_kb(post)
+    photo = post.get("photo")
+    if photo:
+        return await bot.send_photo(
+            channel, photo=photo, caption=text or None, reply_markup=markup, parse_mode=None
+        )
+    return await bot.send_message(channel, text, reply_markup=markup, parse_mode=None)
+
+
+async def render_channels(store: Store) -> tuple[str, InlineKeyboardMarkup]:
+    channels = await _managed_channels(store)
+    required = (await store.get_setting(REQUIRED_CHANNEL_SETTING) or "").strip()
+    lines = ["📢 <b>Управление каналом</b>", ""]
+    if channels:
+        lines.append("<b>Каналы, доступные для публикации:</b>")
+        for index, channel in enumerate(channels):
+            mark = " · проверка подписки" if channel == required else ""
+            lines.append(f"{index + 1}. {_channel_title(channel)}{mark}")
+    else:
+        lines.append("Каналы пока не подключены.")
+    lines += [
+        "",
+        "Подключи канал, где бот администратор, затем создавай посты с URL-кнопками.",
+        "Пост можно сделать текстовым или с фото; кнопки задаются как <code>Текст | https://ссылка</code>.",
+    ]
+    rows = []
+    for index, channel in enumerate(channels):
+        rows.append([
+            InlineKeyboardButton(text=f"✍️ Пост · {channel[:25]}", callback_data=f"adm:ch:pick:{index}"),
+            InlineKeyboardButton(text="🗑", callback_data=f"adm:ch:rm:{index}"),
+        ])
+    if len(channels) < MAX_CHANNELS:
+        rows.append([InlineKeyboardButton(text="➕ Подключить канал", callback_data="adm:ch:add")])
+    rows.append([InlineKeyboardButton(text="⬅️ В админку", callback_data="adm:main")])
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _compose_kb(post: dict | None = None) -> InlineKeyboardMarkup:
+    buttons = (post or {}).get("buttons") or []
+    rows = []
+    for index, item in enumerate(buttons):
+        rows.append([InlineKeyboardButton(
+            text=f"🗑 {item['text'][:40]}", callback_data=f"adm:ch:del:{index}"
+        )])
+    rows.append([InlineKeyboardButton(text="🔘 Добавить URL-кнопку", callback_data="adm:ch:addbtn")])
+    rows.append([
+        InlineKeyboardButton(text="👀 Предпросмотр", callback_data="adm:ch:preview"),
+        InlineKeyboardButton(text="🚀 Опубликовать", callback_data="adm:ch:publish"),
+    ])
+    rows.append([
+        InlineKeyboardButton(text="🗑 Удалить все кнопки", callback_data="adm:ch:delmenu"),
+        InlineKeyboardButton(text="❌ Отмена", callback_data="adm:ch:cancel"),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _render_compose(post: dict, channel: str) -> str:
+    body = _post_text(post)
+    if len(body) > 700:
+        body = body[:700] + "…"
+    if not body:
+        body = "<i>Текст пока не задан</i>"
+    buttons = post.get("buttons") or []
+    lines = [
+        f"📝 <b>Новый пост для {_channel_title(channel)}</b>",
+        "",
+        f"📷 Фото: {'есть' if post.get('photo') else 'нет'}",
+        "<b>Содержимое:</b>",
+        escape(body),
+        "",
+        f"🔘 Кнопок: <b>{len(buttons)}/{MAX_POST_BUTTONS}</b>",
+    ]
+    for item in buttons:
+        lines.append(f"• {escape(item['text'])} → <code>{escape(item['url'])}</code>")
+    return "\n".join(lines)
+
+
+async def _edit_compose(call: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    post = data.get("channel_post") or {}
+    channel = str(data.get("channel_target") or "")
+    await call.message.edit_text(_render_compose(post, channel), reply_markup=_compose_kb(post))
+
+
+@router.message(Command("channel"))
+async def cmd_channel(message: Message, store: Store, state: FSMContext) -> None:
+    await state.clear()
+    text, kb = await render_channels(store)
+    await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data == "adm:ch")
+async def cb_channels(call: CallbackQuery, store: Store, state: FSMContext) -> None:
+    await state.clear()
+    text, kb = await render_channels(store)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm:ch:add")
+async def cb_channel_add(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(Panel.channel_add)
+    await call.message.edit_text(
+        "➕ <b>Подключить канал</b>\n\n"
+        "Пришли @username, ссылку <code>https://t.me/username</code> или ID вида <code>-100…</code>.\n"
+        "Бот проверит, что он администратор канала и может публиковать посты.\n/cancel — отмена.",
+        reply_markup=back_kb("adm:ch"),
+    )
+    await call.answer()
+
+
+@router.message(Panel.channel_add, F.text)
+async def on_channel_add(message: Message, bot: Bot, store: Store, state: FSMContext) -> None:
+    channel, error = await _verify_channel(bot, (message.text or "").strip())
+    if error:
+        await message.answer(error)
+        return
+    channels = _stored_channels(await store.get_setting(CHANNEL_SETTING))
+    if channel not in channels:
+        if len(channels) >= MAX_CHANNELS:
+            await message.answer("Подключено максимальное число каналов. Удали один и попробуй снова.")
+            return
+        channels.append(channel)
+        await store.set_setting(CHANNEL_SETTING, json.dumps(channels, ensure_ascii=False))
+    await state.clear()
+    text, kb = await render_channels(store)
+    await message.answer(f"✅ Канал {escape(channel)} подключён.\n\n{text}", reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("adm:ch:rm:"))
+async def cb_channel_remove(call: CallbackQuery, store: Store) -> None:
+    try:
+        index = int(call.data.rsplit(":", 1)[1])
+    except (ValueError, AttributeError):
+        await call.answer("Неверный канал", show_alert=True)
+        return
+    visible = await _managed_channels(store)
+    if index < 0 or index >= len(visible):
+        await call.answer("Канал уже удалён", show_alert=True)
+        return
+    removed = visible[index]
+    required = (await store.get_setting(REQUIRED_CHANNEL_SETTING) or "").strip()
+    if removed == required:
+        await call.answer("Это канал обязательной подписки. Чтобы отвязать его, измени настройку в «Настройки».", show_alert=True)
+        return
+    channels = _stored_channels(await store.get_setting(CHANNEL_SETTING))
+    channels = [channel for channel in channels if channel != removed]
+    await store.set_setting(CHANNEL_SETTING, json.dumps(channels, ensure_ascii=False))
+    text, kb = await render_channels(store)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(f"✅ Канал {escape(removed)} отвязан.\n\n{text}", reply_markup=kb)
+    await call.answer("Канал отвязан")
+
+
+@router.callback_query(F.data.startswith("adm:ch:pick:"))
+async def cb_channel_pick(call: CallbackQuery, store: Store, state: FSMContext) -> None:
+    try:
+        index = int(call.data.rsplit(":", 1)[1])
+        channels = await _managed_channels(store)
+        channel = channels[index]
+    except (IndexError, ValueError, AttributeError):
+        await call.answer("Канал не найден", show_alert=True)
+        return
+    await state.clear()
+    await state.update_data(channel_target=channel, channel_post={"text": "", "photo": None, "buttons": []})
+    await state.set_state(Panel.channel_text)
+    await call.message.edit_text(
+        f"📝 <b>Пост в {escape(channel)}</b>\n\n"
+        "Пришли текст поста или фото с подписью. Текст отправится без разбора HTML, чтобы символы не ломались.\n"
+        "Затем можно добавить до 10 URL-кнопок.",
+        reply_markup=back_kb("adm:ch"),
+    )
+    await call.answer()
+
+
+@router.message(Panel.channel_text, F.text)
+async def on_channel_post_text(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("Пост пустой — пришли текст или фото с подписью.")
+        return
+    data = await state.get_data()
+    post = data.get("channel_post") or {"buttons": []}
+    post.update(text=text, caption=text)
+    await state.update_data(channel_post=post)
+    await state.set_state(None)
+    await message.answer(_render_compose(post, str(data.get("channel_target") or "")), reply_markup=_compose_kb(post))
+
+
+@router.message(Panel.channel_text, F.photo)
+async def on_channel_post_photo(message: Message, state: FSMContext) -> None:
+    photo = message.photo[-1]
+    caption = (message.caption or "").strip()
+    data = await state.get_data()
+    post = data.get("channel_post") or {"buttons": []}
+    post.update(text=caption, caption=caption, photo=photo.file_id)
+    await state.update_data(channel_post=post)
+    await state.set_state(None)
+    await message.answer(_render_compose(post, str(data.get("channel_target") or "")), reply_markup=_compose_kb(post))
+
+
+@router.callback_query(F.data == "adm:ch:addbtn")
+async def cb_channel_add_button(call: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    if len((data.get("channel_post") or {}).get("buttons") or []) >= MAX_POST_BUTTONS:
+        await call.answer("Можно добавить не больше 10 кнопок", show_alert=True)
+        return
+    await state.set_state(Panel.channel_button)
+    await call.message.edit_text(
+        "🔘 <b>Добавить кнопку</b>\n\nПришли в формате:\n<code>Текст кнопки | https://example.com</code>\n"
+        "Допускаются ссылки http(s):// и tg://. Можно прислать несколько кнопок подряд — по одной в сообщении.\n"
+        "/cancel — отмена добавления.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Готово", callback_data="adm:ch:back")]
+            ]
+        ),
+    )
+    await call.answer()
+
+
+@router.message(Panel.channel_button, F.text)
+async def on_channel_button(message: Message, state: FSMContext) -> None:
+    raw = (message.text or "").strip()
+    if "|" not in raw:
+        await message.answer("Нужен формат <code>Текст кнопки | https://example.com</code>.")
+        return
+    label, url = (part.strip() for part in raw.split("|", 1))
+    if not label or len(label) > 64:
+        await message.answer("Текст кнопки должен быть от 1 до 64 символов.")
+        return
+    if not _BUTTON_URL_RE.fullmatch(url):
+        await message.answer("Ссылка должна начинаться с http://, https:// или tg:// и не содержать пробелов.")
+        return
+    data = await state.get_data()
+    post = data.get("channel_post") or {"text": "", "photo": None, "buttons": []}
+    buttons = post.setdefault("buttons", [])
+    if len(buttons) >= MAX_POST_BUTTONS:
+        await message.answer("У поста уже 10 кнопок — лимит достигнут.")
+        return
+    buttons.append({"text": label, "url": url})
+    await state.update_data(channel_post=post)
+    # Состояние не сбрасываем: можно сразу прислать следующую кнопку строкой.
+    await message.answer(_render_compose(post, str(data.get("channel_target") or "")), reply_markup=_compose_kb(post))
+
+
+@router.callback_query(F.data == "adm:ch:back")
+async def cb_channel_compose_back(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(None)
+    await _edit_compose(call, state)
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:ch:del:"))
+async def cb_channel_delete_button(call: CallbackQuery, state: FSMContext) -> None:
+    try:
+        index = int(call.data.rsplit(":", 1)[1])
+    except (AttributeError, ValueError):
+        await call.answer("Неверная кнопка", show_alert=True)
+        return
+    data = await state.get_data()
+    post = data.get("channel_post") or {}
+    buttons = post.get("buttons") or []
+    if index < 0 or index >= len(buttons):
+        await call.answer("Кнопка уже удалена", show_alert=True)
+        return
+    buttons.pop(index)
+    post["buttons"] = buttons
+    await state.update_data(channel_post=post)
+    await _edit_compose(call, state)
+    await call.answer("Кнопка удалена")
+
+
+@router.callback_query(F.data == "adm:ch:delmenu")
+async def cb_channel_delete_menu(call: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    post = data.get("channel_post") or {}
+    post["buttons"] = []
+    await state.update_data(channel_post=post)
+    await _edit_compose(call, state)
+    await call.answer("Кнопки удалены")
+
+
+@router.callback_query(F.data == "adm:ch:preview")
+async def cb_channel_preview(call: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    post = data.get("channel_post") or {}
+    channel = str(data.get("channel_target") or "")
+    if not _post_text(post) and not post.get("photo"):
+        await call.answer("Сначала добавь текст или фото", show_alert=True)
+        return
+    try:
+        if post.get("photo"):
+            await call.bot.send_photo(
+                call.message.chat.id,
+                photo=post["photo"],
+                caption=_post_text(post) or None,
+                reply_markup=_post_kb(post),
+                parse_mode=None,
+            )
+        else:
+            await call.message.answer(_post_text(post), reply_markup=_post_kb(post), parse_mode=None)
+    except TelegramAPIError:
+        await call.answer("Не удалось показать предпросмотр", show_alert=True)
+        return
+    await call.answer(f"Предпросмотр · публикация в {channel}")
+
+
+@router.callback_query(F.data == "adm:ch:publish")
+async def cb_channel_publish(call: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+    data = await state.get_data()
+    post = data.get("channel_post") or {}
+    channel = str(data.get("channel_target") or "")
+    if not channel or (not _post_text(post) and not post.get("photo")):
+        await call.answer("Не хватает канала или содержимого поста", show_alert=True)
+        return
+    try:
+        await _deliver_post(bot, channel, post)
+    except TelegramAPIError as exc:
+        await call.answer("Telegram не принял пост. Проверь права бота и длину текста.", show_alert=True)
+        log.warning("Channel post failed for %s: %s", channel, exc)
+        return
+    await state.clear()
+    await call.message.edit_text(f"✅ Пост опубликован в {escape(channel)}.", reply_markup=back_kb("adm:ch"))
+    await call.answer("Опубликовано")
+
+
+@router.callback_query(F.data == "adm:ch:cancel")
+async def cb_channel_cancel(call: CallbackQuery, state: FSMContext, store: Store) -> None:
+    await state.clear()
+    text, kb = await render_channels(store)
+    await call.message.edit_text("🗑 Черновик удалён.\n\n" + text, reply_markup=kb)
+    await call.answer("Отменено")
+
+
+@router.message(Panel.channel_add)
+async def on_channel_add_non_text(message: Message) -> None:
+    await message.answer("Пришли @username, t.me-ссылку или ID канала текстом. /cancel — отмена.")
+
+
+@router.message(Panel.channel_text)
+async def on_channel_post_non_text(message: Message) -> None:
+    await message.answer("Пришли текстовый пост или фото с подписью.")
+
+
+@router.message(Panel.channel_button)
+async def on_channel_button_non_text(message: Message) -> None:
+    await message.answer("Кнопка добавляется текстом: <code>Текст | https://example.com</code>.")
 
 
 # --------------------------------------------------------------------------- fallback

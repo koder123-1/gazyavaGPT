@@ -95,9 +95,25 @@ class ImageClient:
             return "gemini-nano-banana-2.1"
         if self.provider == "openrouter" and configured in {"", "flux"}:
             return "google/gemini-nano-banana-2.1"
-        if self.provider in {"openai", "reformboss"} and configured in {"", "flux"}:
+        if self.provider == "reformboss" and configured in {"", "flux"}:
+            return "rh-gpt-image-2-5"
+        if self.provider == "openai" and configured in {"", "flux"}:
             return "gpt-image-1"
         return configured or "flux"
+
+    @property
+    def models(self) -> tuple[str, ...]:
+        """Модели картинок по порядку: первая рабочая и уходит в ответ."""
+        configured = tuple(
+            item.strip() for item in self._settings.image_models if item.strip()
+        )
+        if configured:
+            return tuple(dict.fromkeys(configured))
+        raw = (self._settings.image_model or "").strip()
+        if "," in raw:
+            parts = (part.strip() for part in raw.split(","))
+            return tuple(dict.fromkeys(part for part in parts if part))
+        return (self.model,)
 
     @property
     def _openai_base(self) -> str:
@@ -116,6 +132,19 @@ class ImageClient:
         if value in {"", "none", "off", "0"} or value == self.provider:
             return ""
         return value
+
+    def _model_for(self, provider: str) -> str:
+        """Модель для выбранного провайдера (для резерва — его собственный дефолт)."""
+        if provider == self.provider:
+            return self.model
+        defaults = {
+            "gemini": "gemini-nano-banana-2.1",
+            "openrouter": "google/gemini-nano-banana-2.1",
+            "reformboss": "rh-gpt-image-2-5",
+            "openai": "gpt-image-1",
+            "pollinations": "flux",
+        }
+        return defaults.get(provider, "flux")
 
     async def start(self) -> None:
         if self._session is None or self._session.closed:
@@ -138,12 +167,30 @@ class ImageClient:
         await self.start()
         size = size or self._settings.image_size
         try:
-            return await self._generate_with(self.provider, prompt, size)
+            return await self._try_models(
+                self.models,
+                lambda model: self._generate_with(self.provider, model, prompt, size),
+            )
         except ImageUnsupported:
             raise
         except ImageError as exc:
-            # Любая ошибка провайдера (401/404/429/5xx) — повод попробовать резерв.
+            # Все модели провайдера не сработали — пробуем бесплатный резерв.
             return await self._fallback(prompt, size, exc, edit=False)
+
+    async def _try_models(self, models: tuple[str, ...], call) -> bytes:
+        """Пробует модели по порядку; последняя ошибка уходит в резервный провайдер."""
+        error: ImageError | None = None
+        for model in models:
+            try:
+                return await call(model)
+            except ImageUnsupported:
+                raise
+            except ImageError as exc:
+                error = exc
+                if len(models) > 1:
+                    log.warning("Модель картинок %s не сработала: %s", model, exc)
+        assert error is not None
+        raise error
 
     async def edit(self, image: bytes, mime: str, instruction: str) -> bytes:
         instruction = (instruction or "").strip()
@@ -155,7 +202,10 @@ class ImageClient:
             raise ImageError("Редактирование картинок не подключено.")
         await self.start()
         try:
-            return await self._edit_with(self.provider, image, mime, instruction)
+            return await self._try_models(
+                self.models,
+                lambda model: self._edit_with(self.provider, model, image, mime, instruction),
+            )
         except ImageUnsupported:
             raise
         except ImageError as exc:
@@ -163,16 +213,18 @@ class ImageClient:
                 instruction, 0, exc, edit=True, image=image, mime=mime
             )
 
-    async def _generate_with(self, provider: str, prompt: str, size: int) -> bytes:
+    async def _generate_with(
+        self, provider: str, model: str, prompt: str, size: int
+    ) -> bytes:
         if provider == "pollinations":
             return await self._pollinations(prompt, size=size)
         if provider == "gemini":
-            return await self._gemini(prompt)
+            return await self._gemini(prompt, model=model)
         if provider == "openrouter":
-            return await self._openrouter(prompt, size=size)
+            return await self._openrouter(prompt, size=size, model=model)
 
         payload = {
-            "model": self.model,
+            "model": model,
             "prompt": prompt,
             "n": 1,
             "size": f"{size}x{size}",
@@ -186,10 +238,10 @@ class ImageClient:
         return await self._decode_openai_image(data)
 
     async def _edit_with(
-        self, provider: str, image: bytes, mime: str, instruction: str
+        self, provider: str, model: str, image: bytes, mime: str, instruction: str
     ) -> bytes:
         if provider == "openai" or provider == "reformboss":
-            return await self._openai_edit(image, mime, instruction)
+            return await self._openai_edit(image, mime, instruction, model=model)
         if provider == "gemini":
             return await self._gemini(
                 "Отредактируй это изображение по просьбе: "
@@ -197,9 +249,10 @@ class ImageClient:
                 + ". Сохрани композицию и персонажей, измени только то, о чём просят.",
                 image=image,
                 mime=mime,
+                model=model,
             )
         if provider == "openrouter":
-            return await self._openrouter(instruction, image=image, mime=mime)
+            return await self._openrouter(instruction, image=image, mime=mime, model=model)
 
         # pollinations не умеет img2img без платного ключа, зато базовые
         # правки можно сделать локально, бесплатно и без отправки фото наружу.
@@ -226,8 +279,12 @@ class ImageClient:
             target,
         )
         if edit and image is not None:
-            return await self._edit_with(target, image, mime, prompt)
-        return await self._generate_with(target, prompt, size)
+            return await self._edit_with(
+                target, self._model_for(target), image, mime, prompt
+            )
+        return await self._generate_with(
+            target, self._model_for(target), prompt, size
+        )
 
     # ------------------------------------------------------------------ pollinations
     async def _pollinations(self, prompt: str, *, size: int = 1024) -> bytes:
@@ -281,16 +338,33 @@ class ImageClient:
         return "nano-banana" in model or model.startswith("gemini-3")
 
     async def _gemini(
-        self, prompt: str, *, image: bytes | None = None, mime: str = "image/png"
+        self,
+        prompt: str,
+        *,
+        image: bytes | None = None,
+        mime: str = "image/png",
+        model: str | None = None,
     ) -> bytes:
-        if self._gemini_uses_interactions:
-            return await self._gemini_interactions(prompt, image=image, mime=mime)
-        return await self._gemini_generate_content(prompt, image=image, mime=mime)
+        model = (model or self.model).strip()
+        if self._gemini_uses_interactions_for(model):
+            return await self._gemini_interactions(prompt, image=image, mime=mime, model=model)
+        return await self._gemini_generate_content(prompt, image=image, mime=mime, model=model)
+
+    @staticmethod
+    def _gemini_uses_interactions_for(model: str) -> bool:
+        model = model.lower()
+        return "nano-banana" in model or model.startswith("gemini-3")
 
     async def _gemini_interactions(
-        self, prompt: str, *, image: bytes | None = None, mime: str = "image/png"
+        self,
+        prompt: str,
+        *,
+        image: bytes | None = None,
+        mime: str = "image/png",
+        model: str | None = None,
     ) -> bytes:
         assert self._session is not None
+        model = (model or self.model).strip()
         base = self._settings.image_base_url or "https://generativelanguage.googleapis.com/v1beta"
         headers = {
             "x-goog-api-key": self._settings.image_api_key,
@@ -307,7 +381,7 @@ class ImageClient:
                 }
             )
         payload = {
-            "model": self.model,
+            "model": model,
             "input": inputs,
             "response_format": {"type": "image", "mime_type": "image/png"},
         }
@@ -318,9 +392,15 @@ class ImageClient:
         raise ImageError("Сервис не вернул картинку. Попробуй другой запрос.")
 
     async def _gemini_generate_content(
-        self, prompt: str, *, image: bytes | None = None, mime: str = "image/png"
+        self,
+        prompt: str,
+        *,
+        image: bytes | None = None,
+        mime: str = "image/png",
+        model: str | None = None,
     ) -> bytes:
         assert self._session is not None
+        model = (model or self.model).strip()
         base = self._settings.image_base_url or "https://generativelanguage.googleapis.com/v1beta"
         headers = {
             "x-goog-api-key": self._settings.image_api_key,
@@ -341,7 +421,7 @@ class ImageClient:
             "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
         }
         data = await self._gemini_post(
-            f"{base}/models/{self.model}:generateContent", payload, headers
+            f"{base}/models/{model}:generateContent", payload, headers
         )
         encoded = self._find_gemini_image(data)
         if encoded:
@@ -418,9 +498,11 @@ class ImageClient:
         size: int | None = None,
         image: bytes | None = None,
         mime: str = "image/png",
+        model: str | None = None,
     ) -> bytes:
         """Gemini-картинки через OpenRouter: без геоблокировки Google."""
         assert self._session is not None
+        model = (model or self.model).strip()
         base = self._settings.image_base_url or "https://openrouter.ai/api/v1"
         headers = {
             "Authorization": f"Bearer {self._settings.image_api_key}",
@@ -436,7 +518,7 @@ class ImageClient:
                 + ". Сохрани композицию и персонажей, измени только то, о чём просят."
             )
         payload = self._openrouter_payload(
-            self.model, full_prompt, size=size, image=image, mime=mime
+            model, full_prompt, size=size, image=image, mime=mime
         )
         try:
             async with self._session.post(
@@ -507,14 +589,17 @@ class ImageClient:
         except json.JSONDecodeError as exc:
             raise ImageError("Сервис картинок ответил непонятно.") from exc
 
-    async def _openai_edit(self, image: bytes, mime: str, instruction: str) -> bytes:
+    async def _openai_edit(
+        self, image: bytes, mime: str, instruction: str, *, model: str | None = None
+    ) -> bytes:
         assert self._session is not None
         base = self._openai_base
+        model = (model or self.model).strip()
         if self.provider == "reformboss":
             # ReformBoss не принимает multipart: правка идёт через generations
             # с исходником в поле image (data URL).
             payload = {
-                "model": self.model,
+                "model": model,
                 "prompt": fresh_prompt(instruction),
                 "n": 1,
                 "seed": random.randint(1, 2**31 - 1),
@@ -527,7 +612,7 @@ class ImageClient:
             return await self._decode_openai_image(data)
         headers = {"Authorization": f"Bearer {self._settings.image_api_key}"}
         form = aiohttp.FormData()
-        form.add_field("model", self.model)
+        form.add_field("model", model)
         form.add_field("prompt", instruction)
         form.add_field(
             "image",

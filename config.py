@@ -189,10 +189,12 @@ class Settings:
 
     image_provider: str = "pollinations"
     image_model: str = "flux"
+    image_models: tuple[str, ...] = ()
     image_size: int = 1024
     image_api_key: str = ""
     image_base_url: str = ""
     image_fallback: str = "pollinations"
+    image_daily_limit: int = 1
 
     file_max_mb: int = 10
     file_max_chars: int = 20000
@@ -365,12 +367,14 @@ def load_settings() -> Settings:
         strike_window=_int_env("STRIKE_WINDOW", 3600),
         image_provider=image_provider,
         image_model=(os.getenv("IMAGE_MODEL", "").strip() or "flux"),
+        image_models=_list_env("IMAGE_MODELS", ""),
         image_size=_int_env("IMAGE_SIZE", 1024),
         image_api_key=(
             os.getenv("IMAGE_API_KEY", "").strip() or _provider_key(image_provider)
         ),
         image_base_url=(os.getenv("IMAGE_BASE_URL", "").strip().rstrip("/")),
         image_fallback=(os.getenv("IMAGE_FALLBACK", "").strip() or "pollinations").lower(),
+        image_daily_limit=max(0, _int_env("IMAGE_DAILY_LIMIT", 1)),
         file_max_mb=max(1, _int_env("FILE_MAX_MB", 10)),
         file_max_chars=max(2000, _int_env("FILE_MAX_CHARS", 20000)),
         file_max_pdf_pages=max(1, _int_env("FILE_MAX_PDF_PAGES", 60)),

@@ -35,6 +35,10 @@ class Store(Protocol):
     async def bonus_requests(self, user_id: int) -> int: ...
     async def add_bonus(self, user_id: int, count: int) -> int: ...
     async def add_bonus_all(self, count: int) -> int: ...
+    async def image_credits(self, user_id: int) -> int: ...
+    async def add_image_credits(self, user_id: int, count: int) -> int: ...
+    async def image_used_today(self, user_id: int) -> int: ...
+    async def consume_image(self, user_id: int) -> int: ...
     async def record_payment(
         self, user_id: int, requests: int, stars: int, charge_id: str, kind: str = "requests"
     ) -> bool: ...
@@ -112,6 +116,8 @@ class MemoryStore:
         self._profiles: dict[int, dict] = {}
         self._daily: dict[date, int] = defaultdict(int)
         self._styles: dict[int, str] = {}
+        self._image_credits: dict[int, int] = {}
+        self._image_usage: dict[int, tuple[date, int]] = {}
         self._payments: dict[str, dict] = {}
         self._model_access: dict[int, set[str]] = {}
         self._roles: dict[int, str] = {}
@@ -235,6 +241,24 @@ class MemoryStore:
             info["bonus_requests"] = max(0, int(info.get("bonus_requests", 0)) + count)
             total += 1
         return total
+
+    async def image_credits(self, user_id: int) -> int:
+        return int(self._image_credits.get(user_id, 0))
+
+    async def add_image_credits(self, user_id: int, count: int) -> int:
+        value = max(0, self._image_credits.get(user_id, 0) + count)
+        self._image_credits[user_id] = value
+        return value
+
+    async def image_used_today(self, user_id: int) -> int:
+        day, count = self._image_usage.get(user_id, (date.today(), 0))
+        return count if day == date.today() else 0
+
+    async def consume_image(self, user_id: int) -> int:
+        used = await self.image_used_today(user_id)
+        used += 1
+        self._image_usage[user_id] = (date.today(), used)
+        return used
 
     async def record_payment(
         self,
@@ -388,6 +412,7 @@ class MemoryStore:
             "banned": bool(info.get("banned")),
             "used_today": self._used_today(user_id),
             "bonus_requests": self._users.get(user_id, {}).get("bonus_requests", 0),
+            "image_credits": self._image_credits.get(user_id, 0),
             "subscription_until": self._users.get(user_id, {}).get("subscription_until"),
             "total_requests": self._total_requests.get(user_id, 0),
             "history_len": len(self._history.get(user_id, [])),
@@ -866,6 +891,46 @@ class PostgresStore:
         except (TypeError, ValueError):
             return 0
 
+    async def image_credits(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT image_credits FROM users WHERE user_id = $1", user_id
+        )
+        return int(value or 0)
+
+    async def add_image_credits(self, user_id: int, count: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            """
+            UPDATE users SET image_credits = GREATEST(0, image_credits + $2)
+            WHERE user_id = $1
+            RETURNING image_credits
+            """,
+            user_id,
+            count,
+        )
+        return int(value or 0)
+
+    async def image_used_today(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT count FROM image_usage WHERE user_id = $1 AND day = CURRENT_DATE",
+            user_id,
+        )
+        return int(value or 0)
+
+    async def consume_image(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            """
+            INSERT INTO image_usage (user_id, day, count) VALUES ($1, CURRENT_DATE, 1)
+            ON CONFLICT (user_id, day) DO UPDATE SET count = image_usage.count + 1
+            RETURNING count
+            """,
+            user_id,
+        )
+        return int(value or 0)
+
     async def record_payment(
         self,
         user_id: int,
@@ -1073,7 +1138,7 @@ class PostgresStore:
         row = await self._pool.fetchrow(
             """
             SELECT u.user_id, u.username, u.first_name, u.banned, u.bonus_requests,
-                   u.subscription_until, u.model,
+                   u.image_credits, u.subscription_until, u.model,
                    coalesce(x.count, 0) AS used_today,
                    (SELECT coalesce(sum(count), 0) FROM usage WHERE user_id = u.user_id) AS total_requests,
                    (SELECT count(*) FROM messages WHERE user_id = u.user_id) AS history_len
@@ -1462,12 +1527,20 @@ CREATE TABLE IF NOT EXISTS users (
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_requests INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS image_credits INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS lang TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_until TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS model TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS style TEXT;
 
 CREATE TABLE IF NOT EXISTS usage (
+    user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    day     DATE NOT NULL DEFAULT CURRENT_DATE,
+    count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day)
+);
+
+CREATE TABLE IF NOT EXISTS image_usage (
     user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     day     DATE NOT NULL DEFAULT CURRENT_DATE,
     count   INTEGER NOT NULL DEFAULT 0,
