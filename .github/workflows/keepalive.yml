@@ -8,7 +8,9 @@ name: keep-alive
 
 on:
   schedule:
-    - cron: "*/10 3-20 * * *"
+    # Каждые 5 минут: у GitHub Actions бывают задержки, а Render засыпает
+    # уже через 15 минут без входящего трафика.
+    - cron: "*/5 3-20 * * *"
   workflow_dispatch:
 
 permissions: {}
