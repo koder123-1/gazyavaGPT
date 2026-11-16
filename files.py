@@ -438,14 +438,14 @@ def build_empty(fmt: str, name: str | None = None) -> tuple[bytes, str]:
 # Слова, которые не должны попадать в имя файла: это команды и формат, а не смысл.
 _NAME_NOISE = re.compile(
     r"(?i)\b(?:созда\w*|сдела\w*|сгенер\w*|сформир\w*|напиш\w*|оформ\w*|сохран\w*|"
-    r"пришл\w*|отправ\w*|скин\w*|выгруз\w*|экспорт\w*|собер\w*|подготов\w*|"
-    r"перевед\w*|конверт\w*|пожалуйста|плиз|мне|нужен|нужно|надо|хочу|дай\w*|"
+    r"пришл\w*|попрос\w*|отправ\w*|скин\w*|выгруз\w*|экспорт\w*|собер\w*|подготов\w*|"
+    r"перевед\w*|конверт\w*|пожалуйста|плиз|я|мне|нужен|нужно|надо|хочу|дай\w*|"
     r"файл\w*|документ\w*|вложени\w*|"
     r"pdf|docx?|word|ворд|докс|xlsx|excel|эксель|csv|txt|текстов\w*|"
-    r"py|python|html|css|js|javascript|"
+    r"py|python|html|хтмл\w*|css|цсс\w*|js|javascript|джс|жаваскрипт\w*|"
     r"а|и|в|во|на|с|со|по|для|от|до|из|к|о|об|это|этот|эту|этого)\b"
 )
-_EMPTY_WORD = re.compile(r"(?i)\b(?:пуст\w*|empty)\b")
+_EMPTY_WORD = re.compile(r"(?i)\b(?:пуст\w*|пусой|empty)\b")
 _PAGE_WORD = re.compile(r"(?i)\b(?:сайт\w*|страниц\w*|лендинг\w*|site|page|index)\b")
 
 
@@ -484,33 +484,37 @@ def suggest_filename(instruction: str | None, fmt: str) -> str:
 
 _FORMAT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # Код: только явные просьбы про файл с расширением, чтобы «что такое Python»
-    # не превращалось в .py-вложение.
+    # не превращалось в .py-вложение. Учитываем и русские написания: «хтмл», «питон».
     ("py", re.compile(
-        r"\.py\b|\bpy[- ]?файл|\bpython[- ]?файл|\bфайл\w*\s+(?:на\s+)?python",
+        r"\.py\b|\bpy[- ]?файл|\bpython[- ]?файл|\bпайтон\w*|\bпитон\w*|"
+        r"\bфайл\w*\s+(?:на\s+)?(?:python|питон\w*|пайтон\w*)",
         re.IGNORECASE,
     )),
     ("html", re.compile(
-        r"\.html?\b|\bhtml[- ]?файл|\bфайл\w*\s+html", re.IGNORECASE
+        r"\.html?\b|\bhtml[- ]?файл|\bхтмл\w*|\bфайл\w*\s+(?:html|хтмл\w*)",
+        re.IGNORECASE,
     )),
-    ("css", re.compile(r"\.css\b|\bcss[- ]?файл", re.IGNORECASE)),
+    ("css", re.compile(r"\.css\b|\bcss[- ]?файл|\bцсс\w*", re.IGNORECASE)),
     ("js", re.compile(
-        r"\.js\b|\bjs[- ]?файл|\bjavascript[- ]?файл", re.IGNORECASE
+        r"\.js\b|\bjs[- ]?файл|\bjavascript[- ]?файл|\bджс\b|\bжаваскрипт\w*|"
+        r"\bфайл\w*\s+(?:js|javascript|джс|жаваскрипт\w*)",
+        re.IGNORECASE,
     )),
     ("pdf", re.compile(r"\bpdf\b|пдф|пэдэф|пдэф", re.IGNORECASE)),
     ("docx", re.compile(r"\bdocx?\b|\bword\b|ворд|докс", re.IGNORECASE)),
     ("xlsx", re.compile(r"\bxlsx\b|\bexcel\b|эксель|ексель", re.IGNORECASE)),
-    ("csv", re.compile(r"\bcsv\b", re.IGNORECASE)),
-    ("txt", re.compile(r"\btxt\b|текстов\w*\s+файл", re.IGNORECASE)),
+    ("csv", re.compile(r"\bcsv\b|\bцсв\b", re.IGNORECASE)),
+    ("txt", re.compile(r"\btxt\b|\bтхт\b|текстов\w*\s+файл", re.IGNORECASE)),
 )
 _GENERIC_FILE = re.compile(
     r"\bфайл\w*\b|\bскач\w*\b|\bсохран\w*\b|\bвыгруз\w*\b|\bэкспорт\w*\b", re.IGNORECASE
 )
 # Формат без слова «файл»: «создай пустой html», «напиши игру на python».
 _FORMAT_WORDS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("py", re.compile(r"\bpython\b", re.IGNORECASE)),
-    ("html", re.compile(r"\bhtml?\b", re.IGNORECASE)),
-    ("css", re.compile(r"\bcss\b", re.IGNORECASE)),
-    ("js", re.compile(r"\b(?:js|javascript)\b", re.IGNORECASE)),
+    ("py", re.compile(r"\b(?:python|питон\w*|пайтон\w*)\b", re.IGNORECASE)),
+    ("html", re.compile(r"\bhtml?\b|\bхтмл\w*", re.IGNORECASE)),
+    ("css", re.compile(r"\bcss\b|\bцсс\w*", re.IGNORECASE)),
+    ("js", re.compile(r"\b(?:js|javascript|джс|жаваскрипт\w*)\b", re.IGNORECASE)),
 )
 _ASK_ABOUT = re.compile(
     r"(?i)\b(?:что такое|как работает|как сделать|почему|зачем|объясни|расскажи|подскажи)\b"
@@ -567,8 +571,8 @@ _FILE_NOISE = re.compile(
     r"созда\w*|сдела\w*|сгенер\w*|напиш\w*|оформ\w*|сохран\w*|пришл\w*|"
     r"отправ\w*|скин\w*|выгруз\w*|экспорт\w*|собер\w*|подготов\w*|перевед\w*|"
     r"конверт\w*|дай\w*|файл\w*|документ\w*|вложени\w*|"
-    r"pdf|docx?|word|ворд|докс|xlsx|excel|эксель|csv|txt|текстов\w*|"
-    r"py|python|html|css|js|javascript)\b"
+    r"pdf|docx?|word|ворд|докс|xlsx|excel|эксель|csv|цсв|txt|тхт|текстов\w*|"
+    r"py|python|html|хтмл\w*|css|цсс\w*|js|javascript|джс|жаваскрипт\w*)\b"
 )
 
 

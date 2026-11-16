@@ -21,7 +21,7 @@ import json
 import logging
 import random
 import re
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import aiohttp
 
@@ -291,11 +291,19 @@ class ImageClient:
         assert self._session is not None
         # Classic API отдаёт не больше 768×768 и всегда JPEG.
         side = max(256, min(int(size), 768))
+        # nologo=true обязателен: без него Pollinations кладёт водяной знак.
+        params = {
+            "width": side,
+            "height": side,
+            "nologo": "true",
+            "model": "flux",
+            "seed": random.randint(1, 10**6),
+        }
         url = (
             "https://image.pollinations.ai/prompt/"
             + quote(prompt[:900], safe="")
-            + f"?width={side}&height={side}&nologo=true&model=flux"
-            + f"&seed={random.randint(1, 10**6)}"
+            + "?"
+            + urlencode(params)
         )
         try:
             async with asyncio.timeout(IMAGE_TIMEOUT):
