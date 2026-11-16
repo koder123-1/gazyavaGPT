@@ -129,7 +129,6 @@ def build_system_prompt(
     extra: str | None,
     *,
     has_image: bool = False,
-    profile: str | None = None,
     subject_note: str | None = None,
     lang: str = "ru",
     task_lang: str | None = None,
@@ -145,8 +144,6 @@ def build_system_prompt(
     ]
     if extra and extra.strip():
         parts.append("Дополнительные указания от администратора:\n" + extra.strip())
-    if profile and profile.strip():
-        parts.append(profile.strip())
     if subject_note and subject_note.strip():
         parts.append(subject_note.strip())
     # Заголовки шаблона должны совпадать с языком задания даже тогда, когда

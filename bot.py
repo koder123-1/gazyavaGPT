@@ -46,7 +46,6 @@ COMMANDS = [
     BotCommand(command="reset", description="Очистить контекст диалога"),
     BotCommand(command="check", description="Проверить моё решение"),
     BotCommand(command="imagine", description="Нарисовать картинку"),
-    BotCommand(command="profile", description="Класс и стиль объяснений"),
     BotCommand(command="files", description="Чтение и создание файлов"),
     BotCommand(command="lang", description="Сменить язык"),
     BotCommand(command="model", description="Выбрать модель ИИ"),

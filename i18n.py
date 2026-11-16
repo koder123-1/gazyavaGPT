@@ -82,7 +82,6 @@ TR: dict[str, dict[str, str]] = {
     },
     "btn.lang": {"ru": "🌍 Язык", "uk": "🌍 Мова", "be": "🌍 Мова", "en": "🌍 Language"},
     "menu.model": {"ru": "🧠 Модель", "uk": "🧠 Модель", "be": "🧠 Мадэль", "en": "🧠 Model"},
-    "menu.profile": {"ru": "🎓 Профиль", "uk": "🎓 Профіль", "be": "🎓 Профіль", "en": "🎓 Profile"},
     "menu.buy": {
         "ru": "⭐ Купить запросы",
         "uk": "⭐ Купити запити",
@@ -271,7 +270,6 @@ TR: dict[str, dict[str, str]] = {
         "en": "🎫 Tickets",
     },
     "btn.menu": {"ru": "⬅️ В меню", "uk": "⬅️ У меню", "be": "⬅️ У меню", "en": "⬅️ Menu"},
-    "btn.profile": {"ru": "🎓 Профиль", "uk": "🎓 Профіль", "be": "🎓 Профіль", "en": "🎓 Profile"},
     "btn.simple": {"ru": "🧩 Проще", "uk": "🧩 Простіше", "be": "🧩 Прасьцей", "en": "🧩 Simpler"},
     "btn.deep": {
         "ru": "📚 Подробнее",
@@ -319,6 +317,12 @@ TR: dict[str, dict[str, str]] = {
         "en": "This answer is no longer available",
     },
     "fb.working": {"ru": "Готовлю…", "uk": "Готую…", "be": "Гатоўлю…", "en": "Working…"},
+    "fb.stale": {
+        "ru": "Кнопка устарела — задай вопрос заново.",
+        "uk": "Кнопка застаріла — постав питання знову.",
+        "be": "Кнопка састарэла — задай пытанне зноў.",
+        "en": "This button is stale — ask the question again.",
+    },
     # ------------------------------------------------------------------ старт
     "start.body": {
         "ru": (
@@ -426,8 +430,6 @@ TR: dict[str, dict[str, str]] = {
             "<b>Проверка решения</b>\n"
             "<code>/check</code> → пришли текст или фото своего решения — найду ошибку, "
             "не решая заново.\n\n"
-            "<b>Профиль</b>\n"
-            "<code>/profile</code> → класс, предмет и стиль объяснений.\n\n"
             "<b>Картинки</b>\n"
             "<code>/imagine описание</code> → нарисую картинку.\n"
             "Фото с подписью «измени / перерисуй» → переделаю по описанию.\n\n"
@@ -446,8 +448,6 @@ TR: dict[str, dict[str, str]] = {
             "<b>Перевірка рішення</b>\n"
             "<code>/check</code> → надішли текст або фото свого рішення — знайду помилку, "
             "не розв'язуючи заново.\n\n"
-            "<b>Профіль</b>\n"
-            "<code>/profile</code> → клас, предмет і стиль пояснень.\n\n"
             "<b>Картинки</b>\n"
             "<code>/imagine опис</code> → намалюю картинку.\n"
             "Фото з підписом «зміни / перемалюй» → перероблю за описом.\n\n"
@@ -466,8 +466,6 @@ TR: dict[str, dict[str, str]] = {
             "<b>Праверка рашэння</b>\n"
             "<code>/check</code> → дашлі тэкст або фота свайго рашэння — знойду памылку, "
             "не развязваючы нанова.\n\n"
-            "<b>Профіль</b>\n"
-            "<code>/profile</code> → клас, прадмет і стыль паясьненняў.\n\n"
             "<b>Малюнкі</b>\n"
             "<code>/imagine апісанне</code> → намалюю малюнак.\n"
             "Фота з подпісам «змяні / перамалюй» → перараблю па апісанні.\n\n"
@@ -486,8 +484,6 @@ TR: dict[str, dict[str, str]] = {
             "<b>Checking a solution</b>\n"
             "<code>/check</code> → send your solution as text or photo — I'll find the mistake "
             "without solving it from scratch.\n\n"
-            "<b>Profile</b>\n"
-            "<code>/profile</code> → grade, subject and explanation style.\n\n"
             "<b>Images</b>\n"
             "<code>/imagine description</code> → I'll draw a picture.\n"
             "A photo captioned \u201cchange / redraw\u201d → I'll redo it from the description.\n\n"
@@ -578,34 +574,30 @@ TR: dict[str, dict[str, str]] = {
         "be": "\n\nМожна купіць дадатковыя запыты: /buy",
         "en": "\n\nYou can buy extra requests: /buy",
     },
-    # ------------------------------------------------------------------ /me, /profile, /check
+    # --------------------------------------------------------------------------- /me, /check
     "me.body": {
         "ru": (
             "🪪 ID: <code>{user_id}</code>\n{role_line}{sub_line}"
             "💬 Лимит на сегодня: {limit}\n"
             "⭐ Бонусные запросы: <b>{bonus}</b>\n"
-            "🎓 Профиль: {profile}\n"
             "🧠 Модель: {model}{note}"
         ),
         "uk": (
             "🪪 ID: <code>{user_id}</code>\n{role_line}{sub_line}"
             "💬 Ліміт на сьогодні: {limit}\n"
             "⭐ Бонусні запити: <b>{bonus}</b>\n"
-            "🎓 Профіль: {profile}\n"
             "🧠 Модель: {model}{note}"
         ),
         "be": (
             "🪪 ID: <code>{user_id}</code>\n{role_line}{sub_line}"
             "💬 Ліміт на сёння: {limit}\n"
             "⭐ Бонусныя запыты: <b>{bonus}</b>\n"
-            "🎓 Профіль: {profile}\n"
             "🧠 Мадэль: {model}{note}"
         ),
         "en": (
             "🪪 ID: <code>{user_id}</code>\n{role_line}{sub_line}"
             "💬 Today's limit: {limit}\n"
             "⭐ Bonus requests: <b>{bonus}</b>\n"
-            "🎓 Profile: {profile}\n"
             "🧠 Model: {model}{note}"
         ),
     },
@@ -645,53 +637,6 @@ TR: dict[str, dict[str, str]] = {
         "be": "без абмежаванняў",
         "en": "unlimited",
     },
-    "me.profile_empty": {
-        "ru": "не задан (/profile)",
-        "uk": "не задано (/profile)",
-        "be": "не зададзены (/profile)",
-        "en": "not set (/profile)",
-    },
-    "profile.title": {
-        "ru": "🎓 <b>Профиль ученика</b>",
-        "uk": "🎓 <b>Профіль учня</b>",
-        "be": "🎓 <b>Профіль вучня</b>",
-        "en": "🎓 <b>Student profile</b>",
-    },
-    "profile.grade": {"ru": "Класс", "uk": "Клас", "be": "Клас", "en": "Grade"},
-    "profile.subject": {"ru": "Предмет", "uk": "Предмет", "be": "Прадмет", "en": "Subject"},
-    "profile.subject_auto": {
-        "ru": "🎯 определяется автоматически",
-        "uk": "🎯 визначається автоматично",
-        "be": "🎯 вызначаецца аўтаматычна",
-        "en": "🎯 detected automatically",
-    },
-    "profile.style": {"ru": "Стиль", "uk": "Стиль", "be": "Стыль", "en": "Style"},
-    "profile.hint": {
-        "ru": (
-            "Предмет выбирать не нужно: бот сам определяет его по заданию и меняет "
-            "объяснение. Выбери класс и стиль — под это подстроятся ответы:"
-        ),
-        "uk": (
-            "Предмет обирати не потрібно: бот сам визначає його за завданням і змінює "
-            "пояснення. Обери клас і стиль — під це підлаштуються відповіді:"
-        ),
-        "be": (
-            "Прадмет выбіраць не трэба: бот сам вызначае яго па заданні і змяняе "
-            "тлумачэнне. Абяры клас і стыль — пад гэта падладуюцца адказы:"
-        ),
-        "en": (
-            "You don't pick a subject: the bot detects it from the task and adapts the "
-            "explanation. Choose your grade and style:"
-        ),
-    },
-    "profile.reset": {
-        "ru": "♻️ Сбросить профиль",
-        "uk": "♻️ Скинути профіль",
-        "be": "♻️ Скінуць профіль",
-        "en": "♻️ Reset profile",
-    },
-    "profile.saved": {"ru": "Сохранено: {value}", "uk": "Збережено: {value}", "be": "Захавана: {value}", "en": "Saved: {value}"},
-    "profile.unknown": {"ru": "Неизвестное значение", "uk": "Невідоме значення", "be": "Невядомае значэнне", "en": "Unknown value"},
     "check.hint": {
         "ru": (
             "✅ <b>Проверка решения</b>\n\n"
@@ -1345,22 +1290,6 @@ _WORD_RE = re.compile(r"[\w\u0400-\u04FF]+")
 
 def is_english_task(text: str | None) -> bool:
     return detect_lang(text) == "en" and len(text or "") > 2
-# --------------------------------------------------------------------------- предметы и стиль
-TR.update(
-    {
-        "subject.math": {"ru": "математика", "uk": "математика", "be": "матэматыка", "en": "math"},
-        "subject.physics": {"ru": "физика", "uk": "фізика", "be": "фізіка", "en": "physics"},
-        "subject.chemistry": {"ru": "химия", "uk": "хімія", "be": "хімія", "en": "chemistry"},
-        "subject.biology": {"ru": "биология", "uk": "біологія", "be": "біялогія", "en": "biology"},
-        "subject.russian": {"ru": "русский", "uk": "російська", "be": "руская", "en": "Russian"},
-        "subject.english": {"ru": "английский", "uk": "англійська", "be": "англійская", "en": "English"},
-        "subject.cs": {"ru": "информатика", "uk": "інформатика", "be": "інфарматыка", "en": "CS"},
-        "subject.other": {"ru": "другое", "uk": "інше", "be": "іншае", "en": "other"},
-        "style.brief": {"ru": "кратко", "uk": "коротко", "be": "коратка", "en": "brief"},
-        "style.detailed": {"ru": "подробно", "uk": "докладно", "be": "падрабязна", "en": "detailed"},
-        "style.examples": {"ru": "с примерами", "uk": "з прикладами", "be": "з прыкладамі", "en": "with examples"},
-    }
-)
 
 
 TR.update(

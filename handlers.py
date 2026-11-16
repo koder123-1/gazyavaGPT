@@ -1,4 +1,4 @@
-"""Хендлеры: диалог с ИИ, квоты, кнопки под ответом, профиль, режим проверки."""
+"""Хендлеры: диалог с ИИ, квоты, кнопки под ответом, меню, режим проверки."""
 
 from __future__ import annotations
 
@@ -82,15 +82,6 @@ MODIFIERS = {
     "practice": "Дай одну похожую задачу для тренировки, без решения и подсказок. "
     "В конце попроси прислать ответ.",
 }
-
-PROFILE_GRADES = ["5–6", "7–8", "9", "10–11", "вуз"]
-PROFILE_STYLES = ["кратко", "подробно", "с примерами"]
-
-# Предмет больше не выбирается вручную: его определяет subjects.detect_subject
-# по тексту задания.
-PROFILE_VALUES = {"g": PROFILE_GRADES, "st": PROFILE_STYLES}
-PROFILE_FIELDS = {"g": "grade", "st": "style"}
-
 
 class Check(StatesGroup):
     awaiting = State()
@@ -205,7 +196,6 @@ async def send_model_menu(
 
 MENU_KEYS = (
     "menu.model",
-    "menu.profile",
     "menu.check",
     "menu.imagine",
     "menu.buy",
@@ -234,23 +224,19 @@ def main_menu_kb(
 ) -> ReplyKeyboardMarkup:
     """Постоянная клавиатура: почти всё меню под рукой, команды помнить не надо."""
     rows = [
-        _button_row(lang, "menu.model", "menu.profile"),
-        _button_row(lang, "menu.check", "menu.imagine"),
+        _button_row(lang, "menu.model", "menu.check"),
+        _button_row(lang, "menu.imagine", "menu.files"),
     ]
     if payments:
         rows.append(_button_row(lang, "menu.buy", "menu.support"))
     else:
         rows.append(_button_row(lang, "menu.support"))
-    rows.extend(
-        [
-            _button_row(lang, "menu.tickets", "menu.files"),
-            _button_row(lang, "menu.lang", "menu.help"),
-        ]
-    )
+    rows.append(_button_row(lang, "menu.tickets", "menu.lang"))
     if payments:
-        rows.append(_button_row(lang, "menu.reset", "menu.terms"))
-    else:
+        rows.append(_button_row(lang, "menu.help", "menu.terms"))
         rows.append(_button_row(lang, "menu.reset"))
+    else:
+        rows.append(_button_row(lang, "menu.help", "menu.reset"))
     if staff:
         rows.append(_button_row(lang, "menu.admin"))
     return ReplyKeyboardMarkup(
@@ -265,11 +251,11 @@ def menu_inline(
     rows = [
         [
             InlineKeyboardButton(text=t(lang, "menu.model"), callback_data="mdl:menu"),
-            InlineKeyboardButton(text=t(lang, "menu.profile"), callback_data="pf:menu"),
+            InlineKeyboardButton(text=t(lang, "menu.check"), callback_data="menu:act:check"),
         ],
         [
-            InlineKeyboardButton(text=t(lang, "menu.check"), callback_data="menu:act:check"),
             InlineKeyboardButton(text=t(lang, "menu.imagine"), callback_data="menu:act:imagine"),
+            InlineKeyboardButton(text=t(lang, "menu.files"), callback_data="menu:act:files"),
         ],
     ]
     if payments:
@@ -283,28 +269,38 @@ def menu_inline(
         rows.append(
             [InlineKeyboardButton(text=t(lang, "menu.support"), callback_data="tick:menu")]
         )
-    rows.extend(
+    rows.append(
         [
+            InlineKeyboardButton(
+                text=t(lang, "menu.tickets"), callback_data="menu:act:tickets"
+            ),
+            InlineKeyboardButton(text=t(lang, "menu.lang"), callback_data="lang:menu"),
+        ]
+    )
+    if payments:
+        rows.append(
             [
-                InlineKeyboardButton(
-                    text=t(lang, "menu.tickets"), callback_data="menu:act:tickets"
-                ),
-                InlineKeyboardButton(text=t(lang, "menu.files"), callback_data="menu:act:files"),
-            ],
-            [
-                InlineKeyboardButton(text=t(lang, "menu.lang"), callback_data="lang:menu"),
                 InlineKeyboardButton(text=t(lang, "menu.help"), callback_data="menu:act:help"),
-            ],
+                InlineKeyboardButton(
+                    text=t(lang, "menu.terms"), callback_data="menu:act:terms"
+                ),
+            ]
+        )
+        rows.append(
             [
                 InlineKeyboardButton(
                     text=t(lang, "menu.reset"), callback_data="menu:act:reset"
                 )
-            ],
-        ]
-    )
-    if payments:
-        rows[-1].append(
-            InlineKeyboardButton(text=t(lang, "menu.terms"), callback_data="menu:act:terms")
+            ]
+        )
+    else:
+        rows.append(
+            [
+                InlineKeyboardButton(text=t(lang, "menu.help"), callback_data="menu:act:help"),
+                InlineKeyboardButton(
+                    text=t(lang, "menu.reset"), callback_data="menu:act:reset"
+                ),
+            ]
         )
     if staff:
         rows.append(
@@ -491,24 +487,6 @@ def answer_kb(
                 )
             ],
         ]
-    )
-
-
-async def build_profile_note(store: Store, user_id: int) -> str | None:
-    profile = await store.get_profile(user_id)
-    if not profile:
-        return None
-    bits = []
-    if profile.get("grade"):
-        bits.append(f"класс: {profile['grade']}")
-    if profile.get("style"):
-        bits.append(f"стиль объяснений: {profile['style']}")
-    if not bits:
-        return None
-    return (
-        "Профиль ученика — " + "; ".join(bits) + ". "
-        "Подстраивай сложность и стиль ответа под этот профиль. "
-        "Предмет определяй по самому заданию, а не по профилю."
     )
 
 
@@ -794,7 +772,6 @@ async def answer_with_ai(
     if use_history and runtime.max_context > 0:
         history = await store.history(user.id, runtime.max_context)
 
-    profile_note = await build_profile_note(store, user.id)
     chosen_model = await user_model(store, settings, runtime, user.id)
 
     try:
@@ -807,7 +784,6 @@ async def answer_with_ai(
                 image=image,
                 image_mime=image_mime,
                 vision_model=runtime.vision_model,
-                profile_note=profile_note,
                 subject_note=subject_note,
                 lang=lang,
                 task_lang=task_lang or detect_lang(question),
@@ -1118,11 +1094,6 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
         daily_left = max(0, left - bonus)
         limit_text = t(lang, "me.limit_left", left=daily_left, total=runtime.daily_limit)
 
-    profile = await store.get_profile(user.id) or {}
-    profile_text = ", ".join(
-        bit for bit in (profile.get("grade"), profile.get("style")) if bit
-    ) or t(lang, "me.profile_empty")
-
     banned = await store.is_banned(user.id)
     note = t(lang, "me.banned_note") if banned else ""
     rows = []
@@ -1147,107 +1118,11 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
             sub_line="",
             limit=limit_text,
             bonus=bonus,
-            profile=escape(profile_text),
             model=escape(model_title(current_model)),
             note=note,
         ),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
-
-
-# --------------------------------------------------------------------------- профиль
-STYLE_KEYS = ["brief", "detailed", "examples"]
-
-
-def profile_kb(lang: str = "ru") -> InlineKeyboardMarkup:
-    rows = [
-        [
-            InlineKeyboardButton(text=grade, callback_data=f"pf:g:{i}")
-            for i, grade in enumerate(PROFILE_GRADES)
-        ],
-        [
-            InlineKeyboardButton(
-                text=t(lang, f"style.{STYLE_KEYS[i]}"), callback_data=f"pf:st:{i}"
-            )
-            for i in range(len(STYLE_KEYS))
-        ],
-        [InlineKeyboardButton(text=t(lang, "profile.reset"), callback_data="pf:reset")],
-        [InlineKeyboardButton(text=t(lang, "menu.home"), callback_data="menu:home")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-async def render_profile(
-    store: Store, user_id: int, lang: str = "ru"
-) -> tuple[str, InlineKeyboardMarkup]:
-    profile = await store.get_profile(user_id) or {}
-    text = (
-        t(lang, "profile.title")
-        + "\n\n"
-        + f"{t(lang, 'profile.grade')}: <b>{escape(profile.get('grade') or '—')}</b>\n"
-        f"{t(lang, 'profile.subject')}: <b>{t(lang, 'profile.subject_auto')}</b>\n"
-        f"{t(lang, 'profile.style')}: <b>{escape(profile.get('style') or '—')}</b>\n\n"
-        + t(lang, "profile.hint")
-    )
-    return text, profile_kb(lang)
-
-
-@router.message(Command("profile"))
-async def cmd_profile(message: Message, store: Store, settings: Settings) -> None:
-    user = message.from_user
-    if not user:
-        return
-    await store.ensure_user(user.id, user.username, user.first_name)
-    lang = await user_lang(store, settings, user.id)
-    text, kb = await render_profile(store, user.id, lang)
-    await message.answer(text, reply_markup=kb)
-
-
-@router.callback_query(F.data.startswith("pf:"))
-async def cb_profile(call: CallbackQuery, store: Store, settings: Settings) -> None:
-    if call.from_user is None:
-        return
-    lang = await user_lang(store, settings, call.from_user.id)
-    parts = call.data.split(":")
-    field_key = parts[1]
-
-    if field_key == "menu":
-        text, kb = await render_profile(store, call.from_user.id, lang)
-        with contextlib.suppress(TelegramAPIError):
-            await call.message.edit_text(text, reply_markup=kb)
-        await call.answer()
-        return
-
-    if field_key == "reset":
-        await store.delete_profile(call.from_user.id)
-        text, kb = await render_profile(store, call.from_user.id, lang)
-        with contextlib.suppress(TelegramAPIError):
-            await call.message.edit_text(text, reply_markup=kb)
-        await call.answer(t(lang, "profile.reset"))
-        return
-
-    values = PROFILE_VALUES.get(field_key)
-    if not values:
-        await call.answer(t(lang, "profile.unknown"))
-        return
-    try:
-        value = values[int(parts[2])]
-    except (IndexError, ValueError):
-        await call.answer(t(lang, "profile.unknown"))
-        return
-
-    profile = await store.get_profile(call.from_user.id) or {}
-    profile[PROFILE_FIELDS[field_key]] = value
-    await store.set_profile(
-        call.from_user.id,
-        profile.get("grade"),
-        profile.get("subject"),
-        profile.get("style"),
-    )
-    text, kb = await render_profile(store, call.from_user.id, lang)
-    with contextlib.suppress(TelegramAPIError):
-        await call.message.edit_text(text, reply_markup=kb)
-    await call.answer(t(lang, "profile.saved", value=value))
 
 
 # --------------------------------------------------------------------------- режим проверки
@@ -1543,12 +1418,11 @@ async def cb_feedback(
 
     modifier = MODIFIERS.get(action)
     if not modifier:
-        await call.answer(t(lang, "profile.unknown"))
+        await call.answer(t(lang, "fb.stale"))
         return
 
     await call.answer(t(lang, "fb.working"))
     runtime = await load_runtime(store, settings)
-    profile_note = await build_profile_note(store, owner)
     history = [
         {"role": "user", "content": exchange["question"]},
         {"role": "assistant", "content": exchange["answer"]},
@@ -1563,7 +1437,6 @@ async def cb_feedback(
                 model=chosen_model,
                 system_prompt=runtime.system_prompt,
                 vision_model=runtime.vision_model,
-                profile_note=profile_note,
                 lang=lang,
                 task_lang=detect_lang(exchange["question"]),
             )
@@ -1609,9 +1482,6 @@ async def on_menu_button(
 
     if action == "menu.model":
         await send_model_menu(message, store, settings, lang, user.id)
-    elif action == "menu.profile":
-        text, kb = await render_profile(store, user.id, lang)
-        await message.answer(text, reply_markup=kb)
     elif action == "menu.check":
         await state.set_state(Check.awaiting)
         await message.answer(t(lang, "check.hint"))

@@ -23,7 +23,7 @@ DEFAULT_SYSTEM_PROMPT = (
 # Прозвища, на которые бот отзывается в группе (через запятую).
 DEFAULT_ALIASES = "gazyava,газява,газик,газировка,газяваgpt,газикgpt"
 # Команды, которые в группах молчат: их место — только в личке.
-DEFAULT_PRIVATE_ONLY_COMMANDS = "buy,terms,paysupport,check,profile,lang,tickets,me"
+DEFAULT_PRIVATE_ONLY_COMMANDS = "buy,terms,paysupport,check,lang,tickets,me"
 
 COARENA_MODELS = (
     "deepseek-v4-1-flash-1017,gemini-3-8-flash,gemini-4-argon,gemini-4-carbon,"
@@ -63,7 +63,6 @@ DEFAULT_WELCOME = (
     "• напиши вопрос — отвечу;\n"
     "• пришли фото задания — разберу;\n"
     "• <code>/ai вопрос</code> — обратиться явно;\n"
-    "• <code>/profile</code> — указать класс и предмет, чтобы объяснял под тебя;\n"
     "• <code>/rules</code> — правила чата."
 )
 
