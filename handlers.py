@@ -53,6 +53,7 @@ from payments import send_model_invoice
 from roles import has_admin_access, is_staff, resolve_role, role_title
 from runtime import Runtime, load_runtime
 from store import Store
+from subjects import detect_subject, subject_hint, subject_title
 
 log = logging.getLogger("handlers")
 router = Router()
@@ -83,20 +84,12 @@ MODIFIERS = {
 }
 
 PROFILE_GRADES = ["5–6", "7–8", "9", "10–11", "вуз"]
-PROFILE_SUBJECTS = [
-    "математика",
-    "физика",
-    "химия",
-    "биология",
-    "русский",
-    "английский",
-    "информатика",
-    "другое",
-]
 PROFILE_STYLES = ["кратко", "подробно", "с примерами"]
 
-PROFILE_VALUES = {"g": PROFILE_GRADES, "s": PROFILE_SUBJECTS, "st": PROFILE_STYLES}
-PROFILE_FIELDS = {"g": "grade", "s": "subject", "st": "style"}
+# Предмет больше не выбирается вручную: его определяет subjects.detect_subject
+# по тексту задания.
+PROFILE_VALUES = {"g": PROFILE_GRADES, "st": PROFILE_STYLES}
+PROFILE_FIELDS = {"g": "grade", "st": "style"}
 
 
 class Check(StatesGroup):
@@ -451,15 +444,14 @@ async def build_profile_note(store: Store, user_id: int) -> str | None:
     bits = []
     if profile.get("grade"):
         bits.append(f"класс: {profile['grade']}")
-    if profile.get("subject"):
-        bits.append(f"предмет: {profile['subject']}")
     if profile.get("style"):
         bits.append(f"стиль объяснений: {profile['style']}")
     if not bits:
         return None
     return (
         "Профиль ученика — " + "; ".join(bits) + ". "
-        "Подстраивай сложность и стиль ответа под этот профиль."
+        "Подстраивай сложность и стиль ответа под этот профиль. "
+        "Предмет определяй по самому заданию, а не по профилю."
     )
 
 
@@ -715,6 +707,12 @@ async def answer_with_ai(
 
     payload_text = f"{instruction}\n\n---\n{question}" if instruction else question
 
+    # Роутер предметов: смотрит на задание и подмешивает правила нужного предмета.
+    subject_key = detect_subject(payload_text, has_image=image is not None)
+    subject_note = subject_hint(subject_key)
+    if subject_note:
+        log.info("Предмет задания для %s: %s", user.id, subject_title(subject_key))
+
     history = []
     if use_history and runtime.max_context > 0:
         history = await store.history(user.id, runtime.max_context)
@@ -733,6 +731,7 @@ async def answer_with_ai(
                 image_mime=image_mime,
                 vision_model=runtime.vision_model,
                 profile_note=profile_note,
+                subject_note=subject_note,
                 lang=lang,
                 task_lang=task_lang or detect_lang(question),
             )
@@ -1028,7 +1027,7 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
 
     profile = await store.get_profile(user.id) or {}
     profile_text = ", ".join(
-        bit for bit in (profile.get("grade"), profile.get("subject"), profile.get("style")) if bit
+        bit for bit in (profile.get("grade"), profile.get("style")) if bit
     ) or t(lang, "me.profile_empty")
 
     banned = await store.is_banned(user.id)
@@ -1064,7 +1063,6 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
 
 
 # --------------------------------------------------------------------------- профиль
-SUBJECT_KEYS = ["math", "physics", "chemistry", "biology", "russian", "english", "cs", "other"]
 STYLE_KEYS = ["brief", "detailed", "examples"]
 
 
@@ -1073,15 +1071,6 @@ def profile_kb(lang: str = "ru") -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text=grade, callback_data=f"pf:g:{i}")
             for i, grade in enumerate(PROFILE_GRADES)
-        ],
-        *[
-            [
-                InlineKeyboardButton(
-                    text=t(lang, f"subject.{SUBJECT_KEYS[i]}"), callback_data=f"pf:s:{i}"
-                )
-                for i in range(start, min(start + 4, len(SUBJECT_KEYS)))
-            ]
-            for start in (0, 4)
         ],
         [
             InlineKeyboardButton(
@@ -1103,7 +1092,7 @@ async def render_profile(
         t(lang, "profile.title")
         + "\n\n"
         + f"{t(lang, 'profile.grade')}: <b>{escape(profile.get('grade') or '—')}</b>\n"
-        f"{t(lang, 'profile.subject')}: <b>{escape(profile.get('subject') or '—')}</b>\n"
+        f"{t(lang, 'profile.subject')}: <b>{t(lang, 'profile.subject_auto')}</b>\n"
         f"{t(lang, 'profile.style')}: <b>{escape(profile.get('style') or '—')}</b>\n\n"
         + t(lang, "profile.hint")
     )

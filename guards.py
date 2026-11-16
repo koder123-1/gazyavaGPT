@@ -130,6 +130,7 @@ def build_system_prompt(
     *,
     has_image: bool = False,
     profile: str | None = None,
+    subject_note: str | None = None,
     lang: str = "ru",
     task_lang: str | None = None,
 ) -> str:
@@ -146,6 +147,8 @@ def build_system_prompt(
         parts.append("Дополнительные указания от администратора:\n" + extra.strip())
     if profile and profile.strip():
         parts.append(profile.strip())
+    if subject_note and subject_note.strip():
+        parts.append(subject_note.strip())
     # Заголовки шаблона должны совпадать с языком задания даже тогда, когда
     # он совпадает с языком интерфейса: иначе английская домашка получает
     # русские «Условие/Решение/Ответ».
