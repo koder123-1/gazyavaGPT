@@ -289,12 +289,16 @@ async def publish(bot: Bot, store: Store, settings: Settings, *, force: bool = F
     text = render_post(post, today)
     keyboard = _keyboard(await _username(bot))
     try:
-        await bot.send_message(
+        sent = await bot.send_message(
             target, text, reply_markup=keyboard, disable_web_page_preview=True
         )
     except TelegramAPIError as exc:
         log.warning("Автопост в %s не опубликован: %s", target, exc)
         return False, f"Не удалось опубликовать: {exc}"
+    with contextlib.suppress(Exception):
+        from channelkit import record_post
+
+        await record_post(store, target, sent.message_id, text)
     await store.set_setting("autopost_last", today.isoformat())
     log.info("Автопост в %s: %s", target, post.get("tag"))
     return True, "Задача дня опубликована" if post.get("answer") else "Совет дня опубликован"

@@ -34,6 +34,7 @@ from subscription import SubscriptionMiddleware, probe_channel
 from subscription import router as subscription_router
 from tickets import router as tickets_router
 import autopost
+import channelkit
 import giveaways
 
 WEBHOOK_PATH = "/webhook"
@@ -105,6 +106,7 @@ async def on_startup(
     await images.start()
     giveaways.start_loop(bot, store)
     autopost.start_loop(bot, store, settings)
+    channelkit.start_loop(bot, store)
     await bot.set_my_commands(COMMANDS)
     with contextlib.suppress(TelegramAPIError):
         await bot.set_my_commands(GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())
@@ -151,6 +153,7 @@ async def on_startup(
 async def on_shutdown(bot: Bot, store: Store, ai: AIClient, images: ImageClient) -> None:
     await giveaways.stop_loop()
     await autopost.stop_loop()
+    await channelkit.stop_loop()
     await ai.close()
     await images.close()
     await store.close()
@@ -198,6 +201,7 @@ def create_dispatcher(
     dispatcher.include_router(subscription_router)
     # Админ-роутер первым: его фильтр по роли отсекает остальных.
     dispatcher.include_router(admin_router)
+    dispatcher.include_router(channelkit.router)
     dispatcher.include_router(tickets_router)
     dispatcher.include_router(giveaways.router)
     dispatcher.include_router(autopost.router)

@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any
 
-from aiogram import BaseMiddleware, Bot, Router
+from aiogram import BaseMiddleware, Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import ChatMemberAdministrator, Message, TelegramObject
@@ -606,6 +606,103 @@ async def cmd_unmute(message: Message, bot: Bot, settings: Settings, store: Stor
 async def cmd_warn(message: Message, bot: Bot, settings: Settings, store: Store) -> None:
     await _moderate(
         message, bot, settings, store, right="can_restrict_members", action="warn"
+    )
+
+
+# --------------------------------------------------------------------------- по-русски без слэша
+# Люди пишут «кик», «мут 10м», «варн» — без слэша и по-русски. Понимаем оба
+# варианта: /кик и просто «кик» реплаем. Срабатываем только там, где есть
+# адресат (реплай, @username или ID), чтобы не ловить обычные слова в чате.
+_PLAIN_ACTIONS: dict[str, str] = {
+    "кик": "kick",
+    "кикни": "kick",
+    "выгони": "kick",
+    "выгнать": "kick",
+    "бан": "ban",
+    "забань": "ban",
+    "забанить": "ban",
+    "разбан": "unban",
+    "разбань": "unban",
+    "разбанить": "unban",
+    "мут": "mute",
+    "замуть": "mute",
+    "замутить": "mute",
+    "мьют": "mute",
+    "размут": "unmute",
+    "размуть": "unmute",
+    "размутить": "unmute",
+    "варн": "warn",
+    "варнни": "warn",
+    "пред": "warn",
+    "предупреди": "warn",
+    "повысить": "promote",
+    "понизить": "demote",
+    "удалить": "del",
+    "убери": "del",
+    "снеси": "del",
+    "закрепи": "pin",
+    "закрепить": "pin",
+    "открепи": "unpin",
+    "открепить": "unpin",
+}
+
+_PLAIN_RE = re.compile(
+    r"^(?P<slash>/)?(?:бот[,\s]+)?(?P<word>"
+    + "|".join(sorted((re.escape(word) for word in _PLAIN_ACTIONS), key=len, reverse=True))
+    + r")\b(?P<rest>.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_ACTION_RIGHTS = {
+    "kick": "can_restrict_members",
+    "ban": "can_restrict_members",
+    "unban": "can_restrict_members",
+    "mute": "can_restrict_members",
+    "unmute": "can_restrict_members",
+    "warn": "can_restrict_members",
+    "promote": "can_promote_members",
+    "demote": "can_promote_members",
+    "del": "can_delete_messages",
+}
+
+
+@router.message(F.text.regexp(_PLAIN_RE))
+async def on_russian_command(
+    message: Message, bot: Bot, settings: Settings, store: Store
+) -> None:
+    if message.chat.type == "private":
+        return
+    if message.from_user is None or message.from_user.is_bot:
+        return
+    match = _PLAIN_RE.match((message.text or "").strip())
+    if match is None:
+        return
+    action = _PLAIN_ACTIONS.get(match.group("word").lower())
+    if action is None:
+        return
+    lang = _lang(settings, message)
+    slash = bool(match.group("slash"))
+    if not await has_group_access(message, bot, settings, store):
+        # На простое слово в чате не отвечаем, чтобы не шуметь.
+        if slash:
+            await message.reply(t(lang, "group.only_admins"))
+        return
+    if action == "pin":
+        await cmd_pin(message, bot, settings, store)
+        return
+    if action == "unpin":
+        await cmd_unpin(message, bot, settings, store)
+        return
+    if message.reply_to_message is None and _target_id(message) is None:
+        await message.reply(t(lang, "group.need_reply"))
+        return
+    await _moderate(
+        message,
+        bot,
+        settings,
+        store,
+        right=_ACTION_RIGHTS.get(action, "can_restrict_members"),
+        action=action,
     )
 
 

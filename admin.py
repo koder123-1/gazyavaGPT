@@ -2076,11 +2076,18 @@ async def render_channels(store: Store) -> tuple[str, InlineKeyboardMarkup]:
         "",
         "Подключи канал, где бот администратор, затем создавай посты с URL-кнопками.",
         "Пост можно сделать текстовым или с фото; кнопки задаются как <code>Текст | https://ссылка</code>.",
+        "",
+        "📊 Карточка канала: подписчики, права бота, закреп, история постов, "
+        "отложенные публикации и опросы.",
+        "📤 Отправить любое сообщение в канал: ответь на него командой /topost.",
     ]
     rows = []
     for index, channel in enumerate(channels):
         rows.append([
-            InlineKeyboardButton(text=f"✍️ Пост · {channel[:25]}", callback_data=f"adm:ch:pick:{index}"),
+            InlineKeyboardButton(
+                text=f"📊 {channel[:24]}", callback_data=f"adm:ck:card:{index}"
+            ),
+            InlineKeyboardButton(text="✍️", callback_data=f"adm:ch:pick:{index}"),
             InlineKeyboardButton(text="🗑", callback_data=f"adm:ch:rm:{index}"),
         ])
     if len(channels) < MAX_CHANNELS:
@@ -2101,6 +2108,9 @@ def _compose_kb(post: dict | None = None) -> InlineKeyboardMarkup:
     rows.append([
         InlineKeyboardButton(text="👀 Предпросмотр", callback_data="adm:ch:preview"),
         InlineKeyboardButton(text="🚀 Опубликовать", callback_data="adm:ch:publish"),
+    ])
+    rows.append([
+        InlineKeyboardButton(text="🕘 Отложить публикацию", callback_data="adm:ck:later"),
     ])
     rows.append([
         InlineKeyboardButton(text="🗑 Удалить все кнопки", callback_data="adm:ch:delmenu"),
@@ -2363,7 +2373,9 @@ async def cb_channel_preview(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "adm:ch:publish")
-async def cb_channel_publish(call: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+async def cb_channel_publish(
+    call: CallbackQuery, bot: Bot, store: Store, state: FSMContext
+) -> None:
     data = await state.get_data()
     post = data.get("channel_post") or {}
     channel = str(data.get("channel_target") or "")
@@ -2371,13 +2383,25 @@ async def cb_channel_publish(call: CallbackQuery, bot: Bot, state: FSMContext) -
         await call.answer("Не хватает канала или содержимого поста", show_alert=True)
         return
     try:
-        await _deliver_post(bot, channel, post)
+        import channelkit
+
+        sent = await channelkit.publish_to_channel(bot, store, channel, post)
+        index = await channelkit.channel_index(store, channel)
     except TelegramAPIError as exc:
         await call.answer("Telegram не принял пост. Проверь права бота и длину текста.", show_alert=True)
         log.warning("Channel post failed for %s: %s", channel, exc)
         return
     await state.clear()
-    await call.message.edit_text(f"✅ Пост опубликован в {escape(channel)}.", reply_markup=back_kb("adm:ch"))
+    await call.message.edit_text(
+        f"✅ Пост #{sent.message_id} опубликован в {escape(channel)}.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="📊 Карточка канала", callback_data=f"adm:ck:card:{index}")],
+                [InlineKeyboardButton(text="📋 История постов", callback_data=f"adm:ck:hist:{index}")],
+                [InlineKeyboardButton(text="⬅️ К каналу", callback_data="adm:ch")],
+            ]
+        ),
+    )
     await call.answer("Опубликовано")
 
 
