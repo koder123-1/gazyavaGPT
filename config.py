@@ -178,6 +178,10 @@ class Settings:
     autopost_channel: str = ""
     autopost_hour: int = 9
     autopost_kind: str = "mix"
+    bonus_base: int = 3
+    bonus_max: int = 10
+    invite_reward: int = 5
+    invited_reward: int = 3
     terms_text: str = DEFAULT_TERMS
     support_text: str = DEFAULT_SUPPORT
     support_contact: str = ""
@@ -419,6 +423,10 @@ def load_settings() -> Settings:
             if os.getenv("AUTOPOST_KIND", "").strip().lower() in {"task", "tip", "mix"}
             else "mix"
         ),
+        bonus_base=_int_env("BONUS_BASE", 3, minimum=1, maximum=50),
+        bonus_max=_int_env("BONUS_MAX", 10, minimum=1, maximum=100),
+        invite_reward=_int_env("INVITE_REWARD", 5, minimum=0, maximum=100),
+        invited_reward=_int_env("INVITED_REWARD", 3, minimum=0, maximum=100),
         terms_text=os.getenv("TERMS_TEXT", "").strip() or DEFAULT_TERMS,
         support_text=os.getenv("PAY_SUPPORT_TEXT", "").strip() or DEFAULT_SUPPORT,
         support_contact=os.getenv("PAY_SUPPORT_CONTACT", "").strip(),

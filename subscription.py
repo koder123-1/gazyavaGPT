@@ -30,6 +30,7 @@ from aiogram.types import (
 )
 
 from config import Settings
+from growth import parse_ref, process_pending, remember_pending
 from i18n import normalize_lang, t
 from moderation import ChatAdminCache
 from roles import has_admin_access, resolve_role
@@ -298,6 +299,13 @@ class SubscriptionMiddleware(BaseMiddleware):
             channel, url = await current_channel(store, settings)
             if await membership(bot, channel, user.id) != NOT_SUBSCRIBED:
                 return await handler(event, data)
+            # Не теряем приглашение: /start ref_<id> запомним и начислим
+            # награды после подтверждения подписки.
+            parts = (event.text or "").strip().split(maxsplit=1)
+            if parts and parts[0].startswith("/start") and len(parts) > 1:
+                referrer_id = await parse_ref(parts[1])
+                if referrer_id:
+                    await remember_pending(store, user.id, referrer_id)
             await self._send_gate(bot, event, store, settings, channel, url)
             return None
 
@@ -494,5 +502,9 @@ async def check_subscription(
     stored = await store.get_lang(user.id)
     lang = normalize_lang(stored) if stored else normalize_lang(settings.default_lang)
     await send_welcome(call.message, store, settings, lang, user=user)
+    if await process_pending(bot, store, settings, user):
+        await call.message.answer(
+            t(lang, "invite.welcome", amount=settings.invited_reward)
+        )
     if not stored:
         await call.message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))

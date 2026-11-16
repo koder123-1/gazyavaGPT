@@ -29,6 +29,16 @@ class Store(Protocol):
     async def has_model_access(self, user_id: int, model: str) -> bool: ...
     async def is_banned(self, user_id: int) -> bool: ...
     async def set_banned(self, user_id: int, banned: bool) -> bool: ...
+    async def user_exists(self, user_id: int) -> bool: ...
+    async def daily_bonus(
+        self, user_id: int, base: int = 3, maximum: int = 10
+    ) -> dict[str, int | bool]: ...
+    async def bonus_streak(self, user_id: int) -> int: ...
+    async def claim_referral(
+        self, referrer_id: int, invited_id: int, window_seconds: int = 900
+    ) -> bool: ...
+    async def referral_count(self, user_id: int) -> int: ...
+    async def referral_top(self, limit: int = 10) -> list[dict]: ...
 
     async def remaining(self, user_id: int, daily_limit: int) -> int: ...
     async def consume(self, user_id: int, daily_limit: int = 0) -> int: ...
@@ -163,6 +173,7 @@ class MemoryStore:
         self._ticket_msgs: dict[int, list[dict]] = {}
         self._giveaways: dict[int, dict] = {}
         self._giveaway_entries: dict[int, dict[int, dict]] = {}
+        self._referrals: dict[int, dict] = {}
         self._seq = 0
         self._exchange_seq = 0
         self._payment_seq = 0
@@ -185,6 +196,7 @@ class MemoryStore:
         )
         user.setdefault("bonus_requests", 0)
         user.setdefault("lang", None)
+        user.setdefault("created_at", datetime.now(UTC))
         self._seq += 1
         user.update({"username": username, "first_name": first_name, "seen": self._seq})
 
@@ -309,6 +321,99 @@ class MemoryStore:
             info["bonus_requests"] = max(0, int(info.get("bonus_requests", 0)) + count)
             total += 1
         return total
+
+    async def user_exists(self, user_id: int) -> bool:
+        return user_id in self._users
+
+    async def daily_bonus(
+        self, user_id: int, base: int = 3, maximum: int = 10
+    ) -> dict[str, int | bool]:
+        """Бонус раз в сутки. Серия растёт, пока заходят каждый день."""
+        user = self._users.setdefault(
+            user_id,
+            {
+                "username": None,
+                "first_name": None,
+                "banned": False,
+                "seen": 0,
+                "bonus_requests": 0,
+                "created_at": datetime.now(UTC),
+            },
+        )
+        today = date.today()
+        last = user.get("bonus_day")
+        streak = int(user.get("bonus_streak", 0))
+        if last == today:
+            return {
+                "claimed": False,
+                "amount": 0,
+                "streak": max(1, streak),
+                "total": int(user.get("bonus_requests", 0)),
+            }
+        streak = streak + 1 if last == today - timedelta(days=1) else 1
+        amount = min(max(1, int(maximum)), int(base) + streak - 1)
+        user["bonus_streak"] = streak
+        user["bonus_day"] = today
+        user["bonus_requests"] = max(0, int(user.get("bonus_requests", 0)) + amount)
+        return {
+            "claimed": True,
+            "amount": amount,
+            "streak": streak,
+            "total": int(user["bonus_requests"]),
+        }
+
+    async def bonus_streak(self, user_id: int) -> int:
+        return int(self._users.get(user_id, {}).get("bonus_streak", 0))
+
+    async def claim_referral(
+        self, referrer_id: int, invited_id: int, window_seconds: int = 900
+    ) -> bool:
+        """Привязывает приглашённого к пригласившему, если аккаунт совсем новый."""
+        if referrer_id == invited_id or referrer_id <= 0 or invited_id <= 0:
+            return False
+        referrer = self._users.get(referrer_id)
+        invited = self._users.get(invited_id)
+        if referrer is None or referrer.get("banned"):
+            return False
+        if invited is None:
+            return False
+        created = invited.get("created_at")
+        if not isinstance(created, datetime):
+            return False
+        if (datetime.now(UTC) - created).total_seconds() > max(1, window_seconds):
+            return False
+        if invited_id in self._referrals:
+            return False
+        if self._total_requests.get(invited_id, 0) > 0:
+            return False
+        self._referrals[invited_id] = {
+            "referrer_id": referrer_id,
+            "invited_id": invited_id,
+            "created_at": datetime.now(UTC),
+        }
+        return True
+
+    async def referral_count(self, user_id: int) -> int:
+        return sum(
+            1 for row in self._referrals.values() if row["referrer_id"] == user_id
+        )
+
+    async def referral_top(self, limit: int = 10) -> list[dict]:
+        counts: dict[int, int] = defaultdict(int)
+        for row in self._referrals.values():
+            counts[row["referrer_id"]] += 1
+        rows = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        result = []
+        for user_id, count in rows[: max(1, limit)]:
+            info = self._users.get(user_id, {})
+            result.append(
+                {
+                    "user_id": user_id,
+                    "name": info.get("first_name") or info.get("username") or str(user_id),
+                    "count": count,
+                }
+            )
+        return result
 
     async def image_credits(self, user_id: int) -> int:
         return int(self._image_credits.get(user_id, 0))
@@ -1175,6 +1280,140 @@ class PostgresStore:
         except (TypeError, ValueError):
             return 0
 
+    async def user_exists(self, user_id: int) -> bool:
+        assert self._pool is not None
+        return bool(
+            await self._pool.fetchval(
+                "SELECT EXISTS (SELECT 1 FROM users WHERE user_id = $1)", user_id
+            )
+        )
+
+    async def daily_bonus(
+        self, user_id: int, base: int = 3, maximum: int = 10
+    ) -> dict[str, int | bool]:
+        """Бонус раз в сутки; серия растёт, пока заходят каждый день."""
+        assert self._pool is not None
+        await self._pool.execute(
+            "INSERT INTO users (user_id) VALUES ($1) ON CONFLICT DO NOTHING", user_id
+        )
+        row = await self._pool.fetchrow(
+            """
+            WITH before AS (
+                SELECT bonus_streak, bonus_day, bonus_requests
+                FROM users WHERE user_id = $1
+            ), upd AS (
+                UPDATE users u SET
+                    bonus_streak = CASE
+                        WHEN b.bonus_day = CURRENT_DATE THEN GREATEST(1, b.bonus_streak)
+                        WHEN b.bonus_day = CURRENT_DATE - 1 THEN b.bonus_streak + 1
+                        ELSE 1 END,
+                    bonus_day = CURRENT_DATE,
+                    bonus_requests = CASE
+                        WHEN b.bonus_day = CURRENT_DATE THEN b.bonus_requests
+                        ELSE b.bonus_requests + LEAST(
+                            $3::int,
+                            $2::int + (CASE
+                                WHEN b.bonus_day = CURRENT_DATE - 1 THEN b.bonus_streak
+                                ELSE 0 END)
+                        ) END
+                FROM before b
+                WHERE u.user_id = $1
+                RETURNING u.bonus_streak, u.bonus_requests,
+                          (b.bonus_day IS DISTINCT FROM CURRENT_DATE) AS claimed,
+                          CASE
+                              WHEN b.bonus_day = CURRENT_DATE THEN 0
+                              ELSE LEAST(
+                                  $3::int,
+                                  $2::int + (CASE
+                                      WHEN b.bonus_day = CURRENT_DATE - 1 THEN b.bonus_streak
+                                      ELSE 0 END)
+                              ) END AS amount
+            )
+            SELECT * FROM upd
+            """,
+            user_id,
+            max(1, int(base)),
+            max(1, int(maximum)),
+        )
+        if row is None:
+            return {"claimed": False, "amount": 0, "streak": 1, "total": 0}
+        return {
+            "claimed": bool(row["claimed"]),
+            "amount": int(row["amount"] or 0),
+            "streak": int(row["bonus_streak"] or 1),
+            "total": int(row["bonus_requests"] or 0),
+        }
+
+    async def bonus_streak(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT bonus_streak FROM users WHERE user_id = $1", user_id
+        )
+        return int(value or 0)
+
+    async def claim_referral(
+        self, referrer_id: int, invited_id: int, window_seconds: int = 900
+    ) -> bool:
+        """Привязывает приглашённого к пригласившему, если аккаунт совсем новый."""
+        assert self._pool is not None
+        if referrer_id == invited_id or referrer_id <= 0 or invited_id <= 0:
+            return False
+        value = await self._pool.fetchval(
+            """
+            INSERT INTO referrals (referrer_id, invited_id)
+            SELECT $1::bigint, $2::bigint
+            WHERE EXISTS (
+                    SELECT 1 FROM users WHERE user_id = $1 AND NOT banned
+                  )
+              AND EXISTS (
+                    SELECT 1 FROM users
+                    WHERE user_id = $2
+                      AND created_at > now() - make_interval(secs => $3::int)
+                  )
+              AND NOT EXISTS (SELECT 1 FROM referrals WHERE invited_id = $2)
+              AND NOT EXISTS (
+                    SELECT 1 FROM usage WHERE user_id = $2 AND count > 0
+                  )
+            ON CONFLICT (invited_id) DO NOTHING
+            RETURNING invited_id
+            """,
+            referrer_id,
+            invited_id,
+            max(1, int(window_seconds)),
+        )
+        return value is not None
+
+    async def referral_count(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT count(*) FROM referrals WHERE referrer_id = $1", user_id
+        )
+        return int(value or 0)
+
+    async def referral_top(self, limit: int = 10) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            """
+            SELECT r.referrer_id AS user_id,
+                   coalesce(u.first_name, u.username, r.referrer_id::text) AS name,
+                   count(*) AS count
+            FROM referrals r
+            LEFT JOIN users u ON u.user_id = r.referrer_id
+            GROUP BY r.referrer_id, u.first_name, u.username
+            ORDER BY count DESC, r.referrer_id
+            LIMIT $1
+            """,
+            max(1, int(limit)),
+        )
+        return [
+            {
+                "user_id": int(row["user_id"]),
+                "name": row["name"],
+                "count": int(row["count"]),
+            }
+            for row in rows
+        ]
+
     async def image_credits(self, user_id: int) -> int:
         assert self._pool is not None
         value = await self._pool.fetchval(
@@ -2037,6 +2276,16 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS lang TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_until TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS model TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS style TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_streak INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_day DATE;
+
+CREATE TABLE IF NOT EXISTS referrals (
+    invited_id  BIGINT PRIMARY KEY,
+    referrer_id BIGINT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS referrals_referrer_idx ON referrals (referrer_id);
 
 CREATE TABLE IF NOT EXISTS usage (
     user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,

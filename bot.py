@@ -62,6 +62,8 @@ COMMANDS = [
     BotCommand(command="support", description="Написать в поддержку"),
     BotCommand(command="tickets", description="Мои обращения и тикеты"),
     BotCommand(command="paysupport", description="Поддержка по оплате"),
+    BotCommand(command="bonus", description="Бонус дня за ежедневный вход"),
+    BotCommand(command="invite", description="Пригласить друга и получить запросы"),
     BotCommand(command="me", description="Мой ID и остаток лимита"),
     BotCommand(command="rules", description="Правила чата"),
     BotCommand(command="help", description="Справка"),

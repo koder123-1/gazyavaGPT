@@ -12,6 +12,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from html import escape, unescape
+from urllib.parse import quote
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatAction
@@ -32,6 +33,7 @@ from aiogram.types import (
 
 import files
 import debugmode
+import growth
 import media
 import models as model_catalog
 from ai import AIClient, AIError
@@ -230,6 +232,8 @@ MENU_KEYS = (
     "menu.support",
     "menu.tickets",
     "menu.files",
+    "menu.bonus",
+    "menu.invite",
     "menu.lang",
     "menu.help",
     "menu.reset",
@@ -335,6 +339,7 @@ def main_menu_kb(
     else:
         rows.append(_button_row(lang, "menu.support"))
     rows.append(_button_row(lang, "menu.tickets", "menu.files"))
+    rows.append(_button_row(lang, "menu.bonus", "menu.invite"))
     rows.append(_button_row(lang, "menu.lang", "menu.help"))
     if payments:
         rows.append(_button_row(lang, "menu.terms", "menu.reset"))
@@ -378,6 +383,12 @@ def menu_inline(
                 text=t(lang, "menu.tickets"), callback_data="menu:act:tickets"
             ),
             InlineKeyboardButton(text=t(lang, "menu.files"), callback_data="menu:act:files"),
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(text=t(lang, "menu.bonus"), callback_data="menu:act:bonus"),
+            InlineKeyboardButton(text=t(lang, "menu.invite"), callback_data="menu:act:invite"),
         ]
     )
     rows.append(
@@ -1168,11 +1179,151 @@ async def cmd_start(message: Message, store: Store, settings: Settings) -> None:
 
     stored = await store.get_lang(user.id)
     lang = normalize_lang(stored) if stored else normalize_lang(settings.default_lang)
+    referred = await _accept_referral(message, store, settings, lang)
     # Меню показываем сразу, даже если язык ещё не выбран: иначе новый
     # пользователь видит только выбор языка и не находит кнопки.
     await send_welcome(message, store, settings, lang)
+    if referred:
+        await message.answer(
+            t(lang, "invite.welcome", amount=settings.invited_reward)
+        )
     if not stored:
         await message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))
+
+
+async def _accept_referral(
+    message: Message, store: Store, settings: Settings, lang: str
+) -> bool:
+    """Разбирает deep-link /start ref_<id> и награждает за приглашение."""
+    user = message.from_user
+    if user is None:
+        return False
+    parts = (message.text or "").split(maxsplit=1)
+    payload = parts[1].strip() if len(parts) > 1 else ""
+    referrer_id = await growth.parse_ref(payload) if payload else 0
+    name = user.first_name or (f"@{user.username}" if user.username else None)
+    if referrer_id:
+        if referrer_id == user.id:
+            return False
+        return await growth.accept_referral(
+            message.bot,
+            store,
+            settings,
+            user.id,
+            referrer_id,
+            name=name,
+        )
+    return await growth.process_pending(message.bot, store, settings, user)
+
+
+@router.message(Command("bonus", "бонус"))
+async def cmd_bonus(message: Message, store: Store, settings: Settings) -> None:
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    if message.chat.type != "private":
+        me = await message.bot.me()
+        await message.answer(
+            t(lang, "bonus.private", username=me.username or settings.bot_name)
+        )
+        return
+    await store.ensure_user(user.id, user.username, user.first_name)
+    text, _, _ = await bonus_view(store, settings, user.id, lang)
+    await message.answer(text)
+
+
+async def bonus_view(
+    store: Store, settings: Settings, user_id: int, lang: str
+) -> tuple[str, bool, int]:
+    """Текст про бонус дня + признак «только что получен» и сумма."""
+    result = await store.daily_bonus(user_id, settings.bonus_base, settings.bonus_max)
+    runtime = await load_runtime(store, settings)
+    left = await store.remaining(user_id, runtime.daily_limit)
+    if result["claimed"]:
+        text = t(
+            lang,
+            "bonus.ok",
+            amount=result["amount"],
+            streak=result["streak"],
+            left=left,
+            top=settings.bonus_max,
+        )
+    else:
+        text = t(lang, "bonus.already", streak=result["streak"], left=left)
+    return text, bool(result["claimed"]), int(result["amount"])
+
+
+@router.message(Command("invite", "пригласить", "реф", "ref"))
+async def cmd_invite(message: Message, store: Store, settings: Settings) -> None:
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    me = await message.bot.me()
+    if message.chat.type != "private":
+        await message.answer(
+            t(lang, "invite.private", username=me.username or settings.bot_name)
+        )
+        return
+    await store.ensure_user(user.id, user.username, user.first_name)
+    text, keyboard = await invite_view(
+        store, settings, user.id, lang, me.username or settings.bot_name
+    )
+    await message.answer(text, reply_markup=keyboard)
+
+
+async def invite_view(
+    store: Store, settings: Settings, user_id: int, lang: str, bot_username: str
+) -> tuple[str, InlineKeyboardMarkup]:
+    link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    count = await store.referral_count(user_id)
+    bonus = await store.bonus_requests(user_id)
+    share = (
+        "https://t.me/share/url?url="
+        + quote(link, safe="")
+        + "&text="
+        + quote(t(lang, "invite.share_text", bot=settings.bot_name), safe="")
+    )
+    text = t(
+        lang,
+        "invite.card",
+        link=escape(link),
+        count=count,
+        reward=settings.invite_reward,
+        friend=settings.invited_reward,
+        bonus=bonus,
+    )
+    return text, InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "invite.share"), url=share)],
+            [
+                InlineKeyboardButton(
+                    text=t(lang, "menu.bonus"), callback_data="bonus:claim"
+                )
+            ],
+        ]
+    )
+
+
+@router.callback_query(F.data == "bonus:claim")
+async def cb_bonus_claim(call: CallbackQuery, store: Store, settings: Settings) -> None:
+    if call.from_user is None:
+        return
+    lang = await user_lang(store, settings, call.from_user.id)
+    await store.ensure_user(
+        call.from_user.id, call.from_user.username, call.from_user.first_name
+    )
+    text, claimed, amount = await bonus_view(
+        store, settings, call.from_user.id, lang
+    )
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.answer(text)
+    await call.answer(
+        t(lang, "bonus.ok_short", amount=amount)
+        if claimed
+        else t(lang, "bonus.already_short")
+    )
 
 
 @router.callback_query(F.data.startswith("lg:"))
@@ -1443,13 +1594,20 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
         [InlineKeyboardButton(text=t(lang, "btn.lang"), callback_data="lang:menu")]
     )
     role_line = t(lang, "me.role_line", role=role_title(role)) if role else ""
+    streak = await store.bonus_streak(user.id)
+    invites = await store.referral_count(user.id)
+    growth_line = (
+        t(lang, "me.growth_line", streak=streak, invites=invites)
+        if streak or invites
+        else ""
+    )
     await message.answer(
         t(
             lang,
             "me.body",
             user_id=user.id,
             role_line=role_line,
-            sub_line="",
+            sub_line=growth_line,
             limit=limit_text,
             bonus=bonus,
             style=t(lang, f"styles.{style_key}"),
@@ -2271,6 +2429,10 @@ async def on_menu_button(
                 pages=settings.file_max_pdf_pages,
             )
         )
+    elif action == "menu.bonus":
+        await cmd_bonus(message, store, settings)
+    elif action == "menu.invite":
+        await cmd_invite(message, store, settings)
     elif action == "menu.lang":
         await message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))
     elif action == "menu.reset":
@@ -2366,6 +2528,23 @@ async def cb_menu_action(
                 pages=settings.file_max_pdf_pages,
             )
         )
+    elif action == "bonus":
+        await store.ensure_user(user.id, user.username, user.first_name)
+        text, claimed, amount = await bonus_view(store, settings, user.id, lang)
+        await call.message.answer(text)
+        await call.answer(
+            t(lang, "bonus.ok_short", amount=amount)
+            if claimed
+            else t(lang, "bonus.already_short")
+        )
+        return
+    elif action == "invite":
+        await store.ensure_user(user.id, user.username, user.first_name)
+        me = await call.bot.me()
+        text, keyboard = await invite_view(
+            store, settings, user.id, lang, me.username or settings.bot_name
+        )
+        await call.message.answer(text, reply_markup=keyboard)
     elif action == "help":
         await call.message.answer(
             await help_text(store, settings, lang, user.id),

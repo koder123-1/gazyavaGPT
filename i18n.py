@@ -389,6 +389,156 @@ TR: dict[str, dict[str, str]] = {
         "be": "⚙️ Адмінка",
         "en": "⚙️ Admin",
     },
+    "menu.bonus": {
+        "ru": "🎁 Бонус дня",
+        "uk": "🎁 Бонус дня",
+        "be": "🎁 Бонус дня",
+        "en": "🎁 Daily bonus",
+    },
+    "menu.invite": {
+        "ru": "👥 Пригласить друга",
+        "uk": "👥 Запросити друга",
+        "be": "👥 Запрасіць сябра",
+        "en": "👥 Invite a friend",
+    },
+    "bonus.ok": {
+        "ru": (
+            "🎁 <b>Бонус получен: +{amount}</b>\n"
+            "Серия: <b>{streak}</b> дн. подряд.\n"
+            "Осталось запросов: <b>{left}</b>\n\n"
+            "<i>Заходи каждый день — бонус растёт до {top}.</i>"
+        ),
+        "uk": (
+            "🎁 <b>Бонус отримано: +{amount}</b>\n"
+            "Серія: <b>{streak}</b> дн. підряд.\n"
+            "Залишилось запитів: <b>{left}</b>\n\n"
+            "<i>Заходь щодня — бонус зростає до {top}.</i>"
+        ),
+        "be": (
+            "🎁 <b>Бонус атрыманы: +{amount}</b>\n"
+            "Серыя: <b>{streak}</b> дз. запар.\n"
+            "Засталося запытаў: <b>{left}</b>\n\n"
+            "<i>Заходзь штодня — бонус расце да {top}.</i>"
+        ),
+        "en": (
+            "🎁 <b>Bonus claimed: +{amount}</b>\n"
+            "Streak: <b>{streak}</b> day(s) in a row.\n"
+            "Requests left: <b>{left}</b>\n\n"
+            "<i>Come back every day — the bonus grows up to {top}.</i>"
+        ),
+    },
+    "bonus.already": {
+        "ru": (
+            "🎁 Бонус дня уже получен.\n"
+            "Серия: <b>{streak}</b> дн. · осталось запросов: <b>{left}</b>\n\n"
+            "<i>Следующий бонус — завтра.</i>"
+        ),
+        "uk": (
+            "🎁 Бонус дня вже отримано.\n"
+            "Серія: <b>{streak}</b> дн. · залишилось запитів: <b>{left}</b>\n\n"
+            "<i>Наступний бонус — завтра.</i>"
+        ),
+        "be": (
+            "🎁 Бонус дня ўжо атрыманы.\n"
+            "Серыя: <b>{streak}</b> дз. · засталося запытаў: <b>{left}</b>\n\n"
+            "<i>Наступны бонус — заўтра.</i>"
+        ),
+        "en": (
+            "🎁 Today's bonus is already claimed.\n"
+            "Streak: <b>{streak}</b> day(s) · requests left: <b>{left}</b>\n\n"
+            "<i>Next bonus tomorrow.</i>"
+        ),
+    },
+    "bonus.ok_short": {
+        "ru": "🎁 +{amount} запросов",
+        "uk": "🎁 +{amount} запитів",
+        "be": "🎁 +{amount} запытаў",
+        "en": "🎁 +{amount} requests",
+    },
+    "bonus.already_short": {
+        "ru": "Уже получен сегодня",
+        "uk": "Уже отримано сьогодні",
+        "be": "Ужо атрыманы сёння",
+        "en": "Already claimed today",
+    },
+    "bonus.private": {
+        "ru": "🎁 Бонус дня выдаётся в личке. Напиши мне: @{username}",
+        "uk": "🎁 Бонус дня видається в особистих. Напиши мені: @{username}",
+        "be": "🎁 Бонус дня выдаецца ў асабістых. Напішы мне: @{username}",
+        "en": "🎁 The daily bonus is given in private. Message me: @{username}",
+    },
+    "invite.card": {
+        "ru": (
+            "👥 <b>Приглашай друзей</b>\n\n"
+            "Твоя ссылка:\n<code>{link}</code>\n\n"
+            "За каждого нового друга: тебе <b>+{reward}</b>, другу <b>+{friend}</b> запросов.\n"
+            "Уже приглашено: <b>{count}</b> · твои бонусные запросы: <b>{bonus}</b>\n\n"
+            "<i>Ссылка работает только для новых пользователей.</i>"
+        ),
+        "uk": (
+            "👥 <b>Запрошуй друзів</b>\n\n"
+            "Твоє посилання:\n<code>{link}</code>\n\n"
+            "За кожного нового друга: тобі <b>+{reward}</b>, другу <b>+{friend}</b> запитів.\n"
+            "Уже запрошено: <b>{count}</b> · твої бонусні запити: <b>{bonus}</b>\n\n"
+            "<i>Посилання працює лише для нових користувачів.</i>"
+        ),
+        "be": (
+            "👥 <b>Запрашай сяброў</b>\n\n"
+            "Тваё спасылка:\n<code>{link}</code>\n\n"
+            "За кожнага новага сябра: табе <b>+{reward}</b>, сябру <b>+{friend}</b> запытаў.\n"
+            "Ужо запрошана: <b>{count}</b> · твае бонусныя запыты: <b>{bonus}</b>\n\n"
+            "<i>Спасылка працуе толькі для новых карыстальнікаў.</i>"
+        ),
+        "en": (
+            "👥 <b>Invite friends</b>\n\n"
+            "Your link:\n<code>{link}</code>\n\n"
+            "For each new friend: you get <b>+{reward}</b>, your friend gets <b>+{friend}</b> requests.\n"
+            "Invited so far: <b>{count}</b> · your bonus requests: <b>{bonus}</b>\n\n"
+            "<i>The link works only for new users.</i>"
+        ),
+    },
+    "invite.share": {
+        "ru": "📤 Поделиться ссылкой",
+        "uk": "📤 Поділитися посиланням",
+        "be": "📤 Падзяліцца спасылкай",
+        "en": "📤 Share the link",
+    },
+    "invite.share_text": {
+        "ru": "Заходи в {bot} — ИИ-помощник по учёбе. Разбирает задачи по шагам.",
+        "uk": "Заходзь у {bot} — ШІ-помічник з навчання. Розбирає задачі покроково.",
+        "be": "Заходзь у {bot} — ШІ-памочнік па вучобе. Разбірае задачы па кроках.",
+        "en": "Join {bot} — an AI study helper that solves tasks step by step.",
+    },
+    "invite.joined": {
+        "ru": (
+            "👥 По твоей ссылке пришёл новый пользователь: <b>{name}</b>.\n"
+            "Начислено +{amount} запросов. Всего приглашено: <b>{count}</b>."
+        ),
+        "uk": (
+            "👥 За твоїм посиланням прийшов новий користувач: <b>{name}</b>.\n"
+            "Нараховано +{amount} запитів. Усього запрошено: <b>{count}</b>."
+        ),
+        "be": (
+            "👥 Па тваёй спасылцы прыйшоў новы карыстальнік: <b>{name}</b>.\n"
+            "Налічана +{amount} запытаў. Усяго запрошана: <b>{count}</b>."
+        ),
+        "en": (
+            "👥 A new user joined through your link: <b>{name}</b>.\n"
+            "You got +{amount} requests. Total invited: <b>{count}</b>."
+        ),
+    },
+    "invite.welcome": {
+        "ru": "🎁 Тебе начислили <b>+{amount}</b> запросов за приглашение от друга.\n\nПриятной учёбы!",
+        "uk": "🎁 Тобі нараховано <b>+{amount}</b> запитів за запрошення від друга.\n\nПриємного навчання!",
+        "be": "🎁 Табе налічана <b>+{amount}</b> запытаў за запрашэнне ад сябра.\n\nПрыемнай вучобы!",
+        "en": "🎁 You got <b>+{amount}</b> requests for joining through a friend's invite.\n\nHappy studying!",
+    },
+    "invite.private": {
+        "ru": "👥 Приглашения работают в личке. Напиши мне: @{username}",
+        "uk": "👥 Запрошення працюють в особистих. Напиши мені: @{username}",
+        "be": "👥 Запрашэнні працуюць у асабістых. Напішы мне: @{username}",
+        "en": "👥 Invites work in private. Message me: @{username}",
+    },
     "menu.home": {"ru": "☰ Меню", "uk": "☰ Меню", "be": "☰ Меню", "en": "☰ Menu"},
     "pay.disabled": {
         "ru": "Пополнение сейчас отключено. Лимит обновится в полночь по UTC.",
@@ -879,6 +1029,12 @@ TR: dict[str, dict[str, str]] = {
         "uk": "🎖 Роль: {role}\n",
         "be": "🎖 Роля: {role}\n",
         "en": "🎖 Role: {role}\n",
+    },
+    "me.growth_line": {
+        "ru": "🔥 Серия бонусов: <b>{streak}</b> дн. · 👥 Приглашено: <b>{invites}</b>\n",
+        "uk": "🔥 Серія бонусів: <b>{streak}</b> дн. · 👥 Запрошено: <b>{invites}</b>\n",
+        "be": "🔥 Серыя бонусаў: <b>{streak}</b> дз. · 👥 Запрошана: <b>{invites}</b>\n",
+        "en": "🔥 Bonus streak: <b>{streak}</b> day(s) · 👥 Invited: <b>{invites}</b>\n",
     },
     "me.banned_note": {
         "ru": "\n🚫 Доступ закрыт администратором.",
