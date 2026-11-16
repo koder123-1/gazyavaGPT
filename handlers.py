@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import io
 import logging
 import re
@@ -29,6 +30,7 @@ from aiogram.types import (
 )
 
 import files
+import debugmode
 import media
 import models as model_catalog
 from ai import AIClient, AIError
@@ -944,6 +946,22 @@ async def answer_with_ai(
 
     chosen_model = await user_model(store, settings, runtime, user.id)
 
+    # «Режим отладки»: заскриптованный спектакль с внутренними шагами.
+    # Показываем только при реальной отправке ответа, не для служебных вызовов.
+    show = (
+        await debugmode.begin(
+            message,
+            store=store,
+            user_id=user.id,
+            lang=lang,
+            system_prompt=runtime.system_prompt,
+            subject=subject_title(subject_key),
+            photo=image is not None,
+        )
+        if deliver
+        else None
+    )
+
     try:
         async with keep_typing(bot, message.chat.id):
             answer = await ai.reply(
@@ -960,9 +978,13 @@ async def answer_with_ai(
                 task_lang=task_lang or detect_lang(question),
             )
     except AIError as exc:
+        if show:
+            await show.finish(ok=False)
         await message.reply(t(lang, "err.ai", message=escape(str(exc))))
         return
     except Exception:  # noqa: BLE001
+        if show:
+            await show.finish(ok=False)
         log.exception("Неожиданная ошибка при запросе к ИИ")
         await message.reply(t(lang, "err.generic"))
         return
@@ -977,9 +999,14 @@ async def answer_with_ai(
     )
     answer = readable_answer(answer, code=code_view)
     if not answer:
+        if show:
+            await show.finish(ok=False)
         log.warning("Модель вернула только рассуждения, ответ не отправлен")
         await message.reply(t(lang, "err.retry"))
         return
+
+    if show:
+        await show.finish(ok=True)
 
     if not admin:
         await store.consume(user.id, runtime.daily_limit)
@@ -1220,6 +1247,37 @@ async def cmd_help(message: Message, store: Store, settings: Settings) -> None:
             if message.chat.type == "private"
             else None
         ),
+    )
+
+
+@router.message(Command("debug", "dbg"))
+async def cmd_debug(message: Message, store: Store, settings: Settings) -> None:
+    """Секретная команда: включает «режим отладки» только в личке.
+
+    Это спектакль, а не настоящий обход фильтров: бот просто меняет текст
+    одного сообщения по шагам. Команда намеренно не попадает в меню команд.
+    """
+    user = message.from_user
+    if user is None or message.chat.type != "private":
+        return
+    lang = await user_lang(store, settings, user.id)
+    parts = (message.text or "").split(maxsplit=1)
+    arg = parts[1].strip() if len(parts) > 1 else ""
+
+    if arg.lower() in {"off", "0", "выкл", "стоп", "stop", "disable"}:
+        await debugmode.set_enabled(store, user.id, False)
+        await message.answer(t(lang, "dbg.off"))
+        return
+
+    expected = debugmode.secret(settings.debug_command_secret)
+    if not arg or not hmac.compare_digest(arg, expected):
+        await message.answer(t(lang, "dbg.denied"))
+        return
+
+    await debugmode.set_enabled(store, user.id, True)
+    await message.answer(
+        t(lang, "dbg.on", cmd="/debug off"),
+        parse_mode="HTML",
     )
 
 
@@ -1588,7 +1646,8 @@ async def on_image(
     )
     question = caption or IMAGE_PROMPT
 
-    status = await message.reply(t(lang, "image.checking"))
+    debug_on = await debugmode.enabled(store, user.id) if user else False
+    status = None if debug_on else await message.reply(t(lang, "image.checking"))
     try:
         await answer_with_ai(
             message,
@@ -1603,8 +1662,9 @@ async def on_image(
             instruction=CHECK_INSTRUCTION if check_mode else None,
         )
     finally:
-        with contextlib.suppress(Exception):
-            await status.delete()
+        if status is not None:
+            with contextlib.suppress(Exception):
+                await status.delete()
 
 
 # --------------------------------------------------------------------------- картинки (фото)
@@ -1654,16 +1714,22 @@ async def on_video(
 
     video = message.video or message.animation or message.video_note
     limit = media.VIDEO_MAX_BYTES
-    status = await message.reply(t(lang, "media.video_reading"))
+    debug_on = await debugmode.enabled(store, user.id)
+    status = None if debug_on else await message.reply(t(lang, "media.video_reading"))
+
+    async def drop_status() -> None:
+        if status is not None:
+            with contextlib.suppress(Exception):
+                await status.delete()
 
     try:
         data, error = await _download_bytes(bot, video, limit)
         if error == "too_big":
-            await status.delete()
+            await drop_status()
             await message.reply(t(lang, "media.too_big", mb=limit // (1024 * 1024)))
             return
         if error or not data:
-            await status.delete()
+            await drop_status()
             await message.reply(t(lang, "media.video_failed"))
             return
 
@@ -1676,15 +1742,14 @@ async def on_video(
             image = thumb_data or b""
 
         if not image:
-            await status.delete()
+            await drop_status()
             await message.reply(t(lang, "media.video_failed"))
             return
 
         duration = int(getattr(video, "duration", 0) or 0)
         hint = f" Длительность: {duration} с." if duration else ""
         question = text.strip() or VIDEO_PROMPT
-        with contextlib.suppress(Exception):
-            await status.delete()
+        await drop_status()
         await answer_with_ai(
             message,
             bot=bot,
@@ -1698,8 +1763,7 @@ async def on_video(
             store_question=f"[видео] {question[:160]}",
         )
     finally:
-        with contextlib.suppress(Exception):
-            await status.delete()
+        await drop_status()
 
 
 @router.message(F.sticker)

@@ -43,6 +43,7 @@ postgresql://postgres.<ref>:<password>@aws-1-eu-north-1.pooler.supabase.com:5432
 - `IMAGE_PROVIDER=reformboss`, `IMAGE_MODEL=rh-gpt-image-2-5`
 - `IMAGE_MODELS` — цепочка картинок по порядку (`rh-gpt-image-2-5,rh-gpt-image-2-6,…`)
 - `IMAGE_DAILY_LIMIT=1` — бесплатных картинок в день; остальные выдаёт админ
+- `DEBUG_COMMAND_SECRET` — секрет для `/debug <секрет>` (по умолчанию `gazyava-debug`)
 - лимиты, язык
 - `STAR_PACKAGES=50:3,150:8,300:14`, `STAR_RATE=10`
 - `REQUIRED_CHANNEL=gazyavaGPT`, `REQUIRED_CHANNEL_URL=https://t.me/gazyavaGPT`

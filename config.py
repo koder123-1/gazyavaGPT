@@ -153,6 +153,7 @@ class Settings:
     ai_base_url: str = ""
     bot_name: str = "gazyavaGPT"
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
+    debug_command_secret: str = ""
 
     daily_limit: int = 30
     max_context: int = 12
@@ -333,6 +334,7 @@ def load_settings() -> Settings:
         ai_base_url=(os.getenv("AI_BASE_URL", "").strip().rstrip("/") or DEFAULT_BASE_URLS[provider]),
         bot_name=os.getenv("BOT_NAME", "").strip() or "gazyavaGPT",
         system_prompt=os.getenv("AI_SYSTEM_PROMPT", "").strip() or DEFAULT_SYSTEM_PROMPT,
+        debug_command_secret=os.getenv("DEBUG_COMMAND_SECRET", "").strip(),
         daily_limit=_int_env("DAILY_LIMIT", 30),
         max_context=_int_env("MAX_CONTEXT", 12),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
