@@ -336,7 +336,7 @@ class AIClient:
         payload = {
             "system_instruction": {"parts": [{"text": prompt}]},
             "contents": contents,
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2200},
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4000},
         }
         return url, headers, payload
 
@@ -377,7 +377,7 @@ class AIClient:
             "model": model,
             "messages": messages,
             "temperature": 0.6 if image is not None else 0.7,
-            "max_tokens": 2200,
+            "max_tokens": 4000,
         }
         if s.ai_provider == "openrouter":
             # Не просим и не показываем reasoning: ответ должен быть готовым текстом.

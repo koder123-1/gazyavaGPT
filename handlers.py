@@ -63,7 +63,7 @@ from subjects import detect_subject, subject_hint, subject_title
 log = logging.getLogger("handlers")
 router = Router()
 
-MAX_INPUT_CHARS = 3000
+MAX_INPUT_CHARS = 6000
 CHUNK = 3000
 # Telegram: 4096 символов на сообщение. Оставляем запас под теги и экранирование.
 HTML_LIMIT = 3800
