@@ -425,8 +425,8 @@ def humanize_answer(text: str, *, code: bool = False) -> str:
 # <b> заголовок, <blockquote> условие/ответ, <code> формулы, <pre> столбики.
 _SECTION_RE = re.compile(
     r"^\s*(?:(?P<emoji>[📌🧮✅])\s*)?"
-    r"(?P<title>Условие|Решение|Ответ|Task|Solution|Answer|Condition)\s*:?\s*"
-    r"(?P<rest>.*)$",
+    r"(?P<title>Условие|Решение|Ответ|Task|Solution|Answer|Condition)"
+    r"(?:\s*:\s*|\s*$)(?P<rest>.*)$",
     re.IGNORECASE,
 )
 _EMOJI = {
@@ -436,6 +436,14 @@ _EMOJI = {
 }
 _STEP_RE = re.compile(r"^(?:Шаг|Step)?\s*(\d{1,2})\s*[).:]\s*(.+)$", re.IGNORECASE)
 _COLUMN_CHARS = set("0123456789 +-−×÷=.,:;/\\|()[]<>%√²³⁴⁵⁶⁷⁸⁹⁰")
+
+# Шаги решения получают крупный номер-значок вместо служебного «Шаг N.».
+_KEYCAPS = ("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟")
+
+# «Ключ: значение» — короткая метка в начале строки. Длинные фразы, формулы и
+# ссылки не трогаем, иначе обычный текст покроется жирным без пользы.
+_LABEL_RE = re.compile(r"^(?P<key>[^:=]{1,40}?)\s*:\s*(?P<rest>.+)$")
+_LABEL_BAD = set("=<>/\\@#•*`")
 
 
 def _section(line: str) -> tuple[str, str, str] | None:
@@ -465,6 +473,55 @@ def _looks_like_column(line: str) -> bool:
     return all(char in _COLUMN_CHARS for char in line)
 
 
+def _inline(value: str) -> str:
+    """Экранирует текст и включает инлайн-код из обратных кавычек."""
+    from html import escape
+
+    return re.sub(r"`([^`\n]+)`", r"<code>\1</code>", escape(value))
+
+
+def _label_ok(key: str, rest: str) -> bool:
+    key = key.strip()
+    if not key or len(key) > 36 or not rest.strip() or not any(c.isalpha() for c in key):
+        return False
+    if "." in key or any(char in _LABEL_BAD or char.isdigit() for char in key):
+        return False
+    return True
+
+
+def _is_label(value: str) -> bool:
+    match = _LABEL_RE.match(value.strip())
+    return bool(match and _label_ok(match.group("key"), match.group("rest")))
+
+
+def _render_line(value: str) -> str:
+    """Одна строка текста: пункт списка, «Ключ: значение», подзаголовок или текст."""
+    from html import escape
+
+    stripped = value.strip()
+    if not stripped:
+        return ""
+
+    bullet = ""
+    marker = re.match(r"^[•\-–—*]\s+(?P<rest>.+)$", stripped)
+    if marker:
+        bullet = "• "
+        stripped = marker.group("rest").strip()
+
+    label = _LABEL_RE.match(stripped)
+    if label and _label_ok(label.group("key"), label.group("rest")):
+        key = escape(label.group("key").strip())
+        return f"{bullet}<b>{key}:</b> {_inline(label.group('rest').strip())}"
+
+    if _looks_like_formula(stripped):
+        return bullet + f"<code>{escape(stripped)}</code>"
+
+    if len(stripped) <= 60 and stripped.endswith(":"):
+        return f"{bullet}<b>{_inline(stripped)}</b>"
+
+    return bullet + _inline(stripped)
+
+
 def _render_section_body(lines: list[str]) -> str:
     from html import escape
 
@@ -486,16 +543,23 @@ def _render_section_body(lines: list[str]) -> str:
         step = _STEP_RE.match(stripped)
         if step:
             flush_column()
-            out.append(f"<b>Шаг {step.group(1)}.</b> {escape(step.group(2).strip())}")
+            number = int(step.group(1))
+            if 1 <= number <= len(_KEYCAPS):
+                mark = _KEYCAPS[number - 1]
+            else:
+                mark = f"<b>{number}.</b>"
+            out.append(f"{mark} {_render_line(step.group(2))}")
             continue
         if _looks_like_column(stripped):
             column.append(escape(line))
             continue
         flush_column()
-        if _looks_like_formula(stripped):
+        if _looks_like_formula(stripped) and not _is_label(stripped) and not re.match(
+            r"^[•\-–—*]\s", stripped
+        ):
             out.append(f"<code>{escape(stripped)}</code>")
         else:
-            out.append(escape(line))
+            out.append(_render_line(line))
     flush_column()
 
     body = "\n".join(out)
@@ -535,13 +599,16 @@ def to_telegram_html(text: str, *, code: bool = False) -> str:
             continue
         emoji, title, rest = head
         if rest:
-            body = escape(rest) + (f"\n{body}" if body else "")
+            body = _inline(rest) + (f"\n{body}" if body else "")
         parts.append(f"<b>{emoji} {escape(title)}</b>")
         if not body:
             continue
         if title.lower().rstrip(":") in {"ответ", "answer"}:
             plain = re.sub(r"</?(?:b|code|pre|i|u|s)>", "", body)
-            parts.append(f"<blockquote><b>{plain}</b></blockquote>")
+            if "\n" in body:
+                parts.append(f"<blockquote>{body}</blockquote>")
+            else:
+                parts.append(f"<blockquote><b>{plain}</b></blockquote>")
         elif title.lower() in {"условие", "task", "condition"}:
             parts.append(f"<blockquote>{body}</blockquote>")
         else:
@@ -574,7 +641,9 @@ def to_code_html(text: str) -> str:
             parts.append(to_telegram_html(before))
         block = match.group(2).strip("\n")
         if block:
-            parts.append("<pre>" + escape(block) + "</pre>")
+            language = (match.group(1) or "").strip().lower()
+            attr = f' class="language-{escape(language)}"' if language else ""
+            parts.append(f"<pre><code{attr}>" + escape(block) + "</code></pre>")
         position = match.end()
     tail = text[position:].strip()
     if tail:
