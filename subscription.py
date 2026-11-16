@@ -334,11 +334,7 @@ async def check_subscription(
     from handlers import language_kb, send_welcome
 
     stored = await store.get_lang(user.id)
+    lang = normalize_lang(stored) if stored else normalize_lang(settings.default_lang)
+    await send_welcome(call.message, store, settings, lang, user=user)
     if not stored:
-        await call.message.answer(
-            t(settings.default_lang, "lang.pick"), reply_markup=language_kb()
-        )
-    else:
-        await send_welcome(
-            call.message, store, settings, normalize_lang(stored), user=user
-        )
+        await call.message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))

@@ -96,6 +96,10 @@ class Check(StatesGroup):
     awaiting = State()
 
 
+class Imagine(StatesGroup):
+    awaiting = State()
+
+
 # --------------------------------------------------------------------------- утилиты
 async def is_admin(user_id: int, settings: Settings, store: Store) -> bool:
     return has_admin_access(await resolve_role(user_id, settings, store))
@@ -202,11 +206,17 @@ async def send_model_menu(
 MENU_KEYS = (
     "menu.model",
     "menu.profile",
+    "menu.check",
+    "menu.imagine",
     "menu.buy",
     "menu.support",
+    "menu.tickets",
     "menu.files",
     "menu.lang",
     "menu.help",
+    "menu.reset",
+    "menu.terms",
+    "menu.admin",
 )
 
 
@@ -215,45 +225,92 @@ def menu_label_map() -> dict[str, str]:
     return {t(lang, key): key for lang in LANGS for key in MENU_KEYS}
 
 
-def main_menu_kb(lang: str) -> ReplyKeyboardMarkup:
-    """Постоянная клавиатура: всё меню под рукой, команды помнить не надо."""
+def _button_row(lang: str, *keys: str) -> list[KeyboardButton]:
+    return [KeyboardButton(text=t(lang, key)) for key in keys]
+
+
+def main_menu_kb(
+    lang: str, *, staff: bool = False, payments: bool = True
+) -> ReplyKeyboardMarkup:
+    """Постоянная клавиатура: почти всё меню под рукой, команды помнить не надо."""
     rows = [
-        [
-            KeyboardButton(text=t(lang, "menu.model")),
-            KeyboardButton(text=t(lang, "menu.profile")),
-        ],
-        [
-            KeyboardButton(text=t(lang, "menu.buy")),
-            KeyboardButton(text=t(lang, "menu.support")),
-        ],
-        [
-            KeyboardButton(text=t(lang, "menu.files")),
-            KeyboardButton(text=t(lang, "menu.lang")),
-        ],
-        [KeyboardButton(text=t(lang, "menu.help"))],
+        _button_row(lang, "menu.model", "menu.profile"),
+        _button_row(lang, "menu.check", "menu.imagine"),
     ]
+    if payments:
+        rows.append(_button_row(lang, "menu.buy", "menu.support"))
+    else:
+        rows.append(_button_row(lang, "menu.support"))
+    rows.extend(
+        [
+            _button_row(lang, "menu.tickets", "menu.files"),
+            _button_row(lang, "menu.lang", "menu.help"),
+        ]
+    )
+    if payments:
+        rows.append(_button_row(lang, "menu.reset", "menu.terms"))
+    else:
+        rows.append(_button_row(lang, "menu.reset"))
+    if staff:
+        rows.append(_button_row(lang, "menu.admin"))
     return ReplyKeyboardMarkup(
         keyboard=rows, resize_keyboard=True, is_persistent=True
     )
 
 
-def menu_inline(lang: str) -> InlineKeyboardMarkup:
-    """Короткое меню кнопками — для случаев, когда клавиатура скрыта."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text=t(lang, "menu.model"), callback_data="mdl:menu"),
-                InlineKeyboardButton(text=t(lang, "menu.profile"), callback_data="pf:menu"),
-            ],
+def menu_inline(
+    lang: str, *, staff: bool = False, payments: bool = True
+) -> InlineKeyboardMarkup:
+    """Меню кнопками — компактная копия постоянной клавиатуры."""
+    rows = [
+        [
+            InlineKeyboardButton(text=t(lang, "menu.model"), callback_data="mdl:menu"),
+            InlineKeyboardButton(text=t(lang, "menu.profile"), callback_data="pf:menu"),
+        ],
+        [
+            InlineKeyboardButton(text=t(lang, "menu.check"), callback_data="menu:act:check"),
+            InlineKeyboardButton(text=t(lang, "menu.imagine"), callback_data="menu:act:imagine"),
+        ],
+    ]
+    if payments:
+        rows.append(
             [
                 InlineKeyboardButton(text=t(lang, "menu.buy"), callback_data="pay:menu"),
                 InlineKeyboardButton(text=t(lang, "menu.support"), callback_data="tick:menu"),
+            ]
+        )
+    else:
+        rows.append(
+            [InlineKeyboardButton(text=t(lang, "menu.support"), callback_data="tick:menu")]
+        )
+    rows.extend(
+        [
+            [
+                InlineKeyboardButton(
+                    text=t(lang, "menu.tickets"), callback_data="menu:act:tickets"
+                ),
+                InlineKeyboardButton(text=t(lang, "menu.files"), callback_data="menu:act:files"),
             ],
             [
                 InlineKeyboardButton(text=t(lang, "menu.lang"), callback_data="lang:menu"),
+                InlineKeyboardButton(text=t(lang, "menu.help"), callback_data="menu:act:help"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=t(lang, "menu.reset"), callback_data="menu:act:reset"
+                )
             ],
         ]
     )
+    if payments:
+        rows[-1].append(
+            InlineKeyboardButton(text=t(lang, "menu.terms"), callback_data="menu:act:terms")
+        )
+    if staff:
+        rows.append(
+            [InlineKeyboardButton(text=t(lang, "menu.admin"), callback_data="menu:act:admin")]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def language_kb(current: str | None = None) -> InlineKeyboardMarkup:
@@ -607,6 +664,26 @@ async def cmd_imagine(
     await send_generated(message, images, settings, lang, prompt)
 
 
+@router.message(
+    Imagine.awaiting,
+    F.text,
+    ~F.text.startswith("/"),
+    ~F.text.in_(set(menu_label_map())),
+)
+async def on_imagine_prompt(
+    message: Message,
+    store: Store,
+    settings: Settings,
+    images: ImageClient,
+    state: FSMContext,
+) -> None:
+    """Кнопка «🖌 Картинка»: следующее сообщение — описание картинки."""
+    await state.clear()
+    user = message.from_user
+    lang = await user_lang(store, settings, user.id) if user else settings.default_lang
+    await send_generated(message, images, settings, lang, (message.text or "").strip())
+
+
 @router.message(Command("edit"))
 async def cmd_edit(message: Message, store: Store, settings: Settings) -> None:
     user = message.from_user
@@ -791,7 +868,14 @@ async def send_welcome(
         extra = ""
 
     text = t(lang, "start.body", bot=escape(settings.bot_name)) + limit + extra
-    await message.answer(text, reply_markup=main_menu_kb(lang))
+    await message.answer(
+        text,
+        reply_markup=main_menu_kb(
+            lang,
+            staff=has_admin_access(role),
+            payments=settings.payments_enabled,
+        ),
+    )
 
 
 @router.message(CommandStart())
@@ -813,12 +897,12 @@ async def cmd_start(message: Message, store: Store, settings: Settings) -> None:
         return
 
     stored = await store.get_lang(user.id)
+    lang = normalize_lang(stored) if stored else normalize_lang(settings.default_lang)
+    # Меню показываем сразу, даже если язык ещё не выбран: иначе новый
+    # пользователь видит только выбор языка и не находит кнопки.
+    await send_welcome(message, store, settings, lang)
     if not stored:
-        await message.answer(
-            t(settings.default_lang, "lang.pick"), reply_markup=language_kb()
-        )
-        return
-    await send_welcome(message, store, settings, normalize_lang(stored))
+        await message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))
 
 
 @router.callback_query(F.data.startswith("lg:"))
@@ -967,9 +1051,18 @@ async def help_text(store: Store, settings: Settings, lang: str, user_id: int | 
 async def cmd_help(message: Message, store: Store, settings: Settings) -> None:
     user = message.from_user
     lang = await user_lang(store, settings, user.id) if user else settings.default_lang
+    role = await resolve_role(user.id, settings, store) if user else None
     await message.answer(
         await help_text(store, settings, lang, user.id if user else None),
-        reply_markup=main_menu_kb(lang) if message.chat.type == "private" else None,
+        reply_markup=(
+            main_menu_kb(
+                lang,
+                staff=has_admin_access(role),
+                payments=settings.payments_enabled,
+            )
+            if message.chat.type == "private"
+            else None
+        ),
     )
 
 
@@ -1174,7 +1267,7 @@ async def cmd_cancel(message: Message, store: Store, settings: Settings, state: 
     await message.answer(t(lang, "cancel.done"))
 
 
-@router.message(Check.awaiting)
+@router.message(Check.awaiting, ~F.text.startswith("/"), ~F.text.in_(set(menu_label_map())))
 async def on_check_input(
     message: Message, bot: Bot, store: Store, settings: Settings, ai: AIClient, state: FSMContext
 ) -> None:
@@ -1493,7 +1586,12 @@ async def cb_feedback(
 # --------------------------------------------------------------------------- главное меню
 @router.message(F.text.in_(set(menu_label_map())))
 async def on_menu_button(
-    message: Message, bot: Bot, store: Store, settings: Settings
+    message: Message,
+    bot: Bot,
+    store: Store,
+    settings: Settings,
+    images: ImageClient,
+    state: FSMContext,
 ) -> None:
     """Кнопки постоянной клавиатуры: работают вместо команд."""
     if message.chat.type != "private":
@@ -1506,12 +1604,20 @@ async def on_menu_button(
         return
     await store.ensure_user(user.id, user.username, user.first_name)
     lang = await user_lang(store, settings, user.id)
+    role = await resolve_role(user.id, settings, store)
+    await state.clear()
 
     if action == "menu.model":
         await send_model_menu(message, store, settings, lang, user.id)
     elif action == "menu.profile":
         text, kb = await render_profile(store, user.id, lang)
         await message.answer(text, reply_markup=kb)
+    elif action == "menu.check":
+        await state.set_state(Check.awaiting)
+        await message.answer(t(lang, "check.hint"))
+    elif action == "menu.imagine":
+        await state.set_state(Imagine.awaiting)
+        await message.answer(t(lang, "img.ask_prompt"))
     elif action == "menu.buy":
         if not settings.payments_enabled:
             await message.answer(t(lang, "pay.disabled"))
@@ -1525,6 +1631,16 @@ async def on_menu_button(
 
         text, kb = await support_menu(store, user.id)
         await message.answer(text, reply_markup=kb)
+    elif action == "menu.tickets":
+        from tickets import render_my_tickets, render_ticket_list
+
+        if is_staff(role):
+            text, kb = await render_ticket_list(
+                store, 0, admin=has_admin_access(role)
+            )
+        else:
+            text, kb = await render_my_tickets(store, user.id)
+        await message.answer(text, reply_markup=kb)
     elif action == "menu.files":
         await message.answer(
             t(
@@ -1536,10 +1652,30 @@ async def on_menu_button(
         )
     elif action == "menu.lang":
         await message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))
+    elif action == "menu.reset":
+        await store.reset(user.id)
+        await message.answer(t(lang, "reset.done"))
+    elif action == "menu.terms":
+        from payments import render_terms
+
+        runtime = await load_runtime(store, settings)
+        await message.answer(render_terms(settings, runtime))
+    elif action == "menu.admin":
+        if not has_admin_access(role):
+            await message.answer(t(lang, "err.admin_only"))
+            return
+        from admin import render_main
+
+        text, kb = await render_main(store, settings, role)
+        await message.answer(text, reply_markup=kb)
     else:
         await message.answer(
             await help_text(store, settings, lang, user.id),
-            reply_markup=main_menu_kb(lang),
+            reply_markup=main_menu_kb(
+                lang,
+                staff=has_admin_access(role),
+                payments=settings.payments_enabled,
+            ),
         )
 
 
@@ -1548,14 +1684,86 @@ async def cb_menu_home(call: CallbackQuery, store: Store, settings: Settings) ->
     if call.from_user is None:
         return
     lang = await user_lang(store, settings, call.from_user.id)
+    role = await resolve_role(call.from_user.id, settings, store)
     if call.message is not None:
         try:
             await call.message.answer(
                 t(lang, "menu.title"),
-                reply_markup=menu_inline(lang),
+                reply_markup=menu_inline(
+                    lang,
+                    staff=has_admin_access(role),
+                    payments=settings.payments_enabled,
+                ),
             )
         except TelegramAPIError:
             pass
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("menu:act:"))
+async def cb_menu_action(
+    call: CallbackQuery,
+    store: Store,
+    settings: Settings,
+    images: ImageClient,
+    state: FSMContext,
+) -> None:
+    """Кнопки inline-меню: те же действия, что и на постоянной клавиатуре."""
+    user = call.from_user
+    if user is None or call.data is None or call.message is None:
+        return
+    action = call.data.rsplit(":", 1)[-1]
+    lang = await user_lang(store, settings, user.id)
+    role = await resolve_role(user.id, settings, store)
+
+    if action == "check":
+        await state.set_state(Check.awaiting)
+        await call.message.answer(t(lang, "check.hint"))
+    elif action == "imagine":
+        await state.set_state(Imagine.awaiting)
+        await call.message.answer(t(lang, "img.ask_prompt"))
+    elif action == "tickets":
+        from tickets import render_my_tickets, render_ticket_list
+
+        if is_staff(role):
+            text, kb = await render_ticket_list(store, 0, admin=has_admin_access(role))
+        else:
+            text, kb = await render_my_tickets(store, user.id)
+        await call.message.answer(text, reply_markup=kb)
+    elif action == "files":
+        await call.message.answer(
+            t(
+                lang,
+                "file.help",
+                mb=settings.file_max_mb,
+                pages=settings.file_max_pdf_pages,
+            )
+        )
+    elif action == "help":
+        await call.message.answer(
+            await help_text(store, settings, lang, user.id),
+            reply_markup=main_menu_kb(
+                lang,
+                staff=has_admin_access(role),
+                payments=settings.payments_enabled,
+            ),
+        )
+    elif action == "reset":
+        await store.reset(user.id)
+        await call.message.answer(t(lang, "reset.done"))
+    elif action == "terms":
+        from payments import render_terms
+
+        runtime = await load_runtime(store, settings)
+        await call.message.answer(render_terms(settings, runtime))
+    elif action == "admin":
+        if not has_admin_access(role):
+            await call.answer(t(lang, "err.admin_only"), show_alert=True)
+            return
+        from admin import render_main
+
+        text, kb = await render_main(store, settings, role)
+        await call.message.answer(text, reply_markup=kb)
     await call.answer()
 
 
