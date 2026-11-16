@@ -1681,13 +1681,8 @@ async def handle_document(
         if task and files.wants_document_output(task)
         else None
     )
-    # «оформи в PDF» — это конвертация, а не правка исходного txt.
-    editing = (
-        bool(task)
-        and files.edit_instruction(task)
-        and (requested is None or requested == source_fmt)
-    )
-    fmt = source_fmt if editing else requested
+    editing = bool(task) and files.edit_instruction(task)
+    fmt = requested or (source_fmt if editing else None)
     if fmt:
         if fmt == "xlsx":
             task += (
@@ -1723,7 +1718,7 @@ async def handle_document(
     if answer and fmt:
         out_name = (
             files.edited_filename(name, fmt)
-            if editing and fmt == source_fmt
+            if editing
             else files.suggest_filename(instruction or name, fmt)
         )
         await send_file(message, answer, fmt, lang, name=out_name)
