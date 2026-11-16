@@ -62,7 +62,10 @@ def normalize_channel(raw: str | None) -> str:
         return ""
     if value.lstrip("-").isdigit():
         return value
-    return "@" + value.lstrip("@")
+    value = value.lstrip("@").strip()
+    if not value:
+        return ""
+    return "@" + value
 
 
 def normalize_channel_url(raw: str | None, channel: str) -> str:

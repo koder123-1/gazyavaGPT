@@ -102,10 +102,11 @@ def is_supported(filename: str | None, mime: str | None) -> bool:
 
 def sanitize_name(name: str, ext: str) -> str:
     base = _BAD_NAME_RE.sub("_", (name or "").strip()).strip(" ._")
+    if ext and base.lower().endswith(ext.lower()):
+        stem = base[: -len(ext)].strip(" ._")[:60] or "gazyavaGPT"
+        return stem + ext
     base = base[:60] or "gazyavaGPT"
-    if not base.lower().endswith(ext):
-        base += ext
-    return base
+    return base + ext
 
 
 # --------------------------------------------------------------------------- чтение
