@@ -1183,10 +1183,10 @@ TR: dict[str, dict[str, str]] = {
         "en": "The file is larger than {mb} MB. Send a document up to {mb} MB or split it.",
     },
     "file.unsupported": {
-        "ru": "Не умею читать формат {ext}. Поддерживаю: TXT, MD, CSV, JSON, DOCX, PDF, XLSX.",
-        "uk": "Не вмію читати формат {ext}. Підтримую: TXT, MD, CSV, JSON, DOCX, PDF, XLSX.",
-        "be": "Не ўмею чытаць фармат {ext}. Падтрымліваю: TXT, MD, CSV, JSON, DOCX, PDF, XLSX.",
-        "en": "I can't read the {ext} format. Supported: TXT, MD, CSV, JSON, DOCX, PDF, XLSX.",
+        "ru": "Не умею читать или редактировать формат {ext}, но верну оригинал без изменений. Для обработки поддерживаю: TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX.",
+        "uk": "Не вмію читати або редагувати формат {ext}, але поверну оригінал без змін. Для обробки підтримую: TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX.",
+        "be": "Не ўмею чытаць або рэдагаваць фармат {ext}, але вярну арыгінал без змен. Для апрацоўкі падтрымліваю: TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX.",
+        "en": "I can't read or edit {ext}, but I'll send the original back unchanged. For processing I support: TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX.",
     },
     "file.empty": {
         "ru": "В файле нет текста: он пустой или повреждён.",
@@ -1260,6 +1260,54 @@ TR: dict[str, dict[str, str]] = {
         "be": "Не змог сабраць {fmt}. Вось адказ тэкстам.",
         "en": "I couldn't build the {fmt}. Here is the answer as text.",
     },
+    "file.echoed": {
+        "ru": "📎 Вернул файл без изменений: {name}",
+        "uk": "📎 Повернув файл без змін: {name}",
+        "be": "📎 Вярнуў файл без змен: {name}",
+        "en": "📎 Sent the file back unchanged: {name}",
+    },
+    "file.send_too_big": {
+        "ru": (
+            "Файл больше 50 МБ — Telegram не даст боту его отправить. "
+            "Сожми файл, разбей на части или загрузи в облако и пришли ссылку."
+        ),
+        "uk": (
+            "Файл більший за 50 МБ — Telegram не дасть боту його надіслати. "
+            "Стисни файл, розбий на частини або завантаж у хмару й надішли посилання."
+        ),
+        "be": (
+            "Файл большы за 50 МБ — Telegram не дасць боту яго даслаць. "
+            "Сцісні файл, падзялі на часткі або загрузі ў воблака і дашлі спасылку."
+        ),
+        "en": (
+            "The file is over 50 MB — Telegram won't let the bot send it. "
+            "Compress it, split it, or upload it to cloud storage and send a link."
+        ),
+    },
+    "pin.done": {
+        "ru": "📌 Закрепил сообщение.",
+        "uk": "📌 Закріпив повідомлення.",
+        "be": "📌 Замацаваў паведамленне.",
+        "en": "📌 Message pinned.",
+    },
+    "pin.unpinned": {
+        "ru": "📌 Открепил сообщение.",
+        "uk": "📌 Відкріпив повідомлення.",
+        "be": "📌 Адмацаваў паведамленне.",
+        "en": "📌 Message unpinned.",
+    },
+    "pin.need_reply": {
+        "ru": "Ответь командой /pin на сообщение, которое нужно закрепить.",
+        "uk": "Дай відповідь командою /pin на повідомлення, яке треба закріпити.",
+        "be": "Адпавядай камандай /pin на паведамленне, якое трэба замацаваць.",
+        "en": "Reply with /pin to the message you want to pin.",
+    },
+    "pin.failed": {
+        "ru": "Не смог изменить закреп: проверь право «Закреплять сообщения» у бота.",
+        "uk": "Не зміг змінити закріп: перевір право «Закріплювати повідомлення» в бота.",
+        "be": "Не змог змяніць замацаванне: правер права «Замацоўваць паведамленні» ў бота.",
+        "en": "Couldn't change the pinned message: check the bot's “Pin messages” right.",
+    },
     "file.help": {
         "ru": (
             "📎 <b>Файлы</b>\n\n"
@@ -1270,8 +1318,11 @@ TR: dict[str, dict[str, str]] = {
             "• «переведи на английский и пришли DOCX»\n\n"
             "Можно ответить на готовый ответ «пришли в PDF» — пришлю его файлом.\n"
             "А можно попросить файл с нуля: «сделай PDF с планом урока», «создай .py файл с ботом».\n\n"
-            "<b>Читаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (до {mb} МБ, PDF до {pages} страниц).\n"
-            "<b>Создаю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
+            "Отправь любой файл без подписи — верну его обратно без изменений.\n"
+            "Ответь на файл «исправь ошибки» — верну исправленный файл в том же формате.\n\n"
+            "<b>Читаю и правлю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX (до {mb} МБ, PDF до {pages} страниц).\n"
+            "<b>Создаю:</b> TXT, DOCX, PDF, CSV, XLSX, PPTX, PY, HTML, CSS, JS.\n\n"
+            "Telegram отдаёт боту файлы до 20 МБ и принимает до 50 МБ — большие файлы сожми или разбей.\n"
             "Скан без текстового слоя не читается — пришли фото страницы."
         ),
         "uk": (
@@ -1281,10 +1332,12 @@ TR: dict[str, dict[str, str]] = {
             "• «виправ помилки»\n"
             "• «розв'яжи завдання й оформи в PDF»\n"
             "• «переклади англійською й надішли DOCX»\n\n"
-            "Можна відповісти на готову відповідь «надішли в PDF» — надішлю її файлом.\n"
-            "А можна попросити файл з нуля: «зроби PDF із планом уроку», «створи .py файл із ботом».\n\n"
-            "<b>Читаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (до {mb} МБ, PDF до {pages} сторінок).\n"
-            "<b>Створюю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
+            "Надішли будь-який файл без підпису — поверну його без змін.\n"
+            "Дай відповідь на файл «виправ помилки» — поверну виправлений файл у тому самому форматі.\n\n"
+            "Надішли будь-який файл без підпису — поверну його без змін.\n"
+            "Дай відповідь на файл «виправ помилки» — поверну виправлений файл у тому самому форматі.\n\n"
+            "<b>Читаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX (до {mb} МБ, PDF до {pages} сторінок).\n"
+            "<b>Створюю:</b> TXT, DOCX, PDF, CSV, XLSX, PPTX, PY, HTML, CSS, JS.\n\n"
             "Скан без текстового шару не читається — надішли фото сторінки."
         ),
         "be": (
@@ -1294,10 +1347,12 @@ TR: dict[str, dict[str, str]] = {
             "• «выпраў памылкі»\n"
             "• «развяжы заданні і аформі ў PDF»\n"
             "• «перакладзі на англійскую і дашлі DOCX»\n\n"
-            "Можна адказаць на гатовы адказ «дашлі ў PDF» — дашлю яго файлам.\n"
-            "А можна папрасіць файл з нуля: «зрабі PDF з планам урока», «ствары .py файл з ботам».\n\n"
-            "<b>Чытаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (да {mb} МБ, PDF да {pages} старонак).\n"
-            "<b>Ствараю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
+            "Дашлі любы файл без подпісу — вярну яго без змен.\n"
+            "Адказь на файл «выпраў памылкі» — вярну выпраўлены файл у тым жа фармаце.\n\n"
+            "Дашлі любы файл без подпісу — вярну яго без змен.\n"
+            "Адказь на файл «выпраў памылкі» — вярну выпраўлены файл у тым жа фармаце.\n\n"
+            "<b>Чытаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX (да {mb} МБ, PDF да {pages} старонак).\n"
+            "<b>Ствараю:</b> TXT, DOCX, PDF, CSV, XLSX, PPTX, PY, HTML, CSS, JS.\n\n"
             "Скан без тэкставага слоя не чытаецца — дашлі фота старонкі."
         ),
         "en": (
@@ -1309,8 +1364,10 @@ TR: dict[str, dict[str, str]] = {
             "• \"translate to English and send a DOCX\"\n\n"
             "You can also reply to a finished answer with \"send it as PDF\" — I'll attach it as a file.\n"
             "Or ask for a file from scratch: \"make a PDF with a lesson plan\", \"create a .py file with a bot\".\n\n"
-            "<b>I read:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (up to {mb} MB, PDF up to {pages} pages).\n"
-            "<b>I create:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
+            "Send any file with no caption — I'll send it back unchanged.\n"
+            "Reply to a file with \"fix the mistakes\" — I'll send the fixed file in the same format.\n\n"
+            "<b>I read:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX (up to {mb} MB, PDF up to {pages} pages).\n"
+            "<b>I create:</b> TXT, DOCX, PDF, CSV, XLSX, PPTX, PY, HTML, CSS, JS.\n\n"
             "Scans without a text layer can't be read — send a photo of the page."
         ),
     },

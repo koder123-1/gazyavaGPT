@@ -17,10 +17,10 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Any
 
-from aiogram import BaseMiddleware, Bot, F, Router
+from aiogram import BaseMiddleware, Bot, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
-from aiogram.types import ChatMemberAdministrator, Message, TelegramObject, User
+from aiogram.types import ChatMemberAdministrator, Message, TelegramObject
 
 from config import Settings
 from i18n import detect_lang, normalize_lang, t
@@ -628,6 +628,57 @@ async def cmd_del(message: Message, bot: Bot, settings: Settings, store: Store) 
     await _moderate(
         message, bot, settings, store, right="can_delete_messages", action="del"
     )
+
+
+@router.message(Command("pin"))
+async def cmd_pin(message: Message, bot: Bot, settings: Settings, store: Store) -> None:
+    """Закрепляет сообщение, на которое ответили командой /pin."""
+    lang = _lang(settings, message)
+    if message.chat.type != "private":
+        if not await has_group_access(message, bot, settings, store):
+            await message.reply(t(lang, "group.only_admins"))
+            return
+        if not await _require_rights(message, bot, lang, "can_pin_messages"):
+            return
+    target = message.reply_to_message
+    if target is None:
+        await message.reply(t(lang, "pin.need_reply"))
+        return
+    silent = "тихо" in (message.text or "").lower() or "silent" in (message.text or "").lower()
+    try:
+        await bot.pin_chat_message(
+            chat_id=message.chat.id,
+            message_id=target.message_id,
+            disable_notification=silent,
+        )
+        await message.reply(t(lang, "pin.done"))
+    except TelegramAPIError as exc:
+        log.warning("Не удалось закрепить сообщение: %s", exc)
+        await message.reply(t(lang, "pin.failed"))
+
+
+@router.message(Command("unpin"))
+async def cmd_unpin(message: Message, bot: Bot, settings: Settings, store: Store) -> None:
+    """Открепляет сообщение из реплая или последнее закреплённое."""
+    lang = _lang(settings, message)
+    if message.chat.type != "private":
+        if not await has_group_access(message, bot, settings, store):
+            await message.reply(t(lang, "group.only_admins"))
+            return
+        if not await _require_rights(message, bot, lang, "can_pin_messages"):
+            return
+    target = message.reply_to_message
+    try:
+        if target is not None:
+            await bot.unpin_chat_message(
+                chat_id=message.chat.id, message_id=target.message_id
+            )
+        else:
+            await bot.unpin_chat_message(chat_id=message.chat.id)
+        await message.reply(t(lang, "pin.unpinned"))
+    except TelegramAPIError as exc:
+        log.warning("Не удалось открепить сообщение: %s", exc)
+        await message.reply(t(lang, "pin.failed"))
 
 
 @router.message(Command("purge"))

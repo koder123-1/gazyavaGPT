@@ -22,12 +22,16 @@ READ_EXTS = frozenset(
         ".py", ".js", ".ts", ".html", ".htm", ".xml", ".yaml", ".yml",
         ".ini", ".cfg", ".toml", ".sql",
     }
-) | {".docx", ".pdf", ".xlsx"}
+) | {".docx", ".pdf", ".xlsx", ".pptx"}
 
-TEXT_EXTS = READ_EXTS - {".docx", ".pdf", ".xlsx"}
+TEXT_EXTS = READ_EXTS - {".docx", ".pdf", ".xlsx", ".pptx"}
 IMAGE_EXTS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff"})
 
-READ_HINT = "TXT, MD, CSV, JSON, DOCX, PDF, XLSX"
+READ_HINT = "TXT, MD, CSV, JSON, DOCX, PDF, XLSX, PPTX"
+
+# Telegram Bot API: getFile отдаёт боту не больше 20 МБ, отправка — до 50 МБ.
+TELEGRAM_DOWNLOAD_LIMIT = 20 * 1024 * 1024
+TELEGRAM_SEND_LIMIT = 50 * 1024 * 1024
 
 OUTPUT_EXTS = {
     "txt": ".txt",
@@ -35,11 +39,16 @@ OUTPUT_EXTS = {
     "pdf": ".pdf",
     "csv": ".csv",
     "xlsx": ".xlsx",
+    "pptx": ".pptx",
     "py": ".py",
     "html": ".html",
     "css": ".css",
     "js": ".js",
 }
+
+# Обратное соответствие: по расширению присланного файла понять формат ответа.
+FORMAT_BY_EXT = {ext: fmt for fmt, ext in OUTPUT_EXTS.items()}
+FORMAT_BY_EXT.update({".md": "txt", ".markdown": "txt", ".tsv": "csv"})
 
 # Расширения по MIME: Telegram не всегда присылает file_name.
 _EXT_BY_MIME = {
@@ -122,6 +131,8 @@ def extract_text(
         return _read_docx(data)
     if ext == ".xlsx":
         return _read_xlsx(data)
+    if ext == ".pptx":
+        return _read_pptx(data)
     if ext in TEXT_EXTS:
         return _decode(data)
     raise FileError("file.unsupported", ext=ext or "?")
@@ -216,6 +227,40 @@ def _read_xlsx(data: bytes) -> str:
     return result
 
 
+def _read_pptx(data: bytes) -> str:
+    try:
+        from pptx import Presentation
+    except ImportError as exc:  # pragma: no cover
+        raise FileError("file.unsupported", ext=".pptx") from exc
+
+    try:
+        deck = Presentation(io.BytesIO(data))
+    except Exception:  # noqa: BLE001
+        raise FileError("file.empty") from None
+
+    chunks: list[str] = []
+    for number, slide in enumerate(deck.slides, start=1):
+        lines: list[str] = []
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False) and shape.text_frame is not None:
+                for paragraph in shape.text_frame.paragraphs:
+                    line = "".join(run.text for run in paragraph.runs).strip()
+                    if line:
+                        lines.append(line)
+            if getattr(shape, "has_table", False):
+                for row in shape.table.rows:
+                    cells = [cell.text.strip() for cell in row.cells]
+                    if any(cells):
+                        lines.append(" | ".join(cells))
+        if lines:
+            chunks.append(f"[слайд {number}]\n" + "\n".join(lines))
+
+    result = "\n\n".join(chunks).strip()
+    if not result:
+        raise FileError("file.empty")
+    return result
+
+
 def clip_text(text: str, limit: int) -> str:
     """Обрезает длинный текст и оставляет пометку."""
     text = (text or "").strip()
@@ -250,18 +295,22 @@ def _table_rows(text: str) -> list[list[str]]:
     rows: list[list[str]] = []
     for raw in (text or "").splitlines():
         line = raw.strip()
-        if not line:
+        if not line or line.startswith("```"):
             continue
         if line.startswith("|") and line.endswith("|"):
             line = line.strip("|").strip()
         if "|" in line:
-            rows.append([cell.strip() for cell in line.split("|")])
+            cells = [cell.strip() for cell in line.split("|")]
         elif "\t" in line:
-            rows.append([cell.strip() for cell in line.split("\t")])
+            cells = [cell.strip() for cell in line.split("\t")]
         elif ";" in line:
-            rows.append([cell.strip() for cell in line.split(";")])
+            cells = [cell.strip() for cell in line.split(";")]
         else:
-            rows.append([line])
+            cells = [line]
+        # Markdown-разделитель |---|---| — это оформление, а не данные.
+        if cells and all(re.fullmatch(r":?-{2,}:?", cell) for cell in cells):
+            continue
+        rows.append(cells)
     return rows
 
 
@@ -297,6 +346,76 @@ def build_xlsx(text: str) -> bytes:
             sheet.column_dimensions[column[0].column_letter].width = min(max(10, width + 2), 40)
     buffer = io.BytesIO()
     workbook.save(buffer)
+    return buffer.getvalue()
+
+
+_PPT_SEPARATOR = re.compile(r"^\s*(?:-{3,}|={3,})\s*$")
+_PPT_TITLE = re.compile(
+    r"^\s*(?:#{1,6}\s+|\[?слайд\s*\d+\]?\s*[.:—-]?\s*)(.+)$", re.IGNORECASE
+)
+
+
+def _pptx_sections(text: str) -> list[tuple[str, list[str]]]:
+    """Делит ответ ИИ на слайды: «# Заголовок», «Слайд 2», «---»."""
+    sections: list[tuple[str, list[str]]] = []
+    title = ""
+    body: list[str] = []
+
+    def flush() -> None:
+        nonlocal title, body
+        if title or body:
+            sections.append((title, body))
+        title, body = "", []
+
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if _PPT_SEPARATOR.match(line):
+            flush()
+            continue
+        heading = _PPT_TITLE.match(line)
+        if heading and len(line) < 120:
+            flush()
+            title = heading.group(1).strip()
+            continue
+        body.append(re.sub(r"^[-•*]\s+", "", line))
+
+    flush()
+    if not sections:
+        return [("Презентация", [])]
+
+    # Разметки не было: режем текст на слайды по 10 строк.
+    if len(sections) == 1 and len(sections[0][1]) > 12:
+        lines = sections[0][1]
+        chunks = [lines[index : index + 10] for index in range(0, len(lines), 10)]
+        return [(chunks[0][0], chunks[0][1:])] + [("", chunk) for chunk in chunks[1:]]
+    return sections
+
+
+def build_pptx(text: str) -> bytes:
+    try:
+        from pptx import Presentation
+        from pptx.util import Pt
+    except ImportError as exc:  # pragma: no cover
+        raise FileError("file.unsupported", ext=".pptx") from exc
+
+    deck = Presentation()
+    for title, body in _pptx_sections(text):
+        slide = deck.slides.add_slide(deck.slide_layouts[1])
+        if slide.shapes.title is not None:
+            slide.shapes.title.text = (title or "Слайд")[:120]
+        frame = slide.placeholders[1].text_frame
+        frame.clear()
+        if not body:
+            frame.text = ""
+        for index, item in enumerate(body):
+            paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
+            paragraph.text = item[:300]
+            paragraph.font.size = Pt(18)
+
+    buffer = io.BytesIO()
+    deck.save(buffer)
     return buffer.getvalue()
 
 
@@ -407,6 +526,7 @@ def build_output(text: str, fmt: str, name: str | None = None) -> tuple[bytes, s
         "pdf": build_pdf,
         "csv": build_csv,
         "xlsx": build_xlsx,
+        "pptx": build_pptx,
         "py": build_code,
         "html": build_code,
         "css": build_code,
@@ -419,6 +539,36 @@ def build_output(text: str, fmt: str, name: str | None = None) -> tuple[bytes, s
     base = name or ("gazyavaGPT-код" if fmt in {"py", "html", "css", "js"} else "gazyavaGPT-решение")
     filename = sanitize_name(base, ext)
     return builder(text), filename
+
+
+def edited_filename(filename: str | None, fmt: str) -> str:
+    """Build a safe edited filename while preserving the source basename."""
+    original = Path(filename or "document").name
+    stem = Path(original).stem or "document"
+    ext = OUTPUT_EXTS.get(fmt, Path(original).suffix or ".txt")
+    return sanitize_name(f"{stem}-исправлено", ext)
+
+
+def edit_instruction(text: str | None) -> bool:
+    """True when the user asks to make changes, not just summarize the file."""
+    return bool(re.search(
+        r"\b(?:отредактир\w*|редактир\w*|исправ\w*|перепиш\w*|передел\w*|"
+        r"измени\w*|измен\w*|улучш\w*|почини\w*|правь|поправ\w*|оформ\w*|"
+        r"сократ\w*|добав\w*|дополн\w*|удал\w*|убер\w*|замен\w*|встав\w*|"
+        r"correct\w*|edit\w*|fix\w*|rewrite\w*|improve\w*|translate\w*|update\w*)\b",
+        text or "",
+        flags=re.IGNORECASE,
+    ))
+
+
+def wants_echo(text: str | None) -> bool:
+    """Explicitly asks to return/copy the original file without editing it."""
+    return bool(re.search(
+        r"\b(?:верни|вернуть|отправь|отправить|пришли|прислать|скин\w*|скопируй|копию|"
+        r"return|send\s+back|resend)\b.*\b(?:файл|документ|file|document)\b",
+        text or "",
+        flags=re.IGNORECASE,
+    ))
 
 
 def build_empty(fmt: str, name: str | None = None) -> tuple[bytes, str]:
@@ -442,6 +592,7 @@ _NAME_NOISE = re.compile(
     r"перевед\w*|конверт\w*|пожалуйста|плиз|я|мне|нужен|нужно|надо|хочу|дай\w*|"
     r"файл\w*|документ\w*|вложени\w*|"
     r"pdf|docx?|word|ворд|докс|xlsx|excel|эксель|csv|txt|текстов\w*|"
+    r"pptx?|powerpoint|презентаци\w*|слайд\w*|"
     r"py|python|html|хтмл\w*|css|цсс\w*|js|javascript|джс|жаваскрипт\w*|"
     r"а|и|в|во|на|с|со|по|для|от|до|из|к|о|об|это|этот|эту|этого)\b"
 )
@@ -503,6 +654,9 @@ _FORMAT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("pdf", re.compile(r"\bpdf\b|пдф|пэдэф|пдэф", re.IGNORECASE)),
     ("docx", re.compile(r"\bdocx?\b|\bword\b|ворд|докс", re.IGNORECASE)),
     ("xlsx", re.compile(r"\bxlsx\b|\bexcel\b|эксель|ексель", re.IGNORECASE)),
+    ("pptx", re.compile(
+        r"\bpptx?\b|\bpowerpoint\b|\bпрезентаци\w*|\bслайд\w*", re.IGNORECASE
+    )),
     ("csv", re.compile(r"\bcsv\b|\bцсв\b", re.IGNORECASE)),
     ("txt", re.compile(r"\btxt\b|\bтхт\b|текстов\w*\s+файл", re.IGNORECASE)),
 )
@@ -515,6 +669,7 @@ _FORMAT_WORDS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("html", re.compile(r"\bhtml?\b|\bхтмл\w*", re.IGNORECASE)),
     ("css", re.compile(r"\bcss\b|\bцсс\w*", re.IGNORECASE)),
     ("js", re.compile(r"\b(?:js|javascript|джс|жаваскрипт\w*)\b", re.IGNORECASE)),
+    ("pptx", re.compile(r"\b(?:презентаци\w*|слайд\w*|powerpoint)\b", re.IGNORECASE)),
 )
 _ASK_ABOUT = re.compile(
     r"(?i)\b(?:что такое|как работает|как сделать|почему|зачем|объясни|расскажи|подскажи)\b"
@@ -572,6 +727,7 @@ _FILE_NOISE = re.compile(
     r"отправ\w*|скин\w*|выгруз\w*|экспорт\w*|собер\w*|подготов\w*|перевед\w*|"
     r"конверт\w*|дай\w*|файл\w*|документ\w*|вложени\w*|"
     r"pdf|docx?|word|ворд|докс|xlsx|excel|эксель|csv|цсв|txt|тхт|текстов\w*|"
+    r"pptx?|powerpoint|презентаци\w*|слайд\w*|"
     r"py|python|html|хтмл\w*|css|цсс\w*|js|javascript|джс|жаваскрипт\w*)\b"
 )
 

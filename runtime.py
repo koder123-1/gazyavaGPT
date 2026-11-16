@@ -66,12 +66,14 @@ async def load_runtime(store: Store, settings: Settings) -> Runtime:
         ),
         required_channel=(
             overrides.get("required_channel")
-            if "required_channel" in overrides
+            if overrides.get("required_channel") is not None
             else settings.required_channel
-        ).strip(),
+        )
+        or "",
         required_channel_url=(
             overrides.get("required_channel_url")
-            if "required_channel_url" in overrides
+            if overrides.get("required_channel_url") is not None
             else settings.required_channel_url
-        ).strip(),
+        )
+        or "",
     )

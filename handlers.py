@@ -27,6 +27,7 @@ from aiogram.types import (
     KeyboardButton,
     Message,
     ReplyKeyboardMarkup,
+    User,
 )
 
 import files
@@ -1559,6 +1560,31 @@ async def deliver_answer(
         await send_answer(message, text, code=code)
 
 
+async def echo_document(
+    message: Message,
+    doc,
+    name: str,
+    lang: str,
+) -> None:
+    """Отправляет присланный файл обратно — по file_id, без скачивания.
+
+    Так работают файлы любого формата: бот не тратит трафик и место, а
+    Telegram сам отдаёт файл из своего хранилища. Файл >50 МБ бот отправить
+    не может — просим сжать, разбить или прислать ссылку.
+    """
+    size = int(getattr(doc, "file_size", 0) or 0)
+    if size > files.TELEGRAM_SEND_LIMIT:
+        await message.reply(t(lang, "file.send_too_big"))
+        return
+    try:
+        await message.answer_document(
+            doc.file_id, caption=t(lang, "file.echoed", name=name)
+        )
+    except TelegramAPIError:
+        log.exception("Не удалось вернуть файл %s", name)
+        await message.reply(t(lang, "file.download_failed"))
+
+
 async def handle_document(
     message: Message,
     *,
@@ -1583,22 +1609,55 @@ async def handle_document(
     if doc is None:
         return
 
-    name = doc.file_name or "file"
+    name = files.sanitize_name(doc.file_name or "file", "")
     ext = files.extension(name, doc.mime_type)
-    if not files.is_supported(name, doc.mime_type):
-        await message.reply(t(lang, "file.unsupported", ext=ext or "?"))
+    task = (instruction or "").strip()
+    supported = files.is_supported(name, doc.mime_type)
+
+    if not supported:
+        if not files.is_image_document(name, doc.mime_type):
+            await message.reply(t(lang, "file.unsupported", ext=ext or "?"))
+        # Неподдерживаемый формат всё равно принимаем и возвращаем владельцу.
+        await echo_document(message, doc, name, lang)
         return
 
-    limit = settings.file_max_mb * 1024 * 1024
-    if (doc.file_size or 0) > limit:
-        await message.reply(t(lang, "file.too_big", mb=settings.file_max_mb))
+    # Любой файл без задания возвращаем обратно — без скачивания, по file_id.
+    if not task or files.wants_echo(task):
+        await echo_document(message, doc, name, lang)
+        return
+
+    download_limit = min(
+        settings.file_max_mb * 1024 * 1024, files.TELEGRAM_DOWNLOAD_LIMIT
+    )
+    if (doc.file_size or 0) > download_limit:
+        await message.reply(
+            t(lang, "file.too_big", mb=download_limit // (1024 * 1024))
+        )
         return
 
     status = await message.reply(t(lang, "file.reading"))
     try:
+        # Bot API: first obtain file_path, then download bytes into memory.
+        remote = await bot.get_file(doc.file_id)
         buffer = io.BytesIO()
-        await bot.download(doc, destination=buffer)
+        if getattr(remote, "file_path", None):
+            await bot.download_file(remote.file_path, destination=buffer)
+        else:
+            # Compatibility with Bot mocks/custom sessions; regular Bot API
+            # returns file_path and always takes the explicit get_file path above.
+            await bot.download(doc, destination=buffer)
         data = buffer.getvalue()
+        if len(data) > files.TELEGRAM_DOWNLOAD_LIMIT:
+            await message.reply(t(lang, "file.too_big", mb=20))
+            return
+    except TelegramAPIError:
+        await message.reply(t(lang, "file.download_failed"))
+        return
+    finally:
+        with contextlib.suppress(Exception):
+            await status.delete()
+
+    try:
         text = await asyncio.to_thread(
             files.extract_text,
             data,
@@ -1606,15 +1665,9 @@ async def handle_document(
             doc.mime_type,
             settings.file_max_pdf_pages,
         )
-    except TelegramAPIError:
-        await message.reply(t(lang, "file.download_failed"))
-        return
     except files.FileError as exc:
         await message.reply(t(lang, exc.key, **exc.kwargs))
         return
-    finally:
-        with contextlib.suppress(Exception):
-            await status.delete()
 
     text = files.clip_text(text, settings.file_max_chars)
     if not text.strip():
@@ -1622,16 +1675,35 @@ async def handle_document(
         return
 
     task = (instruction or "").strip()
-    fmt = (
+    source_fmt = files.FORMAT_BY_EXT.get(ext)
+    requested = (
         files.detect_output_format(task)
-        if files.wants_document_output(task)
+        if task and files.wants_document_output(task)
         else None
     )
+    # «оформи в PDF» — это конвертация, а не правка исходного txt.
+    editing = (
+        bool(task)
+        and files.edit_instruction(task)
+        and (requested is None or requested == source_fmt)
+    )
+    fmt = source_fmt if editing else requested
+    if fmt:
+        if fmt == "xlsx":
+            task += (
+                "\nВерни ТОЛЬКО содержимое таблицы: одна строка на строку Excel, "
+                "столбцы разделяй символом |. Не добавляй Markdown-таблицу, "
+                "пояснения или кодовый блок."
+            )
+        elif fmt == "pptx":
+            task += (
+                "\nВерни результат как текст слайдов: каждый слайд начинай "
+                "с '# Заголовок', пункты — отдельными строками."
+            )
+        else:
+            task += "\nВерни только содержимое файла, без пояснений."
     if not task:
         task = t(lang, "file.default_task")
-    elif fmt and files.is_pure_file_request(task):
-        # «PDF», «пришли в DOCX» — просят переоформить, а не пересказать.
-        task = t(lang, "file.convert_task")
 
     wrapper = f"{task}\n\nСодержимое файла «{name}»:\n---\n{text}\n---"
     answer = await answer_with_ai(
@@ -1649,13 +1721,12 @@ async def handle_document(
     )
 
     if answer and fmt:
-        await send_file(
-            message,
-            answer,
-            fmt,
-            lang,
-            name=files.suggest_filename(instruction or name, fmt),
+        out_name = (
+            files.edited_filename(name, fmt)
+            if editing and fmt == source_fmt
+            else files.suggest_filename(instruction or name, fmt)
         )
+        await send_file(message, answer, fmt, lang, name=out_name)
 
 
 # --------------------------------------------------------------------------- картинки (фото)
@@ -1674,6 +1745,18 @@ async def on_image(
 
     user = message.from_user
     lang = await user_lang(store, settings, user.id) if user else settings.default_lang
+
+    # A file without a caption should be sent back unchanged, including images.
+    if message.document is not None and not caption.strip():
+        await handle_document(
+            message,
+            bot=bot,
+            store=store,
+            settings=settings,
+            ai=ai,
+            instruction="",
+        )
+        return
 
     if message.document is not None and not files.is_image_document(
         message.document.file_name, message.document.mime_type
@@ -2018,7 +2101,7 @@ async def cb_feedback(
     if not answer:
         await call.message.answer(t(lang, "err.retry"))
         return
-    new_id = await store.add_exchange_record(owner, exchange["question"], answer, action)
+    await store.add_exchange_record(owner, exchange["question"], answer, action)
     await deliver_answer(call.message, answer, code=code_view, lang=lang)
 
 

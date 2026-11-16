@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -30,7 +29,6 @@ from aiogram.types import (
 from config import Settings
 from i18n import normalize_lang, t
 from roles import has_admin_access, resolve_role
-from runtime import load_runtime
 from store import Store
 
 log = logging.getLogger("subscription_gate")

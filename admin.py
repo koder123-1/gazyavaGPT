@@ -30,7 +30,6 @@ import models as model_catalog
 from roles import (
     ASSIGNABLE,
     ROLE_ADMIN,
-    ROLE_OWNER,
     RoleFilter,
     can_assign,
     can_manage_roles,
@@ -218,7 +217,6 @@ async def render_payments(store: Store) -> tuple[str, InlineKeyboardMarkup]:
 async def render_users(
     store: Store, offset: int, settings: Settings
 ) -> tuple[str, InlineKeyboardMarkup]:
-    rt = await load_runtime(store, settings)
     rows = await store.list_users(offset, PAGE)
     total = (await store.stats())["users"]
     if not rows:

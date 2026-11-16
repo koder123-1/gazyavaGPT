@@ -47,6 +47,7 @@ COMMANDS = [
     BotCommand(command="check", description="Проверить моё решение"),
     BotCommand(command="imagine", description="Нарисовать картинку"),
     BotCommand(command="files", description="Чтение и создание файлов"),
+    BotCommand(command="pin", description="Закрепить сообщение в ответе"),
     BotCommand(command="lang", description="Сменить язык"),
     BotCommand(command="model", description="Выбрать модель ИИ"),
     BotCommand(command="style", description="Стиль ответов: учёба или код"),
@@ -68,6 +69,8 @@ GROUP_COMMANDS = [
     BotCommand(command="rules", description="Правила чата"),
     BotCommand(command="help", description="Справка"),
     BotCommand(command="group", description="Управление чатом"),
+    BotCommand(command="pin", description="Закрепить сообщение в ответе"),
+    BotCommand(command="unpin", description="Открепить сообщение"),
     BotCommand(command="warn", description="Предупреждение"),
     BotCommand(command="mute", description="Мут: /mute 1час причина"),
     BotCommand(command="unmute", description="Снять мут"),
@@ -79,6 +82,8 @@ GROUP_COMMANDS = [
     BotCommand(command="del", description="Удалить сообщение"),
     BotCommand(command="purge", description="Удалить последние сообщения"),
     BotCommand(command="info", description="Информация об участнике"),
+    BotCommand(command="pin", description="Закрепить сообщение в ответе"),
+    BotCommand(command="unpin", description="Открепить сообщение"),
 ]
 
 
