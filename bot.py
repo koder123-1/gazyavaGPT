@@ -33,6 +33,8 @@ from store import Store, create_store
 from subscription import SubscriptionMiddleware, probe_channel
 from subscription import router as subscription_router
 from tickets import router as tickets_router
+import autopost
+import giveaways
 
 WEBHOOK_PATH = "/webhook"
 
@@ -72,6 +74,7 @@ GROUP_COMMANDS = [
     BotCommand(command="rules", description="Правила чата"),
     BotCommand(command="help", description="Справка"),
     BotCommand(command="group", description="Управление чатом"),
+    BotCommand(command="giveaway", description="Розыгрыш в этом чате"),
     BotCommand(command="pin", description="Закрепить сообщение в ответе"),
     BotCommand(command="unpin", description="Открепить сообщение"),
     BotCommand(command="warn", description="Предупреждение"),
@@ -100,6 +103,8 @@ async def on_startup(
     await store.start()
     await ai.start()
     await images.start()
+    giveaways.start_loop(bot, store)
+    autopost.start_loop(bot, store, settings)
     await bot.set_my_commands(COMMANDS)
     with contextlib.suppress(TelegramAPIError):
         await bot.set_my_commands(GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())
@@ -144,6 +149,8 @@ async def on_startup(
 
 
 async def on_shutdown(bot: Bot, store: Store, ai: AIClient, images: ImageClient) -> None:
+    await giveaways.stop_loop()
+    await autopost.stop_loop()
     await ai.close()
     await images.close()
     await store.close()
@@ -192,6 +199,8 @@ def create_dispatcher(
     # Админ-роутер первым: его фильтр по роли отсекает остальных.
     dispatcher.include_router(admin_router)
     dispatcher.include_router(tickets_router)
+    dispatcher.include_router(giveaways.router)
+    dispatcher.include_router(autopost.router)
     dispatcher.include_router(group_router)
     dispatcher.include_router(moderation_router)
     dispatcher.include_router(payments_router)

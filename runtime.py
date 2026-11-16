@@ -33,6 +33,7 @@ class Runtime:
     image_daily_limit: int = 1
     required_channel: str = ""
     required_channel_url: str = ""
+    group_gate: bool = True
 
 
 def _safe_int(value: str | None, default: int) -> int:
@@ -49,6 +50,22 @@ def _safe_packages(
         return parse_packages(value or "", default)
     except ValueError:
         return default
+
+
+BOOL_ON = {"1", "true", "yes", "on", "y", "t", "да", "так", "вкл"}
+BOOL_OFF = {"0", "false", "no", "off", "n", "f", "нет", "не", "выкл"}
+
+
+def _safe_bool(value: str | None, default: bool) -> bool:
+    """Пусто или мусор — значение из env, иначе явное вкл/выкл."""
+    if value is None:
+        return default
+    raw = value.strip().lower()
+    if raw in BOOL_ON:
+        return True
+    if raw in BOOL_OFF:
+        return False
+    return default
 
 
 async def load_runtime(store: Store, settings: Settings) -> Runtime:
@@ -76,4 +93,5 @@ async def load_runtime(store: Store, settings: Settings) -> Runtime:
             else settings.required_channel_url
         )
         or "",
+        group_gate=_safe_bool(overrides.get("group_gate"), settings.group_gate_enabled),
     )

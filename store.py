@@ -111,6 +111,34 @@ class Store(Protocol):
     async def close_ticket(self, ticket_id: int, closed_by: int) -> bool: ...
     async def tickets_stats(self) -> dict[str, int]: ...
 
+    # ------------------------------------------------------------- розыгрыши
+    async def create_giveaway(
+        self,
+        chat_id: int,
+        prize: str,
+        winners: int,
+        need_sub: bool,
+        duration_minutes: int,
+        created_by: int,
+        lang: str = "ru",
+    ) -> int: ...
+    async def set_giveaway_message(self, giveaway_id: int, message_id: int) -> None: ...
+    async def get_giveaway(self, giveaway_id: int) -> dict | None: ...
+    async def active_giveaways(self, chat_id: int | None = None) -> list[dict]: ...
+    async def due_giveaways(self, limit: int = 20) -> list[dict]: ...
+    async def join_giveaway(
+        self,
+        giveaway_id: int,
+        user_id: int,
+        username: str | None,
+        first_name: str | None,
+    ) -> bool: ...
+    async def giveaway_entries(self, giveaway_id: int) -> list[dict]: ...
+    async def giveaway_entries_count(self, giveaway_id: int) -> int: ...
+    async def finish_giveaway(self, giveaway_id: int, result: str) -> bool: ...
+    async def cancel_giveaway(self, giveaway_id: int) -> bool: ...
+    async def giveaways_stats(self) -> dict[str, int]: ...
+
 
 # --------------------------------------------------------------------------- память
 class MemoryStore:
@@ -133,10 +161,13 @@ class MemoryStore:
         self._roles: dict[int, str] = {}
         self._tickets: dict[int, dict] = {}
         self._ticket_msgs: dict[int, list[dict]] = {}
+        self._giveaways: dict[int, dict] = {}
+        self._giveaway_entries: dict[int, dict[int, dict]] = {}
         self._seq = 0
         self._exchange_seq = 0
         self._payment_seq = 0
         self._ticket_seq = 0
+        self._giveaway_seq = 0
 
     async def start(self) -> None:
         log.warning("DATABASE_URL не задан -> данные хранятся в памяти (пропадут при рестарте)")
@@ -702,6 +733,133 @@ class MemoryStore:
         rows = list(self._tickets.values())
         opened = sum(1 for t in rows if t["status"] == "open")
         return {"open": opened, "closed": len(rows) - opened, "total": len(rows)}
+
+    # ------------------------------------------------------------- розыгрыши
+    async def create_giveaway(
+        self,
+        chat_id: int,
+        prize: str,
+        winners: int,
+        need_sub: bool,
+        duration_minutes: int,
+        created_by: int,
+        lang: str = "ru",
+    ) -> int:
+        self._giveaway_seq += 1
+        now = datetime.now(UTC)
+        self._giveaways[self._giveaway_seq] = {
+            "id": self._giveaway_seq,
+            "chat_id": chat_id,
+            "prize": prize,
+            "winners": max(1, winners),
+            "need_sub": bool(need_sub),
+            "lang": lang,
+            "created_by": created_by,
+            "created_at": now,
+            "ends_at": now + timedelta(minutes=max(1, duration_minutes)),
+            "status": "active",
+            "message_id": None,
+            "finished_at": None,
+            "result": None,
+        }
+        self._giveaway_entries[self._giveaway_seq] = {}
+        return self._giveaway_seq
+
+    async def set_giveaway_message(self, giveaway_id: int, message_id: int) -> None:
+        giveaway = self._giveaways.get(giveaway_id)
+        if giveaway is not None:
+            giveaway["message_id"] = message_id
+
+    def _giveaway_view(self, giveaway: dict) -> dict:
+        return {
+            **giveaway,
+            "entries": len(self._giveaway_entries.get(giveaway["id"], {})),
+        }
+
+    async def get_giveaway(self, giveaway_id: int) -> dict | None:
+        giveaway = self._giveaways.get(giveaway_id)
+        return self._giveaway_view(giveaway) if giveaway is not None else None
+
+    async def active_giveaways(self, chat_id: int | None = None) -> list[dict]:
+        now = datetime.now(UTC)
+        rows = [
+            g
+            for g in self._giveaways.values()
+            if g["status"] == "active"
+            and g["ends_at"] > now
+            and (chat_id is None or g["chat_id"] == chat_id)
+        ]
+        rows.sort(key=lambda g: g["ends_at"])
+        return [self._giveaway_view(g) for g in rows]
+
+    async def due_giveaways(self, limit: int = 20) -> list[dict]:
+        now = datetime.now(UTC)
+        rows = [
+            g
+            for g in self._giveaways.values()
+            if g["status"] == "active" and g["ends_at"] <= now
+        ]
+        rows.sort(key=lambda g: g["ends_at"])
+        return [self._giveaway_view(g) for g in rows[: max(1, limit)]]
+
+    async def join_giveaway(
+        self,
+        giveaway_id: int,
+        user_id: int,
+        username: str | None,
+        first_name: str | None,
+    ) -> bool:
+        giveaway = self._giveaways.get(giveaway_id)
+        if giveaway is None or giveaway["status"] != "active":
+            return False
+        if giveaway["ends_at"] <= datetime.now(UTC):
+            return False
+        box = self._giveaway_entries.setdefault(giveaway_id, {})
+        if user_id in box:
+            return False
+        box[user_id] = {
+            "giveaway_id": giveaway_id,
+            "user_id": user_id,
+            "username": username,
+            "first_name": first_name,
+            "joined_at": datetime.now(UTC),
+        }
+        return True
+
+    async def giveaway_entries(self, giveaway_id: int) -> list[dict]:
+        return [dict(row) for row in self._giveaway_entries.get(giveaway_id, {}).values()]
+
+    async def giveaway_entries_count(self, giveaway_id: int) -> int:
+        return len(self._giveaway_entries.get(giveaway_id, {}))
+
+    async def finish_giveaway(self, giveaway_id: int, result: str) -> bool:
+        giveaway = self._giveaways.get(giveaway_id)
+        if giveaway is None or giveaway["status"] != "active":
+            return False
+        giveaway.update(
+            {"status": "finished", "finished_at": datetime.now(UTC), "result": result}
+        )
+        return True
+
+    async def cancel_giveaway(self, giveaway_id: int) -> bool:
+        giveaway = self._giveaways.get(giveaway_id)
+        if giveaway is None or giveaway["status"] != "active":
+            return False
+        giveaway.update(
+            {"status": "cancelled", "finished_at": datetime.now(UTC), "result": None}
+        )
+        return True
+
+    async def giveaways_stats(self) -> dict[str, int]:
+        rows = list(self._giveaways.values())
+        active = sum(1 for g in rows if g["status"] == "active")
+        finished = sum(1 for g in rows if g["status"] == "finished")
+        return {
+            "active": active,
+            "finished": finished,
+            "cancelled": len(rows) - active - finished,
+            "total": len(rows),
+        }
 
 
 # --------------------------------------------------------------------------- postgres
@@ -1691,6 +1849,176 @@ class PostgresStore:
         )
         return {k: int(row[k] or 0) for k in ("open", "closed", "total")}
 
+    # ------------------------------------------------------------- розыгрыши
+    async def create_giveaway(
+        self,
+        chat_id: int,
+        prize: str,
+        winners: int,
+        need_sub: bool,
+        duration_minutes: int,
+        created_by: int,
+        lang: str = "ru",
+    ) -> int:
+        assert self._pool is not None
+        giveaway_id = await self._pool.fetchval(
+            """
+            INSERT INTO giveaways
+                (chat_id, prize, winners, need_sub, lang, created_by, ends_at)
+            VALUES ($1, $2, $3, $4, $5, $6, now() + ($7::int * interval '1 minute'))
+            RETURNING id
+            """,
+            chat_id,
+            prize,
+            max(1, winners),
+            bool(need_sub),
+            lang,
+            created_by,
+            max(1, duration_minutes),
+        )
+        return int(giveaway_id)
+
+    async def set_giveaway_message(self, giveaway_id: int, message_id: int) -> None:
+        assert self._pool is not None
+        await self._pool.execute(
+            "UPDATE giveaways SET message_id = $2 WHERE id = $1",
+            giveaway_id,
+            message_id,
+        )
+
+    async def get_giveaway(self, giveaway_id: int) -> dict | None:
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            """
+            SELECT g.*,
+                   (SELECT count(*) FROM giveaway_entries e
+                     WHERE e.giveaway_id = g.id) AS entries
+            FROM giveaways g
+            WHERE g.id = $1
+            """,
+            giveaway_id,
+        )
+        return dict(row) if row else None
+
+    async def active_giveaways(self, chat_id: int | None = None) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            """
+            SELECT g.*,
+                   (SELECT count(*) FROM giveaway_entries e
+                     WHERE e.giveaway_id = g.id) AS entries
+            FROM giveaways g
+            WHERE g.status = 'active'
+              AND g.ends_at > now()
+              AND ($1::bigint IS NULL OR g.chat_id = $1)
+            ORDER BY g.ends_at
+            """,
+            chat_id,
+        )
+        return [dict(r) for r in rows]
+
+    async def due_giveaways(self, limit: int = 20) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            """
+            SELECT g.*,
+                   (SELECT count(*) FROM giveaway_entries e
+                     WHERE e.giveaway_id = g.id) AS entries
+            FROM giveaways g
+            WHERE g.status = 'active' AND g.ends_at <= now()
+            ORDER BY g.ends_at
+            LIMIT $1
+            """,
+            max(1, limit),
+        )
+        return [dict(r) for r in rows]
+
+    async def join_giveaway(
+        self,
+        giveaway_id: int,
+        user_id: int,
+        username: str | None,
+        first_name: str | None,
+    ) -> bool:
+        assert self._pool is not None
+        row = await self._pool.fetchval(
+            """
+            INSERT INTO giveaway_entries
+                (giveaway_id, user_id, username, first_name)
+            SELECT g.id, $2, $3, $4
+            FROM giveaways g
+            WHERE g.id = $1 AND g.status = 'active' AND g.ends_at > now()
+            ON CONFLICT (giveaway_id, user_id) DO NOTHING
+            RETURNING user_id
+            """,
+            giveaway_id,
+            user_id,
+            username,
+            first_name,
+        )
+        return row is not None
+
+    async def giveaway_entries(self, giveaway_id: int) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            """
+            SELECT giveaway_id, user_id, username, first_name, joined_at
+            FROM giveaway_entries
+            WHERE giveaway_id = $1
+            ORDER BY joined_at, user_id
+            """,
+            giveaway_id,
+        )
+        return [dict(r) for r in rows]
+
+    async def giveaway_entries_count(self, giveaway_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT count(*) FROM giveaway_entries WHERE giveaway_id = $1",
+            giveaway_id,
+        )
+        return int(value or 0)
+
+    async def finish_giveaway(self, giveaway_id: int, result: str) -> bool:
+        assert self._pool is not None
+        row = await self._pool.fetchval(
+            """
+            UPDATE giveaways
+            SET status = 'finished', finished_at = now(), result = $2
+            WHERE id = $1 AND status = 'active'
+            RETURNING id
+            """,
+            giveaway_id,
+            result,
+        )
+        return row is not None
+
+    async def cancel_giveaway(self, giveaway_id: int) -> bool:
+        assert self._pool is not None
+        row = await self._pool.fetchval(
+            """
+            UPDATE giveaways
+            SET status = 'cancelled', finished_at = now(), result = NULL
+            WHERE id = $1 AND status = 'active'
+            RETURNING id
+            """,
+            giveaway_id,
+        )
+        return row is not None
+
+    async def giveaways_stats(self) -> dict[str, int]:
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            """
+            SELECT count(*) FILTER (WHERE status = 'active')    AS active,
+                   count(*) FILTER (WHERE status = 'finished')  AS finished,
+                   count(*) FILTER (WHERE status = 'cancelled') AS cancelled,
+                   count(*)                                     AS total
+            FROM giveaways
+            """
+        )
+        return {k: int(row[k] or 0) for k in ("active", "finished", "cancelled", "total")}
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -1815,6 +2143,36 @@ CREATE TABLE IF NOT EXISTS ticket_messages (
 );
 
 CREATE INDEX IF NOT EXISTS ticket_messages_ticket_idx ON ticket_messages (ticket_id, id);
+
+CREATE TABLE IF NOT EXISTS giveaways (
+    id          BIGSERIAL PRIMARY KEY,
+    chat_id     BIGINT NOT NULL,
+    prize       TEXT NOT NULL,
+    winners     INTEGER NOT NULL DEFAULT 1,
+    need_sub    BOOLEAN NOT NULL DEFAULT FALSE,
+    lang        TEXT NOT NULL DEFAULT 'ru',
+    created_by  BIGINT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ends_at     TIMESTAMPTZ NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'active',
+    message_id  BIGINT,
+    finished_at TIMESTAMPTZ,
+    result      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS giveaways_status_ends_idx ON giveaways (status, ends_at);
+CREATE INDEX IF NOT EXISTS giveaways_chat_idx ON giveaways (chat_id, status);
+
+CREATE TABLE IF NOT EXISTS giveaway_entries (
+    giveaway_id BIGINT NOT NULL REFERENCES giveaways(id) ON DELETE CASCADE,
+    user_id     BIGINT NOT NULL,
+    username    TEXT,
+    first_name  TEXT,
+    joined_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (giveaway_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS giveaway_entries_user_idx ON giveaway_entries (user_id);
 """
 
 

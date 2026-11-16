@@ -11,9 +11,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from html import escape
 from typing import Any
 
 from aiogram import BaseMiddleware, Bot, F, Router
@@ -28,7 +31,9 @@ from aiogram.types import (
 
 from config import Settings
 from i18n import normalize_lang, t
+from moderation import ChatAdminCache
 from roles import has_admin_access, resolve_role
+from runtime import Runtime, load_runtime
 from store import Store
 
 log = logging.getLogger("subscription_gate")
@@ -45,6 +50,45 @@ UNKNOWN = "unknown"
 _cache: dict[tuple[str, int], tuple[str, float]] = {}
 # Ошибку «бот не в канале» логируем один раз, чтобы не засорять лог.
 _warned: set[str] = set()
+# Предупреждения в группах: (chat_id, user_id) -> когда показывали.
+_warned_in_group: dict[tuple[int, int], float] = {}
+# Кеш «сотрудник бота»: resolve_role бьёт в БД, а в группе сообщений много.
+_staff_cache: dict[int, tuple[bool, float]] = {}
+STAFF_TTL = 300.0
+# Кеш Runtime: не дёргать таблицу settings на каждое сообщение в группе.
+_runtime_cache: tuple[float, Runtime] | None = None
+RUNTIME_TTL = 45.0
+GROUP_WARN_COOLDOWN = 90.0
+GROUP_WARN_TTL = 25.0
+
+# Какие сообщения считаются «написал участник». Служебные (вход, закреп,
+# смена названия и т.п.) не трогаем: за них бот не должен наказывать.
+GROUP_CONTENT_TYPES = {
+    "text",
+    "photo",
+    "video",
+    "document",
+    "audio",
+    "voice",
+    "video_note",
+    "animation",
+    "sticker",
+    "poll",
+    "location",
+    "contact",
+    "dice",
+}
+
+
+async def runtime_cached(store: Store, settings: Settings) -> Runtime:
+    """Настройки из БД с коротким кешем — их читают на каждое сообщение."""
+    global _runtime_cache
+    now = time.monotonic()
+    if _runtime_cache is not None and now - _runtime_cache[0] < RUNTIME_TTL:
+        return _runtime_cache[1]
+    runtime = await load_runtime(store, settings)
+    _runtime_cache = (now, runtime)
+    return runtime
 
 
 # --------------------------------------------------------------------------- канал
@@ -200,20 +244,33 @@ async def channel_status(bot: Bot, channel: str) -> tuple[str, str]:
 
 def reset_cache(user_id: int | None = None) -> None:
     """Сбросить кеш проверки — после смены канала или ручной выдачи подписки."""
+    global _runtime_cache
+    _runtime_cache = None
     if user_id is None:
         _cache.clear()
+        _warned_in_group.clear()
+        _staff_cache.clear()
     else:
         for key in [key for key in _cache if key[1] == user_id]:
             _cache.pop(key, None)
+        for key in [key for key in _warned_in_group if key[1] == user_id]:
+            _warned_in_group.pop(key, None)
+        _staff_cache.pop(user_id, None)
 
 
 # --------------------------------------------------------------------------- middleware
 class SubscriptionMiddleware(BaseMiddleware):
-    """Закрывает личный доступ к боту без подписки на канал.
+    """Закрывает доступ без подписки: личка и (по настройке) группы.
 
-    Не трогает: группы (модерация и ответы там работают как раньше), служебные
-    платежи (`successful_payment`), владельца и админов бота, кнопку проверки.
+    В группе удаляет сообщение неподписанного и не чаще раза в 90 секунд
+    показывает короткое предупреждение с кнопкой. Служебные сообщения, боты,
+    анонимные админы, админы чата и сотрудники бота проходят без проверки.
+    Если Telegram не даёт проверить подписку (UNKNOWN) — пропускаем: гейт не
+    должен молча запирать весь чат.
     """
+
+    def __init__(self) -> None:
+        self.chat_admins = ChatAdminCache()
 
     async def __call__(
         self,
@@ -227,7 +284,11 @@ class SubscriptionMiddleware(BaseMiddleware):
 
         if isinstance(event, Message):
             user = event.from_user
-            if event.chat.type != "private" or user is None:
+            if user is None:
+                return await handler(event, data)
+            if event.chat.type in {"group", "supergroup"}:
+                return await self._group_gate(handler, event, data)
+            if event.chat.type != "private":
                 return await handler(event, data)
             if event.successful_payment is not None:
                 return await handler(event, data)
@@ -268,6 +329,93 @@ class SubscriptionMiddleware(BaseMiddleware):
 
         return await handler(event, data)
 
+    async def _group_gate(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        message: Message,
+        data: dict[str, Any],
+    ) -> Any:
+        user = message.from_user
+        if user is None or user.is_bot or message.sender_chat is not None:
+            return await handler(message, data)
+        if message.content_type not in GROUP_CONTENT_TYPES:
+            return await handler(message, data)
+
+        settings: Settings = data["settings"]
+        store: Store = data["store"]
+        bot: Bot = data["bot"]
+
+        runtime = await runtime_cached(store, settings)
+        if not runtime.group_gate:
+            return await handler(message, data)
+        channel = normalize_channel(runtime.required_channel)
+        if not channel:
+            return await handler(message, data)
+
+        if await self._exempt(user.id, settings, store):
+            return await handler(message, data)
+        if await self.chat_admins.is_admin(bot, message.chat.id, user.id):
+            return await handler(message, data)
+
+        state = await membership(bot, channel, user.id)
+        if state != NOT_SUBSCRIBED:
+            return await handler(message, data)
+
+        # Сообщение не должно дойти ни до ИИ, ни до модерации.
+        with contextlib.suppress(TelegramAPIError):
+            await message.delete()
+        url = normalize_channel_url(runtime.required_channel_url, channel)
+        await self._group_warning(bot, message, store, settings, channel, url)
+        return None
+
+    async def _group_warning(
+        self,
+        bot: Bot,
+        message: Message,
+        store: Store,
+        settings: Settings,
+        channel: str,
+        url: str,
+    ) -> None:
+        user = message.from_user
+        if user is None:
+            return
+        key = (message.chat.id, user.id)
+        now = time.monotonic()
+        last = _warned_in_group.get(key)
+        if last is not None and now - last < GROUP_WARN_COOLDOWN:
+            return
+        _warned_in_group[key] = now
+        if len(_warned_in_group) > 2000:
+            cutoff = now - GROUP_WARN_COOLDOWN
+            for stale, shown_at in list(_warned_in_group.items()):
+                if shown_at < cutoff:
+                    _warned_in_group.pop(stale, None)
+
+        lang = await self._lang(store, settings, user.id)
+        try:
+            sent = await message.answer(
+                t(
+                    lang,
+                    "gate.group",
+                    name=escape(user.first_name or ""),
+                    channel=channel_display(channel),
+                ),
+                reply_markup=subscription_keyboard(lang, url),
+                disable_notification=True,
+            )
+        except TelegramAPIError:
+            return
+        asyncio.create_task(
+            self._delete_later(bot, sent.chat.id, sent.message_id, GROUP_WARN_TTL)
+        )
+
+    @staticmethod
+    async def _delete_later(bot: Bot, chat_id: int, message_id: int, delay: float) -> None:
+        await asyncio.sleep(delay)
+        with contextlib.suppress(TelegramAPIError):
+            await bot.delete_message(chat_id, message_id)
+
     @staticmethod
     async def _lang(store: Store, settings: Settings, user_id: int) -> str:
         return normalize_lang(await store.get_lang(user_id) or settings.default_lang)
@@ -298,7 +446,13 @@ class SubscriptionMiddleware(BaseMiddleware):
             return True
         if user_id in settings.admin_ids:
             return True
-        return has_admin_access(await resolve_role(user_id, settings, store))
+        now = time.monotonic()
+        cached = _staff_cache.get(user_id)
+        if cached is not None and now - cached[1] < STAFF_TTL:
+            return cached[0]
+        value = has_admin_access(await resolve_role(user_id, settings, store))
+        _staff_cache[user_id] = (value, now)
+        return value
 
 
 @router.callback_query(F.data == "sub:check")
@@ -314,11 +468,12 @@ async def check_subscription(
         return
 
     state = await membership(bot, channel, user.id, refresh=True)
+    in_group = call.message is not None and call.message.chat.type != "private"
     if state == UNKNOWN:
         await call.answer(t(lang, "sub.unavailable"), show_alert=True)
         return
     if state != SUBSCRIBED:
-        if call.message is not None:
+        if call.message is not None and not in_group:
             try:
                 await call.message.answer(
                     t(lang, "sub.required", channel=channel_display(channel)),
@@ -330,7 +485,9 @@ async def check_subscription(
         return
 
     await call.answer(t(lang, "sub.ok"))
-    if call.message is None:
+    if call.message is None or in_group:
+        # В группе не заваливаем чат приветствием: подписка подтверждена —
+        # человек просто пишет дальше, гейт его больше не трогает.
         return
     from handlers import language_kb, send_welcome
 

@@ -448,6 +448,61 @@ _KEYCAPS = ("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7
 _LABEL_RE = re.compile(r"^(?P<key>[^:=]{1,40}?)\s*:\s*(?P<rest>.+)$")
 _LABEL_BAD = set("=<>/\\@#•*`")
 
+# Примечания и подсказки — курсивом, чтобы не спорили с шагами решения.
+_NOTE_RE = re.compile(
+    r"^(?P<key>Примечание|Внимание|Подсказка|Совет|Проверка|Note|Hint|Tip|Warning)"
+    r"\s*[:：]\s*(?P<rest>.+)$",
+    re.IGNORECASE,
+)
+
+# Дробь отдельной строкой: рисуем «числитель над знаменателем».
+_FRACTION_ONLY_RE = re.compile(r"^(?P<num>-?\d+)\s*/\s*(?P<den>-?\d+)$")
+_FRACTION_VAR_RE = re.compile(
+    r"^(?P<var>[A-Za-zА-Яа-я][A-Za-zА-Яа-я0-9]{0,2})\s*=\s*"
+    r"(?P<num>-?\d+)\s*/\s*(?P<den>-?\d+)$"
+)
+_FRACTION_MIXED_RE = re.compile(
+    r"^(?P<whole>-?\d+)\s+(?P<num>\d+)\s*/\s*(?P<den>\d+)$"
+)
+
+
+def _stacked_fraction(numerator: str, denominator: str) -> str:
+    width = max(len(numerator), len(denominator), 3)
+    return (
+        f"<pre>{numerator.rjust(width)}\n"
+        f"{'─' * width}\n"
+        f"{denominator.rjust(width)}</pre>"
+    )
+
+
+def _fraction_block(line: str) -> str | None:
+    """Строка-дробь → аккуратный столбик в <pre>. Остальное не трогаем."""
+    from html import escape
+
+    value = line.strip()
+    match = _FRACTION_ONLY_RE.fullmatch(value)
+    if match:
+        return _stacked_fraction(match.group("num"), match.group("den"))
+    match = _FRACTION_VAR_RE.fullmatch(value)
+    if match:
+        return (
+            f"<code>{escape(match.group('var'))} =</code>\n"
+            + _stacked_fraction(match.group("num"), match.group("den"))
+        )
+    match = _FRACTION_MIXED_RE.fullmatch(value)
+    if match:
+        whole = match.group("whole")
+        numerator = match.group("num")
+        denominator = match.group("den")
+        width = max(len(numerator), len(denominator), 3)
+        pad = " " * len(whole)
+        return (
+            f"<pre>{whole} {numerator:>{width}}\n"
+            f"{pad} {'─' * width}\n"
+            f"{pad} {denominator:>{width}}</pre>"
+        )
+    return None
+
 
 def _section(line: str) -> tuple[str, str, str] | None:
     match = _SECTION_RE.match(line)
@@ -511,6 +566,11 @@ def _render_line(value: str) -> str:
         bullet = "• "
         stripped = marker.group("rest").strip()
 
+    note = _NOTE_RE.match(stripped)
+    if note:
+        key = escape(note.group("key").strip())
+        return f"{bullet}<i><b>{key}:</b> {_inline(note.group('rest').strip())}</i>"
+
     label = _LABEL_RE.match(stripped)
     if label and _label_ok(label.group("key"), label.group("rest")):
         key = escape(label.group("key").strip())
@@ -553,6 +613,11 @@ def _render_section_body(lines: list[str]) -> str:
             else:
                 mark = f"<b>{number}.</b>"
             out.append(f"{mark} {_render_line(text)}")
+            continue
+        fraction = _fraction_block(stripped)
+        if fraction:
+            flush_column()
+            out.append(fraction)
             continue
         if _looks_like_column(stripped):
             column.append(escape(line))
@@ -609,10 +674,13 @@ def to_telegram_html(text: str, *, code: bool = False) -> str:
             continue
         if title.lower().rstrip(":") in {"ответ", "answer"}:
             plain = re.sub(r"</?(?:b|code|pre|i|u|s)>", "", body)
-            if "\n" in body:
+            if "<pre>" in body:
+                # Дробь/столбик уже в моноширинном блоке — рамка только мешает.
+                parts.append(body)
+            elif "\n" in body:
                 parts.append(f"<blockquote>{body}</blockquote>")
             else:
-                parts.append(f"<blockquote><b>{plain}</b></blockquote>")
+                parts.append(f"<blockquote><b><u>{plain}</u></b></blockquote>")
         elif title.lower() in {"условие", "task", "condition"}:
             parts.append(f"<blockquote>{body}</blockquote>")
         else:

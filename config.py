@@ -173,6 +173,11 @@ class Settings:
     star_rate: int = DEFAULT_STAR_RATE
     required_channel: str = DEFAULT_REQUIRED_CHANNEL
     required_channel_url: str = DEFAULT_REQUIRED_CHANNEL_URL
+    group_gate_enabled: bool = True
+    autopost_enabled: bool = True
+    autopost_channel: str = ""
+    autopost_hour: int = 9
+    autopost_kind: str = "mix"
     terms_text: str = DEFAULT_TERMS
     support_text: str = DEFAULT_SUPPORT
     support_contact: str = ""
@@ -405,6 +410,15 @@ def load_settings() -> Settings:
         or DEFAULT_REQUIRED_CHANNEL,
         required_channel_url=os.getenv("REQUIRED_CHANNEL_URL", "").strip()
         or DEFAULT_REQUIRED_CHANNEL_URL,
+        group_gate_enabled=_bool_env("GROUP_GATE_ENABLED", True),
+        autopost_enabled=_bool_env("AUTOPOST_ENABLED", True),
+        autopost_channel=os.getenv("AUTOPOST_CHANNEL", "").strip(),
+        autopost_hour=_int_env("AUTOPOST_HOUR", 9, minimum=0, maximum=23),
+        autopost_kind=(
+            os.getenv("AUTOPOST_KIND", "").strip().lower()
+            if os.getenv("AUTOPOST_KIND", "").strip().lower() in {"task", "tip", "mix"}
+            else "mix"
+        ),
         terms_text=os.getenv("TERMS_TEXT", "").strip() or DEFAULT_TERMS,
         support_text=os.getenv("PAY_SUPPORT_TEXT", "").strip() or DEFAULT_SUPPORT,
         support_contact=os.getenv("PAY_SUPPORT_CONTACT", "").strip(),

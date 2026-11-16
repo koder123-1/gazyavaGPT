@@ -382,6 +382,13 @@ async def render_settings(
     prompt = rt.system_prompt.replace("\n", " ")
     if len(prompt) > 140:
         prompt = prompt[:140] + "…"
+    gate_line = (
+        "🔐 Гейт в чатах: <b>"
+        + ("включён" if rt.group_gate else "выключен")
+        + "</b>"
+        + mark("group_gate")
+        + "\n\n"
+    )
     text = (
         "⚙️ <b>Настройки</b>\n"
         "<i>Изменения применяются сразу, рестарт не нужен.</i>\n\n"
@@ -393,6 +400,7 @@ async def render_settings(
         f"⭐ Тарифы: <code>{escape(','.join(f'{n}:{s}' for n, s in rt.star_packages))}</code>{mark('star_packages')}\n"
         f"💱 Курс: 1 ⭐ = <b>{rt.star_rate}</b> запросов{mark('star_rate')}\n\n"
         + channel_line
+        + gate_line
         + "🛡 Защита: всегда включена — русский язык, анти-jailbreak, "
         "скрытие внутренних правил (изменить нельзя)."
     )
@@ -424,6 +432,12 @@ async def render_settings(
         [
             InlineKeyboardButton(
                 text="✏️ Ссылка на канал", callback_data="adm:set:edit:required_channel_url"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=("🔓 Выключить гейт в чатах" if rt.group_gate else "🔒 Включить гейт в чатах"),
+                callback_data="adm:set:gate",
             )
         ],
     ]
@@ -1271,6 +1285,10 @@ async def cb_set_reset(
     await state.clear()
     for key in EDITABLE:
         await store.delete_setting(key)
+    # Гейт в группах и автопосты тоже возвращаем к значениям из env.
+    await store.delete_setting("group_gate")
+    for key in ("autopost_enabled", "autopost_channel", "autopost_hour", "autopost_kind"):
+        await store.delete_setting(key)
     from subscription import reset_cache
 
     reset_cache()
@@ -1278,6 +1296,22 @@ async def cb_set_reset(
     with contextlib.suppress(TelegramAPIError):
         await call.message.edit_text(text, reply_markup=kb)
     await call.answer("Вернул значения из env")
+
+
+@router.callback_query(F.data == "adm:set:gate")
+async def cb_set_gate(
+    call: CallbackQuery, bot: Bot, store: Store, settings: Settings, state: FSMContext
+) -> None:
+    await state.clear()
+    rt = await load_runtime(store, settings)
+    await store.set_setting("group_gate", "off" if rt.group_gate else "on")
+    from subscription import reset_cache
+
+    reset_cache()
+    text, kb = await render_settings(store, settings, bot)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer("Гейт в чатах выключен" if rt.group_gate else "Гейт в чатах включён")
 
 
 @router.message(Panel.edit, F.text)
@@ -1583,6 +1617,7 @@ def _fun_kb() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🩺 Диагностика", callback_data="adm:fun:diag"),
                 InlineKeyboardButton(text="🔮 Предсказание", callback_data="adm:fun:fortune"),
             ],
+            [InlineKeyboardButton(text="🎁 Розыгрыши", callback_data="adm:give")],
             [InlineKeyboardButton(text="🎆 Салют", callback_data="adm:fun:party")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:main")],
         ]
@@ -1612,6 +1647,7 @@ async def render_fun(store: Store) -> tuple[str, InlineKeyboardMarkup]:
         "🏆 <b>Зал славы</b> — лучшие по запросам и покупкам.\n"
         "🩺 <b>Диагностика</b> — БД, ИИ, webhook и аптайм.\n"
         "🔮 <b>Предсказание</b> — что день грядущий нам готовит.\n"
+        "🎁 <b>Розыгрыши</b> — призы, участники и победители в чатах.\n"
         "🎆 <b>Салют</b> — просто красиво."
     )
     return text, _fun_kb()
@@ -2049,6 +2085,7 @@ async def render_channels(store: Store) -> tuple[str, InlineKeyboardMarkup]:
         ])
     if len(channels) < MAX_CHANNELS:
         rows.append([InlineKeyboardButton(text="➕ Подключить канал", callback_data="adm:ch:add")])
+    rows.append([InlineKeyboardButton(text="🕘 Автопосты в канал", callback_data="adm:auto")])
     rows.append([InlineKeyboardButton(text="⬅️ В админку", callback_data="adm:main")])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
 
