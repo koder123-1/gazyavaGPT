@@ -1071,6 +1071,12 @@ TR: dict[str, dict[str, str]] = {
         "be": "📄 Гатово: {name}",
         "en": "📄 Done: {name}",
     },
+    "code.file_caption": {
+        "ru": "📄 Код на {lines} строк — в файле {name}",
+        "uk": "📄 Код на {lines} рядків — у файлі {name}",
+        "be": "📄 Код на {lines} радкоў — у файле {name}",
+        "en": "📄 {lines} lines of code — in the file {name}",
+    },
     "file.pdf_unavailable": {
         "ru": "PDF сейчас недоступен: на сервере нет шрифта. Пришлю DOCX.",
         "uk": "PDF зараз недоступний: на сервері немає шрифту. Надішлю DOCX.",

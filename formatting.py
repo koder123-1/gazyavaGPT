@@ -580,3 +580,32 @@ def to_code_html(text: str) -> str:
     if tail:
         parts.append(to_telegram_html(tail))
     return "\n\n".join(part for part in parts if part.strip())
+
+
+# Код длиннее этого числа строк уходит файлом, а не сообщением.
+CODE_FILE_MIN_LINES = 100
+
+
+def split_big_code(
+    text: str, min_lines: int = CODE_FILE_MIN_LINES
+) -> tuple[str, list[tuple[str, str]]]:
+    """Делит ответ на текст и большие блоки кода.
+
+    Возвращает (текст без больших блоков, [(язык, код), ...]). Блок считается
+    большим, если в нём больше min_lines строк.
+    """
+    source = text or ""
+    blocks: list[tuple[str, str]] = []
+    parts: list[str] = []
+    position = 0
+    for match in _CODE_FENCE_RE.finditer(source):
+        code = match.group(2).strip("\n")
+        if len(code.splitlines()) > min_lines:
+            parts.append(source[position : match.start()])
+            blocks.append((match.group(1).lower(), code))
+            position = match.end()
+    if not blocks:
+        return source, []
+    parts.append(source[position:])
+    rest = "\n\n".join(part.strip() for part in parts if part.strip())
+    return rest, blocks

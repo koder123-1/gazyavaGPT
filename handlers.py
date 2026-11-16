@@ -32,7 +32,7 @@ import files
 import models as model_catalog
 from ai import AIClient, AIError
 from config import Settings
-from formatting import humanize_answer, to_telegram_html
+from formatting import humanize_answer, split_big_code, to_telegram_html
 from guards import JAILBREAK_REFUSAL, looks_like_jailbreak
 from i18n import (
     LANGS,
@@ -68,6 +68,24 @@ CHUNK = 3000
 # Telegram: 4096 символов на сообщение. Оставляем запас под теги и экранирование.
 HTML_LIMIT = 3800
 IMAGE_MAX_BYTES = 8 * 1024 * 1024
+
+# Язык блока кода → расширение файла.
+CODE_EXT = {
+    "python": "py",
+    "py": "py",
+    "html": "html",
+    "htm": "html",
+    "css": "css",
+    "js": "js",
+    "javascript": "js",
+    "typescript": "ts",
+    "ts": "ts",
+    "json": "json",
+    "sql": "sql",
+    "bash": "sh",
+    "sh": "sh",
+    "shell": "sh",
+}
 
 IMAGE_PROMPT = (
     "Посмотри на изображение. Если это учебное задание (задача, пример, упражнение) — "
@@ -888,7 +906,11 @@ async def answer_with_ai(
         await message.reply(t(lang, "err.generic"))
         return
 
-    answer = readable_answer(answer, code=style_key == "code")
+    # Крупный код отдаём файлом: для этого сохраняем fences при чистке ответа.
+    # В кодерском стиле код сохраняется всегда, даже если он короткий.
+    _, big_blocks = split_big_code(answer)
+    code_view = style_key == "code" or bool(big_blocks)
+    answer = readable_answer(answer, code=code_view)
     if not answer:
         log.warning("Модель вернула только рассуждения, ответ не отправлен")
         await message.reply(t(lang, "err.retry"))
@@ -905,7 +927,7 @@ async def answer_with_ai(
     )
     await store.add_exchange_record(user.id, label, answer, kind)
     if deliver:
-        await send_answer(message, answer, code=style_key == "code")
+        await deliver_answer(message, answer, code=code_view, lang=lang)
     return answer
 
 
@@ -1306,6 +1328,39 @@ async def send_file(message: Message, text: str, fmt: str, lang: str) -> None:
     )
 
 
+async def send_code_file(
+    message: Message, code: str, language: str, index: int, lang: str
+) -> bool:
+    """Отправляет большой блок кода отдельным файлом. True, если получилось."""
+    ext = CODE_EXT.get((language or "").strip().lower(), "txt")
+    name = f"gazyavaGPT-{index}.{ext}"
+    data = (code.rstrip() + "\n").encode("utf-8")
+    if len(data) > SEND_LIMIT_BYTES:
+        return False
+    lines = len(code.splitlines())
+    await message.answer_document(
+        BufferedInputFile(data, filename=name),
+        caption=t(lang, "code.file_caption", name=name, lines=lines),
+    )
+    return True
+
+
+async def deliver_answer(
+    message: Message, text: str, *, code: bool, lang: str
+) -> None:
+    """Отправляет ответ: большой код — файлами, остальное — текстом."""
+    rest, blocks = split_big_code(text)
+    sent_blocks = 0
+    for index, (language, source) in enumerate(blocks, 1):
+        if await send_code_file(message, source, language, index, lang):
+            sent_blocks += 1
+    if rest.strip():
+        await send_answer(message, rest, code=code)
+    elif blocks and not sent_blocks:
+        # Ни файл, ни текст не ушли — лучше показать код сообщением, чем молчать.
+        await send_answer(message, text, code=code)
+
+
 async def handle_document(
     message: Message,
     *,
@@ -1544,12 +1599,14 @@ async def cb_feedback(
         await call.message.answer(t(lang, "err.retry"))
         return
 
-    answer = readable_answer(answer, code=style_key == "code")
+    _, big_blocks = split_big_code(answer)
+    code_view = style_key == "code" or bool(big_blocks)
+    answer = readable_answer(answer, code=code_view)
     if not answer:
         await call.message.answer(t(lang, "err.retry"))
         return
     new_id = await store.add_exchange_record(owner, exchange["question"], answer, action)
-    await send_answer(call.message, answer, code=style_key == "code")
+    await deliver_answer(call.message, answer, code=code_view, lang=lang)
 
 
 # --------------------------------------------------------------------------- главное меню
