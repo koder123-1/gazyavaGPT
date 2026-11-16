@@ -120,7 +120,10 @@ async def on_startup(
         await bot.set_webhook(
             url=url,
             secret_token=settings.webhook_secret,
-            drop_pending_updates=True,
+            # НЕ drop_pending_updates: Render free засыпает через 15 минут без
+            # трафика, и всё, что написали боту за это время, должно доехать
+            # после пробуждения, а не быть стёртым при старте.
+            drop_pending_updates=False,
             allowed_updates=dispatcher.resolve_used_update_types(),
         )
         log.info("Webhook установлен: %s", url)
