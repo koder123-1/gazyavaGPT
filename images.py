@@ -47,6 +47,27 @@ def fresh_prompt(prompt: str) -> str:
     return prompt + random.choice(_VARIATION_SUFFIXES)
 
 
+def retry_seconds(header: str, default: int = 30) -> int:
+    """Retry-After бывает числом секунд — или HTTP-датой (тогда берём default)."""
+    value = (header or "").strip()
+    if value.isdigit():
+        return max(1, int(value))
+    match = re.search(r"retry after (\d+)", value, re.I)
+    if match:
+        return max(1, int(match.group(1)))
+    try:
+        from email.utils import parsedate_to_datetime
+        from datetime import datetime, timezone
+
+        moment = parsedate_to_datetime(value)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        seconds = int((moment - datetime.now(timezone.utc)).total_seconds())
+        return max(1, seconds)
+    except (TypeError, ValueError, OverflowError):
+        return max(1, default)
+
+
 class ImageError(Exception):
     """Ошибка с текстом, который можно показать пользователю."""
 
@@ -185,6 +206,9 @@ class ImageClient:
                 return await call(model)
             except ImageUnsupported:
                 raise
+            except ImageNoCredits:
+                # Нет кредитов у провайдера целиком — остальные модели не помогут.
+                raise
             except ImageError as exc:
                 error = exc
                 if len(models) > 1:
@@ -256,7 +280,8 @@ class ImageClient:
 
         # pollinations не умеет img2img без платного ключа, зато базовые
         # правки можно сделать локально, бесплатно и без отправки фото наружу.
-        return self._local_edit(image, instruction)
+        # PIL — тяжёлый CPU: не блокируем событийный цикл.
+        return await asyncio.to_thread(self._local_edit, image, instruction)
 
     async def _fallback(
         self,
@@ -310,16 +335,17 @@ class ImageClient:
                 async with self._session.get(url) as resp:
                     raw = await resp.read()
                     if resp.status in {402, 429}:
-                        retry = re.search(r"\d+", resp.headers.get("Retry-After", ""))
-                        if not retry:
-                            retry = re.search(
-                                r"retry after (\d+)", raw.decode("utf-8", "ignore"), re.I
+                        seconds = retry_seconds(
+                            resp.headers.get("Retry-After", ""), 45
+                        )
+                        if not resp.headers.get("Retry-After"):
+                            body_retry = re.search(
+                                r"retry after (\d+)",
+                                raw.decode("utf-8", "ignore"),
+                                re.I,
                             )
-                        seconds = 45
-                        if retry:
-                            seconds = int(
-                                retry.group(1) if retry.groups() else retry.group(0)
-                            )
+                            if body_retry:
+                                seconds = max(1, int(body_retry.group(1)))
                         log.info("pollinations limit: ждём %s с", seconds)
                         raise ImageRateLimited(seconds)
                     if resp.status != 200:
@@ -439,14 +465,19 @@ class ImageClient:
     async def _gemini_post(self, url: str, payload: dict, headers: dict) -> dict:
         assert self._session is not None
         try:
-            async with self._session.post(url, json=payload, headers=headers) as resp:
-                raw = await resp.text()
-                if resp.status != 200:
-                    log.warning("gemini image HTTP %s: %s", resp.status, raw[:300])
-                    if resp.status >= 500:
-                        raise ImageUnavailable("Сервис картинок временно недоступен.")
-                    raise ImageError("Сервис картинок отклонил запрос. Проверь ключ и модель.")
-                return json.loads(raw)
+            async with asyncio.timeout(IMAGE_TIMEOUT):
+                async with self._session.post(
+                    url, json=payload, headers=headers
+                ) as resp:
+                    raw = await resp.text()
+                    if resp.status != 200:
+                        log.warning("gemini image HTTP %s: %s", resp.status, raw[:300])
+                        if resp.status >= 500:
+                            raise ImageUnavailable("Сервис картинок временно недоступен.")
+                        raise ImageError("Сервис картинок отклонил запрос. Проверь ключ и модель.")
+                    return json.loads(raw)
+        except TimeoutError as exc:
+            raise ImageUnavailable("Сервис картинок не ответил вовремя.") from exc
         except aiohttp.ClientError as exc:
             raise ImageUnavailable("Сервис картинок недоступен. Попробуй позже.") from exc
         except json.JSONDecodeError as exc:
@@ -529,12 +560,15 @@ class ImageClient:
             model, full_prompt, size=size, image=image, mime=mime
         )
         try:
-            async with self._session.post(
-                base + "/images", json=payload, headers=headers
-            ) as resp:
-                raw = await resp.text()
-                status = resp.status
-                retry_after = resp.headers.get("Retry-After", "")
+            async with asyncio.timeout(IMAGE_TIMEOUT):
+                async with self._session.post(
+                    base + "/images", json=payload, headers=headers
+                ) as resp:
+                    raw = await resp.text()
+                    status = resp.status
+                    retry_after = resp.headers.get("Retry-After", "")
+        except TimeoutError as exc:
+            raise ImageUnavailable("Сервис картинок не ответил вовремя.") from exc
         except aiohttp.ClientError as exc:
             raise ImageUnavailable("Сервис картинок недоступен. Попробуй позже.") from exc
 
@@ -542,10 +576,7 @@ class ImageClient:
             log.warning("openrouter: нет кредитов на картинки")
             raise ImageNoCredits("У провайдера картинок закончились кредиты.")
         if status == 429:
-            seconds = 30
-            match = re.search(r"\d+", retry_after or "")
-            if match:
-                seconds = int(match.group(0))
+            seconds = retry_seconds(retry_after, 30)
             raise ImageRateLimited(seconds)
         if status >= 500:
             log.warning("openrouter image HTTP %s: %s", status, raw[:300])
@@ -557,10 +588,8 @@ class ImageClient:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise ImageError("Сервис картинок ответил непонятно.") from exc
-        items = data.get("data") or []
-        if not items or not items[0].get("b64_json"):
-            raise ImageError("Сервис не вернул картинку. Попробуй другой запрос.")
-        return base64.b64decode(items[0]["b64_json"])
+        # Ответ может быть и с b64_json, и с url — единый разбор.
+        return await self._decode_openai_image(data)
 
     # ------------------------------------------------------------------ openai
     async def _openai_json(self, path: str, payload: dict) -> dict:
@@ -579,10 +608,9 @@ class ImageClient:
                     if resp.status != 200:
                         log.warning("image API HTTP %s: %s", resp.status, raw[:300])
                         if resp.status == 429:
-                            seconds = 30
-                            match = re.search(r"\d+", resp.headers.get("Retry-After", ""))
-                            if match:
-                                seconds = int(match.group(0))
+                            seconds = retry_seconds(
+                                resp.headers.get("Retry-After", ""), 30
+                            )
                             raise ImageRateLimited(seconds)
                         if resp.status == 402:
                             raise ImageNoCredits("У провайдера картинок закончились кредиты.")
@@ -637,10 +665,9 @@ class ImageClient:
                     if resp.status != 200:
                         log.warning("image edit HTTP %s: %s", resp.status, raw[:300])
                         if resp.status == 429:
-                            seconds = 30
-                            match = re.search(r"\d+", resp.headers.get("Retry-After", ""))
-                            if match:
-                                seconds = int(match.group(0))
+                            seconds = retry_seconds(
+                                resp.headers.get("Retry-After", ""), 30
+                            )
                             raise ImageRateLimited(seconds)
                         if resp.status == 402:
                             raise ImageNoCredits("У провайдера картинок закончились кредиты.")
@@ -652,6 +679,8 @@ class ImageClient:
             raise ImageUnavailable("Сервис картинок не ответил вовремя.") from exc
         except aiohttp.ClientError as exc:
             raise ImageUnavailable("Сервис картинок недоступен. Попробуй позже.") from exc
+        except (ValueError, TypeError) as exc:
+            raise ImageError("Сервис картинок ответил непонятно.") from exc
 
     async def _decode_openai_image(self, data: dict) -> bytes:
         items = data.get("data") or []
@@ -659,7 +688,10 @@ class ImageClient:
             raise ImageError("Сервис не вернул картинку.")
         item = items[0]
         if item.get("b64_json"):
-            return base64.b64decode(item["b64_json"])
+            try:
+                return base64.b64decode(item["b64_json"], validate=False)
+            except (ValueError, TypeError) as exc:
+                raise ImageError("Сервис вернул повреждённую картинку.") from exc
         if item.get("url"):
             url = str(item["url"]).strip()
             # Шлюзы вроде ReformBoss отдают картинку прямо в data URL.
@@ -672,10 +704,16 @@ class ImageClient:
                 except (ValueError, TypeError) as exc:
                     raise ImageError("Сервис вернул повреждённую картинку.") from exc
             assert self._session is not None
-            async with self._session.get(url) as resp:
-                if resp.status != 200:
-                    raise ImageError("Не удалось скачать готовую картинку.")
-                return await resp.read()
+            try:
+                async with asyncio.timeout(IMAGE_TIMEOUT):
+                    async with self._session.get(url) as resp:
+                        if resp.status != 200:
+                            raise ImageError("Не удалось скачать готовую картинку.")
+                        return await resp.read()
+            except TimeoutError as exc:
+                raise ImageUnavailable("Сервис не отдал картинку вовремя.") from exc
+            except aiohttp.ClientError as exc:
+                raise ImageUnavailable("Не удалось скачать готовую картинку.") from exc
         raise ImageError("Сервис не вернул картинку.")
 
     # ------------------------------------------------------------------ локальные правки

@@ -140,21 +140,35 @@ class DebugShow:
         elif self.percent < 95:
             self.percent = min(95, self.percent + random.randint(4, 12))
 
-    async def _refresh(self) -> None:
+    async def _refresh(self, text: str | None = None) -> None:
         if self._msg is None or self.finished:
             return
         with contextlib.suppress(TelegramAPIError):
-            await self._msg.edit_text(self._render(), parse_mode="HTML")
+            await self._msg.edit_text(text or self._render(), parse_mode="HTML")
 
     async def _animate(self) -> None:
         delay = _delay()
+        last: str | None = None
+        loop = asyncio.get_running_loop()
+        # Страховка: даже если ответ завис, цикл не живёт дольше 10 минут.
+        deadline = loop.time() + 600
         try:
             while not self._stopped:
+                if loop.time() > deadline:
+                    return
                 await asyncio.sleep(delay)
                 if self._stopped:
                     return
+                if not self.queue and self.percent >= 95:
+                    # Текст больше не меняется: ждём finish() молча.
+                    return
                 self._advance()
-                await self._refresh()
+                text = self._render()
+                if text == last:
+                    # Повторная правка тем же текстом = «message is not modified».
+                    continue
+                last = text
+                await self._refresh(text)
         except asyncio.CancelledError:
             return
         except Exception:  # noqa: BLE001

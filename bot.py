@@ -5,14 +5,16 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from collections.abc import Awaitable, Callable
 from html import escape
+from typing import Any
 
-from aiogram import Bot, Dispatcher
+from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand, BotCommandScopeAllGroupChats
+from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, TelegramObject
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
@@ -146,6 +148,32 @@ async def on_shutdown(bot: Bot, store: Store, ai: AIClient, images: ImageClient)
     log.info("Бот остановлен")
 
 
+class CallbackAnswerGuard(BaseMiddleware):
+    """Отвечает на нажатие кнопки, даже если обработчик упал.
+
+    Сообщение с кнопками мог удалить сам пользователь или админ чата — тогда
+    `call.message` недоступен (`InaccessibleMessage`/None), и любой
+    `edit_text` бросает AttributeError. Без ответа у клиента навсегда
+    остаются «часики», а обновление теряется.
+    """
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
+    ) -> Any:
+        try:
+            return await handler(event, data)
+        except TelegramAPIError:
+            raise
+        except Exception:  # noqa: BLE001 — кнопка не должна «зависать»
+            log.exception("Ошибка обработки кнопки %s", getattr(event, "data", ""))
+            with contextlib.suppress(TelegramAPIError):
+                await event.answer("⚠️ Не получилось. Попробуй ещё раз.")
+            return None
+
+
 # --------------------------------------------------------------------------- приложение
 def create_dispatcher(
     settings: Settings, store: Store, ai: AIClient, images: ImageClient | None = None
@@ -166,6 +194,8 @@ def create_dispatcher(
     dispatcher.include_router(payments_router)
     dispatcher.include_router(user_router)
     # Спам, антифлуд и «личные» команды — до всех хендлеров.
+    # Guard первым: он ловит падения всех кнопок, включая гейт подписки.
+    dispatcher.callback_query.outer_middleware(CallbackAnswerGuard())
     dispatcher.message.outer_middleware(SubscriptionMiddleware())
     dispatcher.callback_query.outer_middleware(SubscriptionMiddleware())
     dispatcher.message.outer_middleware(PrivateOnlyMiddleware(settings))

@@ -69,10 +69,15 @@ async def resolve_role(user_id: int, settings: Settings, store: Store) -> str | 
         return ROLE_OWNER
     stored = await store.get_role(user_id)
     if stored in RANKS and stored != ROLE_OWNER:
-        return stored
-    if user_id in settings.admin_ids:
-        return ROLE_ADMIN
-    return None
+        role: str | None = stored
+    elif user_id in settings.admin_ids:
+        role = ROLE_ADMIN
+    else:
+        role = None
+    if role is not None and await store.is_banned(user_id):
+        # Забаненный сотрудник не должен сохранять доступ к тикетам и админке.
+        return None
+    return role
 
 
 async def staff_ids(
@@ -85,7 +90,13 @@ async def staff_ids(
         ids |= set(settings.admin_ids)
     if settings.owner_id:
         ids.add(settings.owner_id)
-    return sorted(ids)
+    # Забаненные сотрудники не должны получать тикеты и платежи.
+    result: list[int] = []
+    for user_id in sorted(ids):
+        if await store.is_banned(user_id):
+            continue
+        result.append(user_id)
+    return result
 
 
 def can_assign(
@@ -102,6 +113,8 @@ def can_assign(
         return False, "Управлять ролями могут только владелец и гл. админ."
     if settings.owner_id and target_id == settings.owner_id:
         return False, "Роль владельца менять нельзя — она задаётся через OWNER_ID."
+    if target_id in settings.admin_ids and rank(actor_role) < RANKS[ROLE_OWNER]:
+        return False, "ADMIN_IDS из настроек Render может менять только владелец."
     if target_id == actor_id:
         return False, "Свою роль менять нельзя — попроси другого администратора."
     if new_role is not None and new_role not in ASSIGNABLE:

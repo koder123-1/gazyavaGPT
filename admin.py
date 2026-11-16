@@ -30,6 +30,7 @@ import models as model_catalog
 from roles import (
     ASSIGNABLE,
     ROLE_ADMIN,
+    ROLE_OWNER,
     RoleFilter,
     can_assign,
     can_manage_roles,
@@ -217,8 +218,10 @@ async def render_payments(store: Store) -> tuple[str, InlineKeyboardMarkup]:
 async def render_users(
     store: Store, offset: int, settings: Settings
 ) -> tuple[str, InlineKeyboardMarkup]:
-    rows = await store.list_users(offset, PAGE)
     total = (await store.stats())["users"]
+    # Старая кнопка «➡️» могла уйти за конец списка — не показываем пустоту.
+    offset = max(0, min(offset, max(0, total - PAGE)))
+    rows = await store.list_users(offset, PAGE)
     if not rows:
         return (
             "👥 Пользователей пока нет.",
@@ -318,7 +321,7 @@ async def render_model_access(
         "Отмеченные модели доступны без оплаты. Бесплатная есть у всех.\n",
     ]
     buttons: list[list[InlineKeyboardButton]] = []
-    for index, item in enumerate(model_catalog.CATALOG):
+    for item in model_catalog.CATALOG:
         if item.stars <= 0:
             has = True
         else:
@@ -334,7 +337,7 @@ async def render_model_access(
             [
                 InlineKeyboardButton(
                     text=f"{mark} {item.title} · {price} — {action}",
-                    callback_data=f"adm:mdl:tg:{user_id}:{index}",
+                    callback_data=f"adm:mdl:tg:{user_id}:{item.id}",
                 )
             ]
         )
@@ -633,8 +636,20 @@ async def cb_close(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("adm:grant:"))
-async def cb_grant_start(call: CallbackQuery, state: FSMContext) -> None:
+async def cb_grant_start(
+    call: CallbackQuery, state: FSMContext, store: Store, settings: Settings
+) -> None:
     user_id = int(call.data.rsplit(":", 1)[1])
+    actor = call.from_user
+    actor_id = actor.id if actor else 0
+    actor_role = await resolve_role(actor_id, settings, store)
+    target_role = await resolve_role(user_id, settings, store)
+    if user_id == actor_id and actor_role != ROLE_OWNER:
+        await call.answer("Себе запросы не начисляю — попроси другого админа.", show_alert=True)
+        return
+    if user_id != actor_id and rank(target_role) >= rank(actor_role):
+        await call.answer("Нельзя менять баланс равного или старшего по роли", show_alert=True)
+        return
     await state.set_state(Panel.grant)
     await state.update_data(grant_user_id=user_id)
     await call.message.edit_text(
@@ -646,7 +661,7 @@ async def cb_grant_start(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
-@router.message(Panel.grant, F.text)
+@router.message(Panel.grant, F.text, ~Command("cancel"))
 async def on_grant_amount(
     message: Message, bot: Bot, store: Store, settings: Settings, state: FSMContext
 ) -> None:
@@ -683,14 +698,26 @@ async def on_grant_amount(
     await message.answer(text, reply_markup=kb)
 
 
-@router.message(Panel.grant)
+@router.message(Panel.grant, ~Command("cancel"))
 async def on_grant_non_text(message: Message) -> None:
     await message.answer("Пришли количество запросов числом или нажми /cancel.")
 
 
 @router.callback_query(F.data.startswith("adm:ig:"))
-async def cb_image_grant_start(call: CallbackQuery, state: FSMContext) -> None:
+async def cb_image_grant_start(
+    call: CallbackQuery, state: FSMContext, store: Store, settings: Settings
+) -> None:
     user_id = int(call.data.rsplit(":", 1)[1])
+    actor = call.from_user
+    actor_id = actor.id if actor else 0
+    actor_role = await resolve_role(actor_id, settings, store)
+    target_role = await resolve_role(user_id, settings, store)
+    if user_id == actor_id and actor_role != ROLE_OWNER:
+        await call.answer("Себе генерации не начисляю — попроси другого админа.", show_alert=True)
+        return
+    if user_id != actor_id and rank(target_role) >= rank(actor_role):
+        await call.answer("Нельзя менять баланс равного или старшего по роли", show_alert=True)
+        return
     await state.set_state(Panel.image_grant)
     await state.update_data(image_user_id=user_id)
     await call.message.edit_text(
@@ -702,7 +729,7 @@ async def cb_image_grant_start(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
-@router.message(Panel.image_grant, F.text)
+@router.message(Panel.image_grant, F.text, ~Command("cancel"))
 async def on_image_grant_amount(
     message: Message, bot: Bot, store: Store, settings: Settings, state: FSMContext
 ) -> None:
@@ -740,7 +767,7 @@ async def on_image_grant_amount(
     await message.answer(text, reply_markup=kb)
 
 
-@router.message(Panel.image_grant)
+@router.message(Panel.image_grant, ~Command("cancel"))
 async def on_image_grant_non_text(message: Message) -> None:
     await message.answer("Пришли количество генераций числом или нажми /cancel.")
 
@@ -941,7 +968,10 @@ async def cb_refund_do(call: CallbackQuery, bot: Bot, store: Store) -> None:
 
 # --------------------------------------------------------------------------- пользователи
 @router.callback_query(F.data.startswith("adm:users:"))
-async def cb_users(call: CallbackQuery, store: Store, settings: Settings) -> None:
+async def cb_users(
+    call: CallbackQuery, store: Store, settings: Settings, state: FSMContext
+) -> None:
+    await state.clear()
     offset = int(call.data.rsplit(":", 1)[1])
     text, kb = await render_users(store, offset, settings)
     with contextlib.suppress(TelegramAPIError):
@@ -970,14 +1000,14 @@ async def cb_model_access(call: CallbackQuery, store: Store) -> None:
 
 @router.callback_query(F.data.startswith("adm:mdl:tg:"))
 async def cb_model_toggle(call: CallbackQuery, store: Store) -> None:
-    parts = call.data.split(":")
+    parts = call.data.split(":", 4)
     if len(parts) != 5:
         await call.answer("Кнопка устарела", show_alert=True)
         return
-    user_id, index = int(parts[3]), int(parts[4])
-    item = model_catalog.by_index(index)
+    user_id = int(parts[3])
+    item = model_catalog.info(parts[4])
     if item is None or item.stars <= 0:
-        await call.answer("Эта модель бесплатна для всех", show_alert=True)
+        await call.answer("Кнопка устарела — открой карточку заново", show_alert=True)
         return
     if await store.has_model_access(user_id, item.id):
         await store.revoke_model(user_id, item.id)
@@ -1036,8 +1066,16 @@ async def cb_ban(call: CallbackQuery, store: Store, settings: Settings) -> None:
 
 
 @router.callback_query(F.data.startswith("adm:reset:"))
-async def cb_reset_history(call: CallbackQuery, store: Store, settings: Settings) -> None:
+async def cb_reset_history(
+    call: CallbackQuery, store: Store, settings: Settings
+) -> None:
     user_id = int(call.data.rsplit(":", 1)[1])
+    actor_id = call.from_user.id if call.from_user else 0
+    actor_role = await resolve_role(actor_id, settings, store)
+    target_role = await resolve_role(user_id, settings, store)
+    if user_id != actor_id and rank(target_role) >= rank(actor_role):
+        await call.answer("Нельзя чистить контекст равному или старшему", show_alert=True)
+        return
     await store.reset(user_id)
     text, kb = await render_card(store, user_id, settings)
     with contextlib.suppress(TelegramAPIError):
@@ -1079,7 +1117,7 @@ async def cb_find(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
-@router.message(Panel.search, F.text)
+@router.message(Panel.search, F.text, ~Command("cancel"))
 async def on_search(message: Message, store: Store, settings: Settings, state: FSMContext) -> None:
     raw = (message.text or "").strip()
     if not raw.lstrip("-").isdigit():

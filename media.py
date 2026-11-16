@@ -25,6 +25,9 @@ log = logging.getLogger("media")
 VIDEO_MAX_BYTES = 20 * 1024 * 1024
 FRAME_COUNT = 4
 FRAME_WIDTH = 480
+# Верхняя граница выборки: хватает на ~20 минут видео при fps=1/2,
+# но не даёт ffmpeg съесть память на многочасовой записи.
+VIDEO_SAMPLE_FRAMES = 600
 
 try:  # Pillow нужен и для стикеров, и для сетки кадров.
     from PIL import Image, ImageOps
@@ -64,6 +67,23 @@ def _split_frames(raw: bytes) -> list[bytes]:
     return frames
 
 
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _split_png(raw: bytes) -> list[bytes]:
+    """Режет PNG-поток ffmpeg на отдельные файлы по сигнатуре и чанку IEND."""
+    frames: list[bytes] = []
+    start = raw.find(_PNG_SIGNATURE)
+    while start != -1:
+        end = raw.find(b"IEND", start + len(_PNG_SIGNATURE))
+        if end == -1:
+            break
+        end += len(b"IEND") + 4  # CRC после IEND
+        frames.append(raw[start:end])
+        start = raw.find(_PNG_SIGNATURE, end)
+    return frames
+
+
 def video_frames(data: bytes, count: int = FRAME_COUNT) -> list[bytes]:
     """Достаёт до `count` JPEG-кадров, равномерно разнесённых по видео."""
     binary = ffmpeg_path()
@@ -75,6 +95,7 @@ def video_frames(data: bytes, count: int = FRAME_COUNT) -> list[bytes]:
         command = [
             binary,
             "-hide_banner",
+            "-nostdin",
             "-loglevel",
             "error",
             "-i",
@@ -82,7 +103,9 @@ def video_frames(data: bytes, count: int = FRAME_COUNT) -> list[bytes]:
             "-vf",
             f"fps=1/2,scale={FRAME_WIDTH}:-2",
             "-frames:v",
-            str(max(count * 3, count)),
+            str(VIDEO_SAMPLE_FRAMES),
+            "-an",
+            "-sn",
             "-f",
             "image2pipe",
             "-vcodec",
@@ -93,6 +116,7 @@ def video_frames(data: bytes, count: int = FRAME_COUNT) -> list[bytes]:
             result = subprocess.run(
                 command,
                 capture_output=True,
+                stdin=subprocess.DEVNULL,
                 timeout=60,
                 check=False,
             )
@@ -122,7 +146,14 @@ def contact_sheet(frames: list[bytes], columns: int = 2) -> bytes:
     images = []
     for frame in frames:
         try:
-            images.append(Image.open(io.BytesIO(frame)).convert("RGB"))
+            image = Image.open(io.BytesIO(frame))
+            # Кадры .tgs/.webm приходят с прозрачностью: без подложки
+            # convert("RGB") делает прозрачное чёрным.
+            if image.mode in {"RGBA", "LA", "P"}:
+                image = image.convert("RGBA")
+                background = Image.new("RGBA", image.size, (255, 255, 255, 255))
+                image = Image.alpha_composite(background, image)
+            images.append(image.convert("RGB"))
         except Exception:  # noqa: BLE001
             continue
     if not images:
@@ -209,7 +240,9 @@ def tgs_text(data: bytes) -> str:
     if not data:
         return ""
     try:
-        raw = gzip.decompress(data)
+        # Ограничиваем распаковку: 5 МБ gzip могут развернуться в гигабайты.
+        with gzip.GzipFile(fileobj=io.BytesIO(data)) as archive:
+            raw = archive.read(1_000_000)
     except OSError:
         raw = data
     try:
@@ -249,6 +282,7 @@ def sticker_video_frames(data: bytes, count: int = 4) -> list[bytes]:
         command = [
             binary,
             "-hide_banner",
+            "-nostdin",
             "-loglevel",
             "error",
             "-i",
@@ -257,15 +291,22 @@ def sticker_video_frames(data: bytes, count: int = 4) -> list[bytes]:
             f"fps=4,scale={FRAME_WIDTH}:-2",
             "-frames:v",
             str(max(count * 2, count)),
+            "-an",
+            "-sn",
             "-f",
             "image2pipe",
             "-vcodec",
-            "mjpeg",
+            # VP9-стикеры несут альфа-канал: MJPEG его теряет и даёт чёрный фон.
+            "png",
             "pipe:1",
         ]
         try:
             result = subprocess.run(
-                command, capture_output=True, timeout=45, check=False
+                command,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=45,
+                check=False,
             )
         except (OSError, subprocess.SubprocessError) as exc:
             log.info("ffmpeg не смог разобрать видео-стикер: %s", exc)
@@ -273,7 +314,7 @@ def sticker_video_frames(data: bytes, count: int = 4) -> list[bytes]:
         if result.returncode != 0:
             log.info("ffmpeg для стикера вернул %s", result.returncode)
             return []
-        frames = _split_frames(result.stdout)
+        frames = _split_png(result.stdout)
     if len(frames) <= count:
         return frames
     step = len(frames) / count

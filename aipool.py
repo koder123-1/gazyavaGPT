@@ -41,8 +41,15 @@ def parse_model_list(payload: Any) -> tuple[list[str], set[str]]:
         lifecycle = item.get("lifecycle")
         if lifecycle not in (None, "active"):
             continue
-        models.append(name)
         capabilities = item.get("capabilities") or {}
+        # В каталоге шлюза рядом с чат-моделями лежат embedding/tts/image:
+        # если они попадут в ротацию, ответом будет 400/404.
+        kind = str(
+            item.get("type") or capabilities.get("type") or ""
+        ).lower()
+        if kind and kind not in {"chat", "chat.completion", "language"}:
+            continue
+        models.append(name)
         if capabilities.get("vision"):
             vision.add(name)
     return models, vision
@@ -71,7 +78,11 @@ class ModelPool:
         self._vision: set[str] = set()
         self._failed: dict[str, float] = {}
         self._cursor = 0
-        self._discovered_at = 0.0
+        # time.monotonic() — секунды с запуска машины, поэтому 0.0 означал бы
+        # «список уже свежий» первые часы после деплоя и отключал автоподбор.
+        self._discovered_at = float("-inf")
+        # Не долбим упавший /models на каждом сообщении: пауза после ошибки.
+        self._retry_at = 0.0
         self._lock = asyncio.Lock()
 
     @property
@@ -122,25 +133,34 @@ class ModelPool:
             return
         async with self._lock:
             now = self._clock()
+            if now < self._retry_at:
+                return
             if self._models and now - self._discovered_at < self._ttl:
                 return
             headers = {"Accept": "application/json"}
             if self._api_key:
                 headers["Authorization"] = f"Bearer {self._api_key}"
             try:
-                async with session.get(self._discover_url, headers=headers) as resp:
-                    if resp.status != 200:
-                        log.warning(
-                            "Список моделей недоступен: HTTP %s", resp.status
-                        )
-                        return
-                    data = await resp.json()
+                # Список моделей не должен задерживать сам ответ: короткий таймаут.
+                async with asyncio.timeout(10):
+                    async with session.get(
+                        self._discover_url, headers=headers
+                    ) as resp:
+                        if resp.status != 200:
+                            log.warning(
+                                "Список моделей недоступен: HTTP %s", resp.status
+                            )
+                            self._retry_at = now + 300.0
+                            return
+                        data = await resp.json()
             except Exception as exc:  # noqa: BLE001 — список моделей не критичен
                 log.warning("Не удалось получить список моделей: %r", exc)
+                self._retry_at = now + 300.0
                 return
 
             models, vision = parse_model_list(data)
             if not models:
+                self._retry_at = now + 300.0
                 return
             preferred = [m for m in self._fixed if m in models]
             self._models = preferred + [m for m in models if m not in preferred]

@@ -7,7 +7,7 @@ import logging
 from html import escape
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -292,7 +292,10 @@ async def _notify_staff(
         f"Тема: {escape(topic_title(ticket['topic']))}\n"
         f"От: {escape(display_name(ticket))} (<code>{ticket['user_id']}</code>)"
     )
-    preview = body if len(body) <= 900 else body[:900] + "…"
+    # Обрезаем ПОСЛЕ экранирования: & < > " раздувают текст и ломают лимит 4096.
+    preview = escape(body)
+    if len(preview) > 900:
+        preview = preview[:899].rstrip() + "…"
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -308,7 +311,7 @@ async def _notify_staff(
             continue
         with contextlib.suppress(TelegramAPIError):
             await bot.send_message(
-                staff_id, f"{header}\n\n{escape(preview)}", reply_markup=kb
+                staff_id, f"{header}\n\n{preview}", reply_markup=kb
             )
 
 
@@ -719,17 +722,29 @@ async def on_staff_reply(
         ]
     )
     delivered = True
+    reason = ""
+    sent_text = escape(text)
+    if len(sent_text) > 3500:
+        # Лимит Telegram — 4096 символов HTML; режем уже экранированный текст.
+        sent_text = sent_text[:3499].rstrip() + "…"
     try:
         await bot.send_message(
             ticket["user_id"],
-            f"💬 <b>Ответ поддержки</b> · обращение #{ticket_id}\n\n{escape(text)}",
+            f"💬 <b>Ответ поддержки</b> · обращение #{ticket_id}\n\n{sent_text}",
             reply_markup=kb,
         )
+    except TelegramForbiddenError:
+        delivered = False
+        reason = "пользователь закрыл личку или заблокировал бота"
+    except TelegramBadRequest:
+        delivered = False
+        reason = "Telegram не принял сообщение (возможно, оно слишком длинное)"
     except TelegramAPIError:
         delivered = False
+        reason = "временная ошибка Telegram"
 
     note = "Пользователь получил ответ в личку." if delivered else (
-        "⚠️ Не смог доставить: пользователь не писал боту или закрыл личку."
+        f"⚠️ Не смог доставить: {reason}."
     )
     await message.answer(f"✅ Ответ добавлен в #{ticket_id}. {note}")
     rendered = await render_ticket(store, ticket_id, staff=True)

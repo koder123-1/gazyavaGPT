@@ -1020,6 +1020,18 @@ TR: dict[str, dict[str, str]] = {
         "be": "🖼 Яшчэ варыянт",
         "en": "🖼 One more",
     },
+    "img.old_request": {
+        "ru": "Запрос устарел — напиши /imagine заново.",
+        "uk": "Запит застарів — напиши /imagine знову.",
+        "be": "Запыт састарэў — напішы /imagine зноў.",
+        "en": "This request expired — send /imagine again.",
+    },
+    "img.more_generating": {
+        "ru": "Рисую ещё вариант…",
+        "uk": "Малюю ще варіант…",
+        "be": "Малюю яшчэ варыянт…",
+        "en": "Drawing one more…",
+    },
     "img.quota_exhausted": {
         "ru": (
             "🖼 <b>Лимит картинок на сегодня исчерпан</b>\n\n"

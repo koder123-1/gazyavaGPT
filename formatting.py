@@ -434,7 +434,10 @@ _EMOJI = {
     "решение": "🧮", "solution": "🧮",
     "ответ": "✅", "answer": "✅",
 }
-_STEP_RE = re.compile(r"^(?:Шаг|Step)?\s*(\d{1,2})\s*[).:]\s*(.+)$", re.IGNORECASE)
+_STEP_RE = re.compile(
+    r"^(?:(?:Шаг|Step)\s*(\d{1,2})\s*[).:]|(\d{1,2})\s*[).])\s+(.+)$",
+    re.IGNORECASE,
+)
 _COLUMN_CHARS = set("0123456789 +-−×÷=.,:;/\\|()[]<>%√²³⁴⁵⁶⁷⁸⁹⁰")
 
 # Шаги решения получают крупный номер-значок вместо служебного «Шаг N.».
@@ -543,12 +546,13 @@ def _render_section_body(lines: list[str]) -> str:
         step = _STEP_RE.match(stripped)
         if step:
             flush_column()
-            number = int(step.group(1))
+            number = int(step.group(1) or step.group(2))
+            text = step.group(3)
             if 1 <= number <= len(_KEYCAPS):
                 mark = _KEYCAPS[number - 1]
             else:
                 mark = f"<b>{number}.</b>"
-            out.append(f"{mark} {_render_line(step.group(2))}")
+            out.append(f"{mark} {_render_line(text)}")
             continue
         if _looks_like_column(stripped):
             column.append(escape(line))

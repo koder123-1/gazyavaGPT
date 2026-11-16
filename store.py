@@ -6,7 +6,7 @@ import logging
 from collections import defaultdict, deque
 from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from config import Settings
 
@@ -32,6 +32,8 @@ class Store(Protocol):
 
     async def remaining(self, user_id: int, daily_limit: int) -> int: ...
     async def consume(self, user_id: int, daily_limit: int = 0) -> int: ...
+    async def try_consume(self, user_id: int, daily_limit: int = 0) -> str | None: ...
+    async def refund_consume(self, user_id: int, kind: str = "free") -> None: ...
     async def bonus_requests(self, user_id: int) -> int: ...
     async def add_bonus(self, user_id: int, count: int) -> int: ...
     async def add_bonus_all(self, count: int) -> int: ...
@@ -39,8 +41,16 @@ class Store(Protocol):
     async def add_image_credits(self, user_id: int, count: int) -> int: ...
     async def image_used_today(self, user_id: int) -> int: ...
     async def consume_image(self, user_id: int) -> int: ...
+    async def spend_image(self, user_id: int, daily_limit: int = 0) -> str | None: ...
+    async def refund_image(self, user_id: int, kind: str = "free") -> None: ...
     async def record_payment(
-        self, user_id: int, requests: int, stars: int, charge_id: str, kind: str = "requests"
+        self,
+        user_id: int,
+        requests: int,
+        stars: int,
+        charge_id: str,
+        kind: str = "requests",
+        model: str | None = None,
     ) -> bool: ...
     async def get_payment(self, payment_id: int) -> dict | None: ...
     async def mark_payment_refunded(self, payment_id: int) -> dict | None: ...
@@ -225,6 +235,33 @@ class MemoryStore:
     async def bonus_requests(self, user_id: int) -> int:
         return int(self._users.get(user_id, {}).get("bonus_requests", 0))
 
+    async def try_consume(self, user_id: int, daily_limit: int = 0) -> str | None:
+        """Атомарно занимает запрос: 'free', 'bonus' или None (лимит исчерпан)."""
+        used = self._used_today(user_id)
+        if daily_limit <= 0 or used < daily_limit:
+            kind = "free"
+        else:
+            user = self._users.get(user_id)
+            if user is None or int(user.get("bonus_requests", 0)) <= 0:
+                return None
+            user["bonus_requests"] = int(user.get("bonus_requests", 0)) - 1
+            kind = "bonus"
+        self._usage[user_id] = (date.today(), used + 1)
+        self._total_requests[user_id] += 1
+        self._daily[date.today()] += 1
+        return kind
+
+    async def refund_consume(self, user_id: int, kind: str = "free") -> None:
+        used = self._used_today(user_id)
+        if used > 0:
+            self._usage[user_id] = (date.today(), used - 1)
+            self._total_requests[user_id] = max(0, self._total_requests[user_id] - 1)
+            self._daily[date.today()] = max(0, self._daily[date.today()] - 1)
+        if kind == "bonus":
+            user = self._users.get(user_id)
+            if user is not None:
+                user["bonus_requests"] = int(user.get("bonus_requests", 0)) + 1
+
     async def add_bonus(self, user_id: int, count: int) -> int:
         user = self._users.setdefault(
             user_id,
@@ -259,6 +296,26 @@ class MemoryStore:
         used += 1
         self._image_usage[user_id] = (date.today(), used)
         return used
+
+    async def spend_image(self, user_id: int, daily_limit: int = 0) -> str | None:
+        """Атомарно занимает генерацию: 'free', 'credit' или None."""
+        used = await self.image_used_today(user_id)
+        if daily_limit <= 0 or used < daily_limit:
+            self._image_usage[user_id] = (date.today(), used + 1)
+            return "free"
+        credits = int(self._image_credits.get(user_id, 0))
+        if credits > 0:
+            self._image_credits[user_id] = credits - 1
+            return "credit"
+        return None
+
+    async def refund_image(self, user_id: int, kind: str = "free") -> None:
+        if kind == "credit":
+            self._image_credits[user_id] = int(self._image_credits.get(user_id, 0)) + 1
+            return
+        used = await self.image_used_today(user_id)
+        if used > 0:
+            self._image_usage[user_id] = (date.today(), used - 1)
 
     async def record_payment(
         self,
@@ -656,10 +713,10 @@ def normalize_db_url(url: str) -> tuple[str, bool]:
     parts = urlsplit(url)
     params = dict(parse_qsl(parts.query))
     sslmode = params.pop("sslmode", "").lower()
-    for noisy in ("channel_binding", "application_name", "options"):
-        params.pop(noisy, None)
-
-    dsn = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), ""))
+    # asyncpg превращает оставшиеся query-параметры в server_settings (GUC).
+    # Ключи из libpq вроде connect_timeout/pgbouncer=sslmode ломают handshake,
+    # поэтому из DSN оставляем только то, что разобрали сами.
+    dsn = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
     use_ssl = sslmode in {"require", "prefer", "verify-ca", "verify-full", "true", "1"}
     if not sslmode and "neon.tech" in parts.netloc:
         use_ssl = True
@@ -669,6 +726,11 @@ def normalize_db_url(url: str) -> tuple[str, bool]:
 class PostgresStore:
     def __init__(self, database_url: str) -> None:
         self._dsn, self._ssl = normalize_db_url(database_url)
+        try:
+            mode = dict(parse_qsl(urlsplit(database_url).query)).get("sslmode", "")
+            self._ssl_verify = mode.strip().lower() not in {"require", "prefer", "true", "1"}
+        except Exception:  # noqa: BLE001
+            self._ssl_verify = True
         self._pool = None
 
     async def start(self) -> None:
@@ -681,17 +743,16 @@ class PostgresStore:
             "max_inactive_connection_lifetime": 60,
         }
         if self._ssl:
-            # Supabase Pooler отдаёт самоподписанный сертификат: sslmode=require
-            # означает шифрование без проверки CA, как и в libpq.
-            if "supabase.co" in self._dsn or "pooler.supabase.com" in self._dsn:
-                import ssl as ssl_module
+            # sslmode=require в libpq — шифрование без проверки CA (Supabase
+            # Pooler отдаёт самоподписанный сертификат). verify-full требует
+            # полноценной проверки.
+            import ssl as ssl_module
 
-                context = ssl_module.create_default_context()
+            context = ssl_module.create_default_context()
+            if not self._ssl_verify:
                 context.check_hostname = False
                 context.verify_mode = ssl_module.CERT_NONE
-                kwargs["ssl"] = context
-            else:
-                kwargs["ssl"] = True
+            kwargs["ssl"] = context
         # Пулер Neon/PgBouncer не умеет prepared statements.
         if "pooler" in self._dsn:
             kwargs["statement_cache_size"] = 0
@@ -860,6 +921,70 @@ class PostgresStore:
                     )
                 return count
 
+    async def try_consume(self, user_id: int, daily_limit: int = 0) -> str | None:
+        """Атомарно резервирует запрос: 'free', 'bonus' или None (лимит исчерпан)."""
+        assert self._pool is not None
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                if daily_limit <= 0:
+                    await conn.execute(
+                        """
+                        INSERT INTO usage (user_id, day, count) VALUES ($1, CURRENT_DATE, 1)
+                        ON CONFLICT (user_id, day) DO UPDATE SET count = usage.count + 1
+                        """,
+                        user_id,
+                    )
+                    return "free"
+                count = await conn.fetchval(
+                    """
+                    INSERT INTO usage (user_id, day, count) VALUES ($1, CURRENT_DATE, 1)
+                    ON CONFLICT (user_id, day) DO UPDATE SET count = usage.count + 1
+                    WHERE usage.count < $2
+                    RETURNING count
+                    """,
+                    user_id,
+                    daily_limit,
+                )
+                if count is not None:
+                    return "free"
+                # Свободных мест нет — списываем купленный/выданный бонус.
+                bonus = await conn.fetchval(
+                    """
+                    UPDATE users SET bonus_requests = bonus_requests - 1
+                    WHERE user_id = $1 AND bonus_requests > 0
+                    RETURNING bonus_requests
+                    """,
+                    user_id,
+                )
+                if bonus is None:
+                    return None
+                await conn.execute(
+                    """
+                    INSERT INTO usage (user_id, day, count) VALUES ($1, CURRENT_DATE, 1)
+                    ON CONFLICT (user_id, day) DO UPDATE SET count = usage.count + 1
+                    """,
+                    user_id,
+                )
+                return "bonus"
+
+    async def refund_consume(self, user_id: int, kind: str = "free") -> None:
+        """Возвращает зарезервированный запрос, если ответ не удался."""
+        assert self._pool is not None
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    """
+                    UPDATE usage SET count = GREATEST(0, count - 1)
+                    WHERE user_id = $1 AND day = CURRENT_DATE
+                    """,
+                    user_id,
+                )
+                if kind == "bonus":
+                    await conn.execute(
+                        "UPDATE users SET bonus_requests = bonus_requests + 1 WHERE user_id = $1",
+                        user_id,
+                    )
+
     async def bonus_requests(self, user_id: int) -> int:
         assert self._pool is not None
         value = await self._pool.fetchval(
@@ -871,8 +996,9 @@ class PostgresStore:
         assert self._pool is not None
         value = await self._pool.fetchval(
             """
-            UPDATE users SET bonus_requests = GREATEST(0, bonus_requests + $2)
-            WHERE user_id = $1
+            INSERT INTO users (user_id, bonus_requests) VALUES ($1, GREATEST(0, $2))
+            ON CONFLICT (user_id) DO UPDATE
+               SET bonus_requests = GREATEST(0, users.bonus_requests + $2)
             RETURNING bonus_requests
             """,
             user_id,
@@ -902,8 +1028,9 @@ class PostgresStore:
         assert self._pool is not None
         value = await self._pool.fetchval(
             """
-            UPDATE users SET image_credits = GREATEST(0, image_credits + $2)
-            WHERE user_id = $1
+            INSERT INTO users (user_id, image_credits) VALUES ($1, GREATEST(0, $2))
+            ON CONFLICT (user_id) DO UPDATE
+               SET image_credits = GREATEST(0, users.image_credits + $2)
             RETURNING image_credits
             """,
             user_id,
@@ -930,6 +1057,51 @@ class PostgresStore:
             user_id,
         )
         return int(value or 0)
+
+    async def spend_image(self, user_id: int, daily_limit: int = 0) -> str | None:
+        """Атомарно резервирует генерацию: 'free', 'credit' или None."""
+        assert self._pool is not None
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                if daily_limit > 0:
+                    count = await conn.fetchval(
+                        """
+                        INSERT INTO image_usage (user_id, day, count)
+                        VALUES ($1, CURRENT_DATE, 1)
+                        ON CONFLICT (user_id, day) DO UPDATE SET count = image_usage.count + 1
+                        WHERE image_usage.count < $2
+                        RETURNING count
+                        """,
+                        user_id,
+                        daily_limit,
+                    )
+                    if count is not None:
+                        return "free"
+                credits = await conn.fetchval(
+                    """
+                    UPDATE users SET image_credits = image_credits - 1
+                    WHERE user_id = $1 AND image_credits > 0
+                    RETURNING image_credits
+                    """,
+                    user_id,
+                )
+                return "credit" if credits is not None else None
+
+    async def refund_image(self, user_id: int, kind: str = "free") -> None:
+        assert self._pool is not None
+        if kind == "credit":
+            await self._pool.execute(
+                "UPDATE users SET image_credits = image_credits + 1 WHERE user_id = $1",
+                user_id,
+            )
+            return
+        await self._pool.execute(
+            """
+            UPDATE image_usage SET count = GREATEST(0, count - 1)
+            WHERE user_id = $1 AND day = CURRENT_DATE
+            """,
+            user_id,
+        )
 
     async def record_payment(
         self,
@@ -1316,7 +1488,12 @@ class PostgresStore:
     async def set_style(self, user_id: int, style: str | None) -> None:
         assert self._pool is not None
         await self._pool.execute(
-            "UPDATE users SET style = $2 WHERE user_id = $1", user_id, style
+            """
+            INSERT INTO users (user_id, style) VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE SET style = EXCLUDED.style
+            """,
+            user_id,
+            style,
         )
 
     # ------------------------------------------------------------------ роли
@@ -1539,6 +1716,8 @@ CREATE TABLE IF NOT EXISTS usage (
     count   INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (user_id, day)
 );
+
+CREATE INDEX IF NOT EXISTS usage_day_idx ON usage (day);
 
 CREATE TABLE IF NOT EXISTS image_usage (
     user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,

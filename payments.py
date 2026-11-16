@@ -264,12 +264,13 @@ async def cb_buy(call: CallbackQuery, bot: Bot, store: Store, settings: Settings
         await call.answer("Тариф изменился — открой /buy заново", show_alert=True)
         return
 
-    await call.answer()
     try:
         await send_stars_invoice(bot, call.from_user.id, requests, stars, settings)
     except TelegramAPIError as exc:
         log.warning("Не удалось выставить счёт %s: %s", call.from_user.id, exc)
         await call.answer("Не смог выставить счёт. Напиши мне в личку /buy", show_alert=True)
+        return
+    await call.answer()
 
 
 # --------------------------------------------------------------------------- своя сумма
@@ -361,6 +362,34 @@ async def on_paid(message: Message, bot: Bot, store: Store, settings: Settings) 
         return
 
     model = parse_model_payload(payment.invoice_payload)
+    if not model:
+        # Оплата модели, но каталог успел измениться: принимаем платёж,
+        # записываем его для возврата и не оставляем пользователя без ответа.
+        parts = (payment.invoice_payload or "").split(":")
+        if len(parts) == 3 and parts[0] == MODEL_PREFIX:
+            await store.ensure_user(user.id, user.username, user.first_name)
+            await store.record_payment(
+                user.id,
+                0,
+                payment.total_amount,
+                payment.telegram_payment_charge_id,
+                kind="model",
+                model=parts[1] or None,
+            )
+            await message.answer(
+                "Оплата получена, но тариф этой модели уже изменился. "
+                "Напиши /paysupport — вернём звёзды."
+            )
+            await notify_admins(
+                bot,
+                f"⚠️ <b>Оплата устаревшей модели</b>\n"
+                f"Пользователь: {escape(user.full_name)} (<code>{user.id}</code>)\n"
+                f"Payload: <code>{escape(payment.invoice_payload)}</code>\n"
+                f"Сумма: {payment.total_amount} ⭐ — нужен возврат.",
+                store,
+                settings,
+            )
+            return
     if model:
         model_id, _ = model
         await store.ensure_user(user.id, user.username, user.first_name)
@@ -385,7 +414,7 @@ async def on_paid(message: Message, bot: Bot, store: Store, settings: Settings) 
             await message.answer(
                 f"🧠 <b>Модель открыта!</b>\n\n"
                 f"Теперь отвечает: <b>{escape(title)}</b>\n"
-                f"Оплата разовая — модель останется у тебя.\n\n"
+                "Оплата разовая — модель останется у тебя.\n\n"
                 "Сменить модель — /model. Вопросы по оплате — /paysupport."
             )
             await notify_admins(
@@ -397,7 +426,17 @@ async def on_paid(message: Message, bot: Bot, store: Store, settings: Settings) 
                 settings,
             )
         else:
-            await message.answer("✅ Эта оплата уже учтена. Модель уже открыта — /model.")
+            # Telegram повторил апдейт, а доступ мог не сохраниться (сбой между
+            # записью платежа и выдачей). Довыдаём модель, если её ещё нет.
+            if not await store.has_model_access(user.id, model_id):
+                await store.grant_model(user.id, model_id)
+                await store.set_model(user.id, model_id)
+                await message.answer(
+                    f"✅ Оплата подтверждена — доступ к модели "
+                    f"<b>{escape(title)}</b> восстановлен."
+                )
+            else:
+                await message.answer("✅ Эта оплата уже учтена. Модель уже открыта — /model.")
         return
 
     parsed = parse_payload(payment.invoice_payload)

@@ -54,8 +54,8 @@ def _safe_packages(
 async def load_runtime(store: Store, settings: Settings) -> Runtime:
     overrides = await store.all_settings()
     return Runtime(
-        daily_limit=_safe_int(overrides.get("daily_limit"), settings.daily_limit),
-        max_context=_safe_int(overrides.get("max_context"), settings.max_context),
+        daily_limit=max(0, _safe_int(overrides.get("daily_limit"), settings.daily_limit)),
+        max_context=max(0, _safe_int(overrides.get("max_context"), settings.max_context)),
         model=(overrides.get("ai_model") or settings.ai_model).strip(),
         vision_model=(overrides.get("ai_vision_model") or settings.ai_vision_model).strip(),
         system_prompt=(overrides.get("system_prompt") or settings.system_prompt).strip(),

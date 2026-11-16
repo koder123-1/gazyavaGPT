@@ -69,11 +69,13 @@ _EXT_BY_MIME = {
 
 # Заголовки решения: «📌 Условие», «🧮 Решение», «✅ Ответ».
 _HEADER_RE = re.compile(r"^\s*(?:📌|🧮|✅|📄|📝)\s*(.+?)\s*:?\s*$")
-_STEP_RE = re.compile(r"^\s*(?:Шаг\s*)?(\d{1,2})\s*[).:]\s*(.+)$", re.IGNORECASE)
+_STEP_RE = re.compile(r"^\s*(?:Шаг\s*)?(\d{1,2})[).]\s+(?!\d)(.+)$", re.IGNORECASE)
 _EMOJI_RE = re.compile(
     "[\U0001f000-\U0001faff\u2600-\u27bf\u2b00-\u2bff\ufe0f\u200d\u20e3]"
 )
 _BAD_NAME_RE = re.compile(r'[\\/:*?"<>|\r\n\t]+')
+# Управляющие символы ломают python-docx/openpyxl (ValueError/IllegalCharacterError).
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 class FileError(Exception):
@@ -107,8 +109,14 @@ def sanitize_name(name: str, ext: str) -> str:
     if ext and base.lower().endswith(ext.lower()):
         stem = base[: -len(ext)].strip(" ._")[:60] or "gazyavaGPT"
         return stem + ext
-    base = base[:60] or "gazyavaGPT"
-    return base + ext
+    if not base:
+        return "gazyavaGPT" + ext
+    # Длинное имя режем по основе, иначе обрезается расширение — и файл
+    # превращается в «неизвестный формат».
+    suffix = Path(base).suffix
+    stem = base[: -len(suffix)] if suffix else base
+    stem = stem.strip(" ._")[:60] or "gazyavaGPT"
+    return stem + suffix + ext
 
 
 # --------------------------------------------------------------------------- чтение
@@ -123,21 +131,41 @@ def _decode(data: bytes) -> str:
     return data.decode("latin-1", errors="replace")
 
 
+def _check_zip(data: bytes) -> None:
+    """Защита от zip-бомбы: 20 МБ архива могут развернуться в гигабайты."""
+    try:
+        import zipfile
+
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            total = sum(info.file_size for info in archive.infolist())
+    except Exception:  # noqa: BLE001 — не архив или битый: пусть решает парсер
+        return
+    if total > 120 * 1024 * 1024:
+        raise FileError("file.too_big", mb=20)
+
+
 def extract_text(
     data: bytes, filename: str | None, mime: str | None = None, max_pages: int = 60
 ) -> str:
     """Достаёт текст из файла. Бросает FileError с ключом для пользователя."""
     ext = extension(filename, mime)
-    if ext == ".pdf":
-        return _read_pdf(data, max_pages)
-    if ext == ".docx":
-        return _read_docx(data)
-    if ext == ".xlsx":
-        return _read_xlsx(data)
-    if ext == ".pptx":
-        return _read_pptx(data)
-    if ext in TEXT_EXTS:
-        return _decode(data)
+    if ext in {".docx", ".xlsx", ".pptx"}:
+        _check_zip(data)
+    try:
+        if ext == ".pdf":
+            return _read_pdf(data, max_pages)
+        if ext == ".docx":
+            return _read_docx(data)
+        if ext == ".xlsx":
+            return _read_xlsx(data)
+        if ext == ".pptx":
+            return _read_pptx(data)
+        if ext in TEXT_EXTS:
+            return _decode(data)
+    except FileError:
+        raise
+    except Exception:  # noqa: BLE001 — ленивые парсеры падают уже после открытия
+        raise FileError("file.empty") from None
     raise FileError("file.unsupported", ext=ext or "?")
 
 
@@ -150,10 +178,13 @@ def _read_pdf(data: bytes, max_pages: int = 60) -> str:
     try:
         reader = PdfReader(io.BytesIO(data))
         if reader.is_encrypted:
+            # pypdf не бросает исключение при неверном пароле, а возвращает 0.
             try:
-                reader.decrypt("")
+                unlocked = reader.decrypt("")
             except Exception:  # noqa: BLE001
-                raise FileError("file.locked") from None
+                unlocked = 0
+            if not unlocked:
+                raise FileError("file.locked")
         pages = reader.pages[: max(1, max_pages)]
         chunks: list[str] = []
         for number, page in enumerate(pages, start=1):
@@ -539,6 +570,8 @@ def build_output(text: str, fmt: str, name: str | None = None) -> tuple[bytes, s
     builder = builders.get(fmt)
     if builder is None:
         raise FileError("file.unsupported", ext=fmt)
+    # Управляющие символы из ответа модели или PDF ломают сборку office-файлов.
+    text = _CONTROL_RE.sub("", text or "")
     ext = OUTPUT_EXTS[fmt]
     base = name or ("gazyavaGPT-код" if fmt in {"py", "html", "css", "js"} else "gazyavaGPT-решение")
     filename = sanitize_name(base, ext)
@@ -693,8 +726,12 @@ _FILE_VERB = re.compile(
 )
 
 
-def detect_output_format(instruction: str | None) -> str | None:
-    """Если пользователь просит файл — вернуть формат. Иначе None."""
+def detect_output_format(instruction: str | None, *, generic: bool = True) -> str | None:
+    """Если пользователь просит файл — вернуть формат. Иначе None.
+
+    generic=False отключает «просто файл → DOCX»: при переводе или конспекте
+    присланного PDF нельзя молча менять формат на DOCX.
+    """
     text = (instruction or "").strip()
     if not text:
         return None
@@ -705,7 +742,7 @@ def detect_output_format(instruction: str | None) -> str | None:
         for fmt, pattern in _FORMAT_WORDS:
             if pattern.search(text):
                 return fmt
-    if _GENERIC_FILE.search(text):
+    if generic and _GENERIC_FILE.search(text):
         return "docx"
     return None
 
@@ -769,7 +806,7 @@ def wants_document_output(text: str | None) -> bool:
     raw = (text or "").strip()
     if not raw or _QUESTION_START.match(raw):
         return False
-    return detect_output_format(raw) is not None
+    return detect_output_format(raw, generic=False) is not None
 
 
 def is_pure_file_request(text: str | None) -> bool:

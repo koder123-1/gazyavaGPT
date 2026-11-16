@@ -108,9 +108,12 @@ class AIClient:
             )
 
     async def close(self) -> None:
-        if self._session is not None and not self._session.closed:
-            await self._session.close()
+        session = self._session
         self._session = None
+        if session is not None and not getattr(session, "closed", False):
+            closer = getattr(session, "close", None)
+            if closer is not None:
+                await closer()
         if self._fallback is not None:
             await self._fallback.close()
 
@@ -158,7 +161,10 @@ class AIClient:
                 candidates = ordered or ([primary] if primary else [])
         elif image is not None:
             candidates = [vision_model or settings.ai_vision_model]
-            candidates += [m for m in VISION_FALLBACKS if m not in candidates]
+            # VISION_FALLBACKS — id моделей OpenRouter; другим провайдерам они
+            # дают только 404 и лишние запросы.
+            if settings.ai_provider == "openrouter":
+                candidates += [m for m in VISION_FALLBACKS if m not in candidates]
         else:
             candidates = [model or settings.ai_model]
 
@@ -210,6 +216,8 @@ class AIClient:
                     pool.mark_failed(candidate)
                     log.warning("Модель %s не ответила: %s -> пробуем ещё", candidate, exc)
             if round_no + 1 < rounds:
+                # Не бомбим провайдера повтором сразу: у 429 просили подождать.
+                await asyncio.sleep(1.5)
                 log.info("Повторный запрос к ИИ после пустого ответа")
 
         last = errors[-1] if errors else AIError("Сервис ИИ недоступен. Попробуй позже.")
@@ -243,6 +251,10 @@ class AIClient:
         """Отвечает через резервного провайдера или поднимает исходную ошибку."""
         if self._fallback is None:
             raise exc
+        # Имена моделей у провайдеров разные: нельзя передавать резерву чужой
+        # AI_MODEL/AI_VISION_MODEL, иначе гарантированный 404.
+        kwargs.pop("model", None)
+        kwargs.pop("vision_model", None)
         log.warning("Основной провайдер не ответил (%s) -> резервный", exc)
         return await self._fallback.reply(history, text, **kwargs)
 
@@ -279,9 +291,21 @@ class AIClient:
                         message, retryable = self._explain_status(
                             resp.status, raw, settings.ai_provider
                         )
-                        # Неверный ключ/скоуп одинаков для всех моделей: перебор
-                        # остальных ничего не даст, только сожжёт время.
-                        fatal = resp.status in {401, 403}
+                        # 401 — ключ неверный для всех моделей. 403 у шлюзов
+                        # часто про конкретную модель (скоуп/модерация), поэтому
+                        # его пробуем на следующей модели.
+                        fatal = resp.status == 401
+                        if resp.status == 403:
+                            low = raw.lower()
+                            fatal = any(
+                                marker in low
+                                for marker in (
+                                    "insufficient_scope",
+                                    "invalid_api_key",
+                                    "invalid api key",
+                                )
+                            )
+                            retryable = retryable or not fatal
                         raise AIError(message, retryable=retryable, fatal=fatal)
                     data = json.loads(raw)
             except TimeoutError as exc:
@@ -309,7 +333,10 @@ class AIClient:
         image_mime: str,
     ) -> tuple[str, dict[str, str], dict[str, Any]]:
         s = self._settings
-        base = s.ai_base_url or "https://generativelanguage.googleapis.com"
+        base = (s.ai_base_url or "https://generativelanguage.googleapis.com").rstrip("/")
+        # AI_BASE_URL часто копируют из доков Google вместе с /v1beta.
+        if base.endswith("/v1beta"):
+            base = base[: -len("/v1beta")]
         url = f"{base}/v1beta/models/{model}:generateContent"
         headers = {"x-goog-api-key": s.ai_api_key, "Content-Type": "application/json"}
 
@@ -387,6 +414,14 @@ class AIClient:
     # ------------------------------------------------------------------ разбор
     @staticmethod
     def _extract_text(data: dict[str, Any]) -> str:
+        # Некоторые шлюзы отвечают HTTP 200 с объектом ошибки вместо ответа.
+        error = data.get("error")
+        if isinstance(error, dict):
+            detail = str(error.get("message") or "").strip()
+            raise AIError(
+                detail or "Сервис ИИ вернул ошибку. Попробуй ещё раз.",
+                retryable=True,
+            )
         if "candidates" in data:  # Gemini
             candidates = data.get("candidates") or []
             if not candidates:

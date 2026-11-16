@@ -304,8 +304,9 @@ async def cb_style(call: CallbackQuery, store: Store, settings: Settings) -> Non
         await store.set_style(user.id, None if action == "auto" else action)
 
     text, kb = await render_styles(store, user.id, lang)
-    with contextlib.suppress(TelegramAPIError):
-        await call.message.edit_text(text, reply_markup=kb)
+    if isinstance(call.message, Message):
+        with contextlib.suppress(TelegramAPIError):
+            await call.message.edit_text(text, reply_markup=kb)
     if action == "menu":
         await call.answer()
     else:
@@ -518,6 +519,11 @@ async def keep_typing(bot: Bot, chat_id: int) -> AsyncIterator[None]:
             await task
 
 
+def _tg_len(text: str) -> int:
+    """Telegram считает длину в UTF-16: эмодзи 📌 весит 2, а не 1."""
+    return len(text.encode("utf-16-le")) // 2
+
+
 def html_parts(
     chunk: str, limit: int = HTML_LIMIT, *, code: bool = False
 ) -> list[tuple[str, str]]:
@@ -527,10 +533,10 @@ def html_parts(
     в plain-виде влезал, в HTML может не влезть. Тогда дробим ещё мельче.
     """
     html = to_telegram_html(chunk, code=code)
-    if len(html) <= limit:
+    if _tg_len(html) <= limit:
         return [(html, chunk)]
     # Пропорционально ужимаем plain-кусок под HTML-лимит.
-    smaller = max(100, len(chunk) * limit // max(1, len(html)) - 1)
+    smaller = max(100, len(chunk) * limit // max(1, _tg_len(html)) - 1)
     pieces = split_text(chunk, max(100, smaller))
     if len(pieces) <= 1:
         pieces = [chunk[i : i + max(100, smaller)] for i in range(0, len(chunk), max(100, smaller))]
@@ -556,7 +562,13 @@ async def send_answer(
         try:
             await message.reply(html, parse_mode="HTML", reply_markup=markup)
         except TelegramBadRequest:
-            await message.reply(plain, parse_mode=None, reply_markup=markup)
+            # Битая разметка — шлём обычным текстом. Если не вышло и это,
+            # значит исходное сообщение удалили: отвечаем без reply.
+            try:
+                await message.reply(plain, parse_mode=None, reply_markup=markup)
+            except TelegramBadRequest:
+                with contextlib.suppress(TelegramAPIError):
+                    await message.answer(plain, parse_mode=None, reply_markup=markup)
 
 
 def answer_kb(
@@ -611,7 +623,9 @@ async def load_image(
     elif message.document is not None:
         document = message.document
         mime = (document.mime_type or "").lower()
-        if not mime.startswith("image/"):
+        if not mime.startswith("image/") and not files.is_image_document(
+            document.file_name, document.mime_type
+        ):
             return None, mime, t(lang, "image.not_image")
         if (document.file_size or 0) > IMAGE_MAX_BYTES:
             return None, mime, t(lang, "image.too_big")
@@ -716,26 +730,27 @@ async def send_generated(
 
     user = actor or message.from_user
     runtime = await load_runtime(store, settings) if store else None
-    free_left = 0
-    credits = 0
-    charge = False
+    limit = runtime.image_daily_limit if runtime else 0
+    spend: str | None = None
+    charged = False
     if store is not None and user is not None:
         await store.ensure_user(user.id, user.username, user.first_name)
         admin = await is_admin(user.id, settings, store)
-        limit = runtime.image_daily_limit if runtime else 0
-        used = await store.image_used_today(user.id)
-        credits = await store.image_credits(user.id)
-        free_left = max(0, limit - used)
-        if not admin and free_left <= 0 and credits <= 0:
-            await message.reply(
-                t(lang, "img.quota_exhausted", limit=limit),
-                reply_markup=image_more_kb(prompt, lang),
-            )
-            return
-        charge = not admin
+        if not admin:
+            # Резерв до генерации: два одновременных запроса не получат
+            # бесплатную картинку по одному и тому же остатку лимита.
+            spend = await store.spend_image(user.id, limit)
+            if spend is None:
+                await message.reply(
+                    t(lang, "img.quota_exhausted", limit=limit),
+                    reply_markup=image_more_kb(prompt, lang),
+                )
+                return
+            charged = True
 
     status = await message.reply(t(lang, "img.generating"))
     markup = image_more_kb(prompt, lang) if source is None else None
+    delivered = False
     try:
         if source is not None:
             data = await images.edit(source, mime, prompt)
@@ -743,17 +758,13 @@ async def send_generated(
             data = await images.generate(prompt)
         if not data:
             raise ImageError("empty")
-        if charge and user is not None and store is not None:
-            if free_left > 0:
-                await store.consume_image(user.id)
-            else:
-                await store.add_image_credits(user.id, -1)
         await message.reply_photo(
             photo=BufferedInputFile(data, filename=image_filename(data)),
             caption=t(lang, "img.done", prompt=escape(prompt[:500])),
             parse_mode="HTML",
             reply_markup=markup,
         )
+        delivered = True
     except ImageUnsupported:
         await message.reply(t(lang, "img.edit_unsupported"))
     except ImageNoCredits:
@@ -769,6 +780,9 @@ async def send_generated(
         log.exception("Ошибка генерации картинки")
         await message.reply(t(lang, "img.failed"), reply_markup=markup)
     finally:
+        if charged and not delivered and spend and user is not None and store is not None:
+            with contextlib.suppress(Exception):
+                await store.refund_image(user.id, spend)
         with contextlib.suppress(Exception):
             await status.delete()
 
@@ -826,13 +840,13 @@ async def cb_image_more(
 ) -> None:
     token = call.data.rsplit(":", 1)[1]
     prompt = _image_prompts.get(token)
+    lang = await user_lang(store, settings, call.from_user.id)
     if not prompt:
-        await call.answer("Запрос устарел — напиши /imagine заново.", show_alert=True)
+        await call.answer(t(lang, "img.old_request"), show_alert=True)
         return
-    await call.answer("Рисую ещё вариант…")
+    await call.answer(t(lang, "img.more_generating"))
     if call.message is None:
         return
-    lang = await user_lang(store, settings, call.from_user.id)
     await send_generated(
         call.message, images, settings, lang, prompt, store=store, actor=call.from_user
     )
@@ -909,7 +923,7 @@ async def answer_with_ai(
     if len(question) > max_chars:
         question = question[:max_chars]
         if max_chars == MAX_INPUT_CHARS:
-            await message.reply(f"Вопрос обрезан до {MAX_INPUT_CHARS} символов.")
+            await message.reply(t(lang, "err.truncated", limit=MAX_INPUT_CHARS))
 
     payload_text = f"{instruction}\n\n---\n{question}" if instruction else question
 
@@ -980,6 +994,29 @@ async def answer_with_ai(
 
     chosen_model = await user_model(store, settings, runtime, user.id)
 
+    # Резервируем запрос до обращения к ИИ: два параллельных сообщения не должны
+    # оба пройти по последнему бесплатному лимиту и по одному бонусу.
+    reserved: str | None = None
+    if not admin:
+        reserved = await store.try_consume(user.id, runtime.daily_limit)
+        if reserved is None:
+            kb = None
+            if settings.payments_enabled:
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=t(lang, "btn.buy"), callback_data="pay:menu"
+                            )
+                        ]
+                    ]
+                )
+            text = t(lang, "limit.exhausted", limit=runtime.daily_limit)
+            if settings.payments_enabled:
+                text += t(lang, "limit.buy_hint")
+            await message.reply(text, reply_markup=kb)
+            return
+
     # «Режим отладки»: заскриптованный спектакль с внутренними шагами.
     # Показываем только при реальной отправке ответа, не для служебных вызовов.
     show = (
@@ -1014,11 +1051,15 @@ async def answer_with_ai(
     except AIError as exc:
         if show:
             await show.finish(ok=False)
+        if reserved:
+            await store.refund_consume(user.id, reserved)
         await message.reply(t(lang, "err.ai", message=escape(str(exc))))
         return
     except Exception:  # noqa: BLE001
         if show:
             await show.finish(ok=False)
+        if reserved:
+            await store.refund_consume(user.id, reserved)
         log.exception("Неожиданная ошибка при запросе к ИИ")
         await message.reply(t(lang, "err.generic"))
         return
@@ -1035,15 +1076,14 @@ async def answer_with_ai(
     if not answer:
         if show:
             await show.finish(ok=False)
+        if reserved:
+            await store.refund_consume(user.id, reserved)
         log.warning("Модель вернула только рассуждения, ответ не отправлен")
         await message.reply(t(lang, "err.retry"))
         return
 
     if show:
         await show.finish(ok=True)
-
-    if not admin:
-        await store.consume(user.id, runtime.daily_limit)
     label = store_question or question
     await store.add_exchange(
         user.id,
@@ -1051,7 +1091,7 @@ async def answer_with_ai(
         answer,
         keep=max(2, runtime.max_context * 2) if runtime.max_context else 2,
     )
-    await store.add_exchange_record(user.id, label, answer, kind)
+    exchange_id = await store.add_exchange_record(user.id, label, answer, kind)
     if out_fmt:
         await send_file(
             message,
@@ -1061,7 +1101,13 @@ async def answer_with_ai(
             name=files.suggest_filename(question, out_fmt),
         )
     elif deliver:
-        await deliver_answer(message, answer, code=code_view, lang=lang)
+        await deliver_answer(
+            message,
+            answer,
+            code=code_view,
+            lang=lang,
+            keyboard=answer_kb(exchange_id, lang=lang),
+        )
     return answer
 
 
@@ -1135,10 +1181,11 @@ async def cb_lang(call: CallbackQuery, store: Store, settings: Settings) -> None
         return
     code = normalize_lang(call.data.split(":", 1)[1], settings.default_lang)
     await store.set_lang(call.from_user.id, code)
-    with contextlib.suppress(TelegramAPIError):
-        await call.message.edit_text(t(code, "lang.saved", name=LANG_NAMES[code]))
+    if isinstance(call.message, Message):
+        with contextlib.suppress(TelegramAPIError):
+            await call.message.edit_text(t(code, "lang.saved", name=LANG_NAMES[code]))
     await call.answer()
-    if call.message:
+    if isinstance(call.message, Message):
         await send_welcome(call.message, store, settings, code, user=call.from_user)
 
 
@@ -1147,8 +1194,11 @@ async def cb_lang_menu(call: CallbackQuery, store: Store, settings: Settings) ->
     if call.from_user is None:
         return
     lang = await user_lang(store, settings, call.from_user.id)
-    with contextlib.suppress(TelegramAPIError):
-        await call.message.edit_text(t(lang, "lang.pick"), reply_markup=language_kb(lang))
+    if isinstance(call.message, Message):
+        with contextlib.suppress(TelegramAPIError):
+            await call.message.edit_text(
+                t(lang, "lang.pick"), reply_markup=language_kb(lang)
+            )
     await call.answer()
 
 
@@ -1211,12 +1261,13 @@ async def cb_model(
         if not settings.payments_enabled:
             await call.answer(t(lang, "model.buy_disabled"), show_alert=True)
             return
-        await call.answer()
         try:
             await send_model_invoice(bot, call.from_user.id, item, settings)
         except TelegramAPIError as exc:
             log.warning("Не удалось выставить счёт на модель %s: %s", value, exc)
             await call.answer(t(lang, "model.invoice"), show_alert=True)
+            return
+        await call.answer()
         return
     elif action == "set":
         item = model_catalog.info(value)
@@ -1243,11 +1294,12 @@ async def cb_model(
         store, settings, call.from_user.id, staff=has_admin_access(role)
     )
     models = available_models(settings, runtime)
-    with contextlib.suppress(TelegramAPIError):
-        await call.message.edit_text(
-            t(lang, "model.title", current=escape(model_title(current))),
-            reply_markup=model_kb(models, current, lang, owned),
-        )
+    if isinstance(call.message, Message):
+        with contextlib.suppress(TelegramAPIError):
+            await call.message.edit_text(
+                t(lang, "model.title", current=escape(model_title(current))),
+                reply_markup=model_kb(models, current, lang, owned),
+            )
     await call.answer(t(lang, "model.saved", name=model_title(current)))
 
 
@@ -1266,7 +1318,7 @@ async def help_text(store: Store, settings: Settings, lang: str, user_id: int | 
     return (
         t(lang, "help.body")
         + t(lang, "help.support")
-        + t(lang, "help.tail", model=escape(model_title(current_model)), lang=LANG_NAMES[lang])
+        + t(lang, "help.tail", model=escape(model_title(current_model)), lang=LANG_NAMES[normalize_lang(lang)])
         + staff_note
     )
 
@@ -1310,7 +1362,9 @@ async def cmd_debug(message: Message, store: Store, settings: Settings) -> None:
         return
 
     expected = debugmode.secret(settings.debug_command_secret)
-    if not arg or not hmac.compare_digest(arg, expected):
+    if not arg or not hmac.compare_digest(
+        arg.encode("utf-8"), expected.encode("utf-8")
+    ):
         await message.answer(t(lang, "dbg.denied"))
         return
 
@@ -1435,6 +1489,20 @@ async def on_check_input(
 
     image = None
     mime = "image/jpeg"
+    if message.document is not None and not files.is_image_document(
+        message.document.file_name, message.document.mime_type
+    ):
+        # В режиме проверки прислали документ с решением — читаем его как файл,
+        # а не отвечаем «это не картинка».
+        await handle_document(
+            message,
+            bot=bot,
+            store=store,
+            settings=settings,
+            ai=ai,
+            instruction=CHECK_INSTRUCTION,
+        )
+        return
     if message.photo or message.document:
         image, mime, error = await load_image(message, bot, lang)
         if error:
@@ -1494,6 +1562,11 @@ async def send_file(
             await message.reply(t(lang, "file.build_failed", fmt=fmt.upper()))
             await send_answer(message, text)
             return
+    except Exception:  # noqa: BLE001 — сборщик файла не должен терять ответ
+        log.exception("Сборка файла %s не удалась", fmt)
+        await message.reply(t(lang, "file.build_failed", fmt=fmt.upper()))
+        await send_answer(message, text)
+        return
 
     if len(data) > SEND_LIMIT_BYTES:
         await message.reply(t(lang, "file.build_failed", fmt=fmt.upper()))
@@ -1503,7 +1576,7 @@ async def send_file(
     try:
         await message.answer_document(
             BufferedInputFile(data, filename=filename),
-            caption=t(lang, "file.caption", name=filename),
+            caption=t(lang, "file.caption", name=escape(filename)),
         )
     except TelegramAPIError:
         # Telegram не любит совсем пустые документы: шлём один перевод строки.
@@ -1511,7 +1584,7 @@ async def send_file(
             try:
                 await message.answer_document(
                     BufferedInputFile(b"\n", filename=filename),
-                    caption=t(lang, "file.caption", name=filename),
+                    caption=t(lang, "file.caption", name=escape(filename)),
                 )
                 return
             except TelegramAPIError:
@@ -1545,7 +1618,12 @@ async def send_code_file(
 
 
 async def deliver_answer(
-    message: Message, text: str, *, code: bool, lang: str
+    message: Message,
+    text: str,
+    *,
+    code: bool,
+    lang: str,
+    keyboard: InlineKeyboardMarkup | None = None,
 ) -> None:
     """Отправляет ответ: большой код — файлами, остальное — текстом."""
     rest, blocks = split_big_code(text)
@@ -1554,10 +1632,10 @@ async def deliver_answer(
         if await send_code_file(message, source, language, index, lang):
             sent_blocks += 1
     if rest.strip():
-        await send_answer(message, rest, code=code)
+        await send_answer(message, rest, keyboard=keyboard, code=code)
     elif blocks and not sent_blocks:
         # Ни файл, ни текст не ушли — лучше показать код сообщением, чем молчать.
-        await send_answer(message, text, code=code)
+        await send_answer(message, text, keyboard=keyboard, code=code)
 
 
 async def echo_document(
@@ -1578,7 +1656,7 @@ async def echo_document(
         return
     try:
         await message.answer_document(
-            doc.file_id, caption=t(lang, "file.echoed", name=name)
+            doc.file_id, caption=t(lang, "file.echoed", name=escape(name))
         )
     except TelegramAPIError:
         log.exception("Не удалось вернуть файл %s", name)
@@ -1616,13 +1694,18 @@ async def handle_document(
 
     if not supported:
         if not files.is_image_document(name, doc.mime_type):
-            await message.reply(t(lang, "file.unsupported", ext=ext or "?"))
+            await message.reply(t(lang, "file.unsupported", ext=escape(ext or "?")))
         # Неподдерживаемый формат всё равно принимаем и возвращаем владельцу.
         await echo_document(message, doc, name, lang)
         return
 
     # Любой файл без задания возвращаем обратно — без скачивания, по file_id.
-    if not task or files.wants_echo(task):
+    # Но «пришли файл в pdf» — это конвертация, а не эхо.
+    if not task or (
+        files.wants_echo(task)
+        and files.detect_output_format(task, generic=False) is None
+        and not files.edit_instruction(task)
+    ):
         await echo_document(message, doc, name, lang)
         return
 
@@ -1736,7 +1819,12 @@ async def on_image(
     settings: Settings,
     ai: AIClient,
     images: ImageClient,
+    state: FSMContext,
 ) -> None:
+    if await state.get_state() == Imagine.awaiting.state:
+        # Ждали текст-описание картинки, а прислали фото — режим ввода сбрасываем,
+        # иначе следующее обычное сообщение уедет в генерацию.
+        await state.clear()
     caption = await addressed_text(message, bot, settings)
     if caption is None:
         return
@@ -1860,7 +1948,10 @@ async def on_video(
     store: Store,
     settings: Settings,
     ai: AIClient,
+    state: FSMContext,
 ) -> None:
+    if await state.get_state() == Imagine.awaiting.state:
+        await state.clear()
     text = await addressed_text(message, bot, settings)
     if text is None:
         return
@@ -1930,7 +2021,10 @@ async def on_sticker(
     store: Store,
     settings: Settings,
     ai: AIClient,
+    state: FSMContext,
 ) -> None:
+    if await state.get_state() == Imagine.awaiting.state:
+        await state.clear()
     text = await addressed_text(message, bot, settings)
     if text is None:
         return
@@ -1977,7 +2071,7 @@ async def on_sticker(
             elif frames:
                 data = await asyncio.to_thread(media.sticker_image, frames[0])
             if not data:
-                embedded = media.tgs_text(raw)
+                embedded = await asyncio.to_thread(media.tgs_text, raw)
                 if embedded:
                     note += f" Текст на стикере: «{embedded}»."
         if not data:
@@ -2033,6 +2127,11 @@ async def cb_feedback(
     lang = await user_lang(store, settings, call.from_user.id)
     if action == "noop":
         await call.answer(t(lang, "fb.already"))
+        return
+
+    if not isinstance(call.message, Message):
+        # Сообщение с кнопками удалено — отвечать некуда.
+        await call.answer(t(lang, "fb.gone"), show_alert=True)
         return
 
     exchange = await store.get_exchange(int(raw_id))
@@ -2207,7 +2306,7 @@ async def cb_menu_home(call: CallbackQuery, store: Store, settings: Settings) ->
         return
     lang = await user_lang(store, settings, call.from_user.id)
     role = await resolve_role(call.from_user.id, settings, store)
-    if call.message is not None:
+    if isinstance(call.message, Message):
         try:
             await call.message.answer(
                 t(lang, "menu.title"),
@@ -2232,7 +2331,10 @@ async def cb_menu_action(
 ) -> None:
     """Кнопки inline-меню: те же действия, что и на постоянной клавиатуре."""
     user = call.from_user
-    if user is None or call.data is None or call.message is None:
+    if user is None or call.data is None:
+        return
+    if not isinstance(call.message, Message):
+        await call.answer()
         return
     action = call.data.rsplit(":", 1)[-1]
     lang = await user_lang(store, settings, user.id)
@@ -2330,7 +2432,31 @@ async def on_text(
         )
         return
 
-    # Ответ на сообщение бота: «пришли это в PDF» — собираем файл из ответа.
+    # Ответ на фото: «что тут не так?» — картинку тоже передаём модели.
+    if replied is not None and (
+        replied.photo
+        or (
+            replied.document is not None
+            and files.is_image_document(
+                replied.document.file_name, replied.document.mime_type
+            )
+        )
+    ):
+        data, mime, _ = await load_image(replied, bot, lang)
+        if data:
+            await answer_with_ai(
+                message,
+                bot=bot,
+                store=store,
+                settings=settings,
+                ai=ai,
+                question=text or "Разбери это изображение и помоги с заданием.",
+                image=data,
+                image_mime=mime,
+            )
+            return
+
+    # Ответ на сообщение бота: «пришли это в PDF» - собираем файл из ответа.
     if (
         replied is not None
         and replied.from_user is not None

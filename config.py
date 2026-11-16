@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -211,21 +213,42 @@ class Settings:
         return self.daily_limit <= 0
 
 
-def _int_env(name: str, default: int) -> int:
+def _int_env(
+    name: str,
+    default: int,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
     raw = os.getenv(name, "").strip()
     if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise SystemExit(f"{name} должен быть целым числом, а получено: {raw!r}") from exc
+        value = default
+    else:
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise SystemExit(f"{name} должен быть целым числом, а получено: {raw!r}") from exc
+    if minimum is not None and value < minimum:
+        value = minimum
+    if maximum is not None and value > maximum:
+        value = maximum
+    return value
+
+
+_TRUE_VALUES = {"1", "true", "yes", "on", "y", "t", "да", "так"}
+_FALSE_VALUES = {"0", "false", "no", "off", "n", "f", "нет", "не"}
 
 
 def _bool_env(name: str, default: bool) -> bool:
     raw = os.getenv(name, "").strip().lower()
     if not raw:
         return default
-    return raw not in {"0", "false", "no", "off", "нет"}
+    if raw in _TRUE_VALUES:
+        return True
+    if raw in _FALSE_VALUES:
+        return False
+    # Опечатка не должна молча включать платежи или антиспам.
+    return default
 
 
 def _packages_env(name: str, default: tuple[tuple[int, int], ...]) -> tuple[tuple[int, int], ...]:
@@ -285,9 +308,18 @@ def _load_dotenv(path: Path | None = None) -> None:
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
+        if line.lower().startswith("export "):
+            line = line[len("export ") :].strip()
         key, _, value = line.partition("=")
         key = key.strip()
-        value = value.strip().strip('"').strip("'")
+        value = value.strip()
+        if value[:1] in {"'", '"'}:
+            quote = value[0]
+            end = value.find(quote, 1)
+            value = value[1:end] if end != -1 else value[1:]
+        else:
+            # Конец строки после « #» — комментарий (как в python-dotenv).
+            value = re.split(r"\s+#", value, maxsplit=1)[0].strip()
         if key and key not in os.environ:
             os.environ[key] = value
 
@@ -315,11 +347,33 @@ def load_settings() -> Settings:
         )
     image_provider = (os.getenv("IMAGE_PROVIDER", "").strip() or "pollinations").lower()
 
+    base_url = (
+        os.getenv("RENDER_EXTERNAL_URL") or os.getenv("WEBHOOK_BASE_URL") or ""
+    ).rstrip("/")
+    webhook_secret = os.getenv("WEBHOOK_SECRET", "").strip()
+    if base_url and (not webhook_secret or webhook_secret == "change-me" or len(webhook_secret) < 16):
+        # Без секрета webhook принимает поддельные апдейты (владелец/платежи).
+        # Генерируем на запуск: set_webhook идёт с тем же значением в процессе.
+        webhook_secret = secrets.token_urlsafe(32)
+
+    from i18n import normalize_lang
+
+    default_lang = normalize_lang(os.getenv("DEFAULT_LANG", "").strip() or "ru")
+
+    # Ключ картинок наследуем только у того же провайдера: иначе ключ Gemini
+    # уедет на api.openai.com.
+    image_key = os.getenv("IMAGE_API_KEY", "").strip()
+    if not image_key:
+        if image_provider == provider:
+            image_key = _provider_key(provider)
+        elif image_provider == "openrouter":
+            image_key = _provider_key("openrouter")
+
     return Settings(
         bot_token=token,
-        webhook_secret=os.getenv("WEBHOOK_SECRET", "change-me").strip() or "change-me",
-        base_url=(os.getenv("RENDER_EXTERNAL_URL") or os.getenv("WEBHOOK_BASE_URL") or "").rstrip("/"),
-        port=_int_env("PORT", 8080),
+        webhook_secret=webhook_secret,
+        base_url=base_url,
+        port=_int_env("PORT", 8080, minimum=1, maximum=65535),
         database_url=os.getenv("DATABASE_URL", "").strip(),
         ai_provider=provider,
         ai_model=(os.getenv("AI_MODEL", "").strip() or DEFAULT_MODELS[provider]),
@@ -335,18 +389,18 @@ def load_settings() -> Settings:
         bot_name=os.getenv("BOT_NAME", "").strip() or "gazyavaGPT",
         system_prompt=os.getenv("AI_SYSTEM_PROMPT", "").strip() or DEFAULT_SYSTEM_PROMPT,
         debug_command_secret=os.getenv("DEBUG_COMMAND_SECRET", "").strip(),
-        daily_limit=_int_env("DAILY_LIMIT", 30),
-        max_context=_int_env("MAX_CONTEXT", 12),
+        daily_limit=_int_env("DAILY_LIMIT", 30, minimum=0),
+        max_context=_int_env("MAX_CONTEXT", 12, minimum=0),
         admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS", "")),
         owner_id=_owner_id(os.getenv("OWNER_ID", "")),
         welcome_text=os.getenv("WELCOME_TEXT", "").strip() or DEFAULT_WELCOME,
         rules_text=os.getenv("RULES_TEXT", "").strip() or DEFAULT_RULES,
-        flood_limit=_int_env("FLOOD_LIMIT", 8),
-        flood_window=_int_env("FLOOD_WINDOW", 10),
-        mute_minutes=_int_env("MUTE_MINUTES", 10),
+        flood_limit=_int_env("FLOOD_LIMIT", 8, minimum=0),
+        flood_window=_int_env("FLOOD_WINDOW", 10, minimum=1),
+        mute_minutes=_int_env("MUTE_MINUTES", 10, minimum=0),
         payments_enabled=_bool_env("PAYMENTS_ENABLED", True),
         star_packages=_packages_env("STAR_PACKAGES", DEFAULT_STAR_PACKAGES),
-        star_rate=_int_env("STAR_RATE", DEFAULT_STAR_RATE),
+        star_rate=_int_env("STAR_RATE", DEFAULT_STAR_RATE, minimum=1),
         required_channel=os.getenv("REQUIRED_CHANNEL", "").strip()
         or DEFAULT_REQUIRED_CHANNEL,
         required_channel_url=os.getenv("REQUIRED_CHANNEL_URL", "").strip()
@@ -354,7 +408,7 @@ def load_settings() -> Settings:
         terms_text=os.getenv("TERMS_TEXT", "").strip() or DEFAULT_TERMS,
         support_text=os.getenv("PAY_SUPPORT_TEXT", "").strip() or DEFAULT_SUPPORT,
         support_contact=os.getenv("PAY_SUPPORT_CONTACT", "").strip(),
-        default_lang=(os.getenv("DEFAULT_LANG", "").strip() or "ru").lower(),
+        default_lang=default_lang,
         aliases=_list_env("BOT_ALIASES", DEFAULT_ALIASES),
         private_only_commands=_commands_env(
             "GROUP_DISABLED_COMMANDS", DEFAULT_PRIVATE_ONLY_COMMANDS
@@ -370,10 +424,8 @@ def load_settings() -> Settings:
         image_provider=image_provider,
         image_model=(os.getenv("IMAGE_MODEL", "").strip() or "flux"),
         image_models=_list_env("IMAGE_MODELS", ""),
-        image_size=_int_env("IMAGE_SIZE", 1024),
-        image_api_key=(
-            os.getenv("IMAGE_API_KEY", "").strip() or _provider_key(image_provider)
-        ),
+        image_size=_int_env("IMAGE_SIZE", 1024, minimum=256, maximum=2048),
+        image_api_key=image_key,
         image_base_url=(os.getenv("IMAGE_BASE_URL", "").strip().rstrip("/")),
         image_fallback=(os.getenv("IMAGE_FALLBACK", "").strip() or "pollinations").lower(),
         image_daily_limit=max(0, _int_env("IMAGE_DAILY_LIMIT", 1)),
