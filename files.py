@@ -167,8 +167,9 @@ def _read_pdf(data: bytes, max_pages: int = 60) -> str:
         raise FileError("file.empty") from None
 
     result = "\n\n".join(chunks).strip()
-    # Текстовый слой пустой: почти наверняка скан из картинок.
-    if len(result) < 40:
+    # Нет текстового слоя вообще: почти наверняка скан из картинок. Короткий
+    # текст — это нормальный документ (записка, чек), его не отбрасываем.
+    if not result:
         raise FileError("file.scanned")
     return result
 
