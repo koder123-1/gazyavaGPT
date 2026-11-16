@@ -48,6 +48,7 @@ COMMANDS = [
     BotCommand(command="imagine", description="Нарисовать картинку"),
     BotCommand(command="files", description="Чтение и создание файлов"),
     BotCommand(command="pin", description="Закрепить сообщение в ответе"),
+    BotCommand(command="unpin", description="Открепить сообщение"),
     BotCommand(command="lang", description="Сменить язык"),
     BotCommand(command="model", description="Выбрать модель ИИ"),
     BotCommand(command="style", description="Стиль ответов: учёба или код"),
@@ -82,8 +83,6 @@ GROUP_COMMANDS = [
     BotCommand(command="del", description="Удалить сообщение"),
     BotCommand(command="purge", description="Удалить последние сообщения"),
     BotCommand(command="info", description="Информация об участнике"),
-    BotCommand(command="pin", description="Закрепить сообщение в ответе"),
-    BotCommand(command="unpin", description="Открепить сообщение"),
 ]
 
 
