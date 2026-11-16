@@ -35,6 +35,48 @@ VISION_FALLBACKS = [
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
 ]
 
+# Модель упёрлась в лимит токенов: просим продолжить ровно с обрыва, чтобы
+# большие листинги кода не приходили половинчатыми.
+CONTINUE_PROMPT = (
+    "Продолжи предыдущий ответ ровно с того места, где он оборвался. "
+    "Не повторяй уже написанное, не начинай заново, не пиши вступление и не "
+    "извиняйся. Если оборвался блок кода — продолжай с той же строки и внутри "
+    "того же блока ```…```. Если оборвался текст — продолжай с того же слова."
+)
+
+
+def _merge_continuation(base: str, part: str) -> str:
+    """Склеивает продолжение с ответом, убирая повтор уже написанного хвоста."""
+    if not base:
+        return part.strip()
+    part = (part or "").strip("\n")
+    if not part:
+        return base
+    for marker in ("Продолжение:", "Продолжение ответа:", "Continuation:"):
+        if part.lower().startswith(marker.lower()):
+            part = part[len(marker) :]
+            break
+    tail = base.rstrip()
+    # Модель иногда начинает ответ заново вместо продолжения: тогда оставляем
+    # более длинный вариант, а не дублируем текст.
+    head = base.lstrip()[:200]
+    if len(head) > 40 and part.lstrip().startswith(head):
+        return part if len(part) > len(base) else base
+    limit = min(600, len(tail), len(part))
+    for size in range(limit, 2, -1):
+        if tail.endswith(part[:size]):
+            part = part[size:]
+            break
+    if not part:
+        return base
+    # Модель часто продолжает с середины слова или строки: не вставляем
+    # лишний перевод строки, только пробел между словами.
+    if tail and part[0].isalnum() and tail[-1].isalnum() and not base[-1].isspace():
+        return base + " " + part
+    if base[-1].isspace() or part[0] in "\n\t ":
+        return base + part
+    return base + part
+
 
 class AIError(Exception):
     """Ошибка с текстом, который можно показать пользователю."""
@@ -185,7 +227,7 @@ class AIClient:
         for round_no in range(rounds):
             for candidate in candidates:
                 try:
-                    answer = await self._call(
+                    answer, truncated = await self._call(
                         model=candidate,
                         history=history,
                         text=text,
@@ -193,6 +235,14 @@ class AIClient:
                         image=image,
                         image_mime=image_mime,
                     )
+                    if truncated and image is None:
+                        answer = await self._extend(
+                            model=candidate,
+                            history=history,
+                            text=text,
+                            prompt=prompt,
+                            answer=answer,
+                        )
                     pool.mark_ok(candidate)
                     return sanitize_answer(answer)
                 except AIError as exc:
@@ -241,6 +291,44 @@ class AIClient:
             task_lang=task_lang,
         )
 
+    async def _extend(
+        self,
+        *,
+        model: str,
+        history: list[dict[str, str]],
+        text: str,
+        prompt: str,
+        answer: str,
+    ) -> str:
+        """Дописывает ответ, если модель оборвалась на лимите токенов.
+
+        Так большие листинги кода собираются из нескольких кусков, а не
+        приходят половиной файла.
+        """
+        rounds = max(0, int(self._settings.ai_continue_rounds))
+        current = answer
+        for _ in range(rounds):
+            try:
+                part, truncated = await self._call(
+                    model=model,
+                    history=history,
+                    text=CONTINUE_PROMPT,
+                    prompt=prompt,
+                    image=None,
+                    image_mime="image/jpeg",
+                    assistant_prefix=current[-4000:],
+                )
+            except AIError as exc:
+                # Уже есть нормальный ответ — не теряем его из-за продолжения.
+                log.info("Продолжение не удалось (%s) — оставляю как есть", exc)
+                break
+            if not part.strip():
+                break
+            current = _merge_continuation(current, part)
+            if not truncated:
+                break
+        return current
+
     async def _fallback_reply(
         self,
         exc: AIError,
@@ -259,6 +347,36 @@ class AIClient:
         return await self._fallback.reply(history, text, **kwargs)
 
     # ------------------------------------------------------------------ один запрос
+    @staticmethod
+    def _token_limit_error(raw: str) -> bool:
+        low = (raw or "").lower()
+        return any(
+            marker in low
+            for marker in (
+                "max_tokens",
+                "max_output_tokens",
+                "maxoutputtokens",
+                "max token",
+                "token limit",
+                "too many tokens",
+                "maximum context",
+            )
+        )
+
+    @staticmethod
+    def _is_truncated(data: dict[str, Any]) -> bool:
+        """True, если модель оборвала ответ на лимите токенов."""
+        reason = ""
+        if "candidates" in data:
+            candidates = data.get("candidates") or []
+            if candidates:
+                reason = str(candidates[0].get("finishReason") or "")
+        else:
+            choices = data.get("choices") or []
+            if choices:
+                reason = str(choices[0].get("finish_reason") or "")
+        return reason.lower() in {"length", "max_tokens", "max_tokens_reached"}
+
     async def _call(
         self,
         *,
@@ -268,59 +386,108 @@ class AIClient:
         prompt: str,
         image: bytes | None,
         image_mime: str,
-    ) -> str:
+        assistant_prefix: str | None = None,
+    ) -> tuple[str, bool]:
         settings = self._settings
-        if settings.ai_provider == "gemini":
-            url, headers, payload = self._gemini_request(
-                history, text, model, prompt, image, image_mime
-            )
-        else:
-            url, headers, payload = self._openai_request(
-                history, text, model, prompt, image, image_mime
-            )
-
         await self.start()
         assert self._session is not None
 
-        async with self._semaphore:
-            try:
-                async with self._session.post(url, json=payload, headers=headers) as resp:
-                    raw = await resp.text()
-                    if resp.status != 200:
-                        log.warning("AI HTTP %s (%s): %s", resp.status, model, raw[:400])
-                        message, retryable = self._explain_status(
-                            resp.status, raw, settings.ai_provider
-                        )
-                        # 401 — ключ неверный для всех моделей. 403 у шлюзов
-                        # часто про конкретную модель (скоуп/модерация), поэтому
-                        # его пробуем на следующей модели.
-                        fatal = resp.status == 401
-                        if resp.status == 403:
-                            low = raw.lower()
-                            fatal = any(
-                                marker in low
-                                for marker in (
-                                    "insufficient_scope",
-                                    "invalid_api_key",
-                                    "invalid api key",
-                                )
-                            )
-                            retryable = retryable or not fatal
-                        raise AIError(message, retryable=retryable, fatal=fatal)
-                    data = json.loads(raw)
-            except TimeoutError as exc:
-                log.warning("AI timeout (%s) — переключаюсь на другую модель", model)
-                raise AIError(
-                    "Модель думает слишком долго. Пробую другую.", retryable=True
-                ) from exc
-            except aiohttp.ClientError as exc:
-                log.warning("AI network error: %r", exc)
-                raise AIError("Сервис ИИ сейчас недоступен. Попробуй через минуту.", retryable=True) from exc
-            except json.JSONDecodeError as exc:
-                log.warning("AI вернул не JSON: %s", raw[:300])
-                raise AIError("Сервис ИИ ответил невнятно. Попробуй ещё раз.", retryable=True) from exc
+        budget = max(500, int(settings.ai_max_tokens or 4000))
+        # Провайдер может не принять большой лимит: тогда повторяем с
+        # проверенными 4000 токенами, а не роняем ответ целиком.
+        limits = [budget] + ([4000] if budget > 4000 else [])
 
-        return self._extract_text(data)
+        data: dict[str, Any] | None = None
+        async with self._semaphore:
+            for attempt, limit in enumerate(limits):
+                if settings.ai_provider == "gemini":
+                    url, headers, payload = self._gemini_request(
+                        history,
+                        text,
+                        model,
+                        prompt,
+                        image,
+                        image_mime,
+                        max_tokens=limit,
+                        assistant_prefix=assistant_prefix,
+                    )
+                else:
+                    url, headers, payload = self._openai_request(
+                        history,
+                        text,
+                        model,
+                        prompt,
+                        image,
+                        image_mime,
+                        max_tokens=limit,
+                        assistant_prefix=assistant_prefix,
+                    )
+                try:
+                    async with self._session.post(
+                        url, json=payload, headers=headers
+                    ) as resp:
+                        raw = await resp.text()
+                        if resp.status != 200:
+                            log.warning(
+                                "AI HTTP %s (%s): %s", resp.status, model, raw[:400]
+                            )
+                            if (
+                                resp.status == 400
+                                and attempt + 1 < len(limits)
+                                and self._token_limit_error(raw)
+                            ):
+                                log.info(
+                                    "Провайдер не принял max_tokens=%s — повторяю с 4000",
+                                    limit,
+                                )
+                                continue
+                            message, retryable = self._explain_status(
+                                resp.status, raw, settings.ai_provider
+                            )
+                            # 401 — ключ неверный для всех моделей. 403 у шлюзов
+                            # часто про конкретную модель (скоуп/модерация), поэтому
+                            # его пробуем на следующей модели.
+                            fatal = resp.status == 401
+                            if resp.status == 403:
+                                low = raw.lower()
+                                fatal = any(
+                                    marker in low
+                                    for marker in (
+                                        "insufficient_scope",
+                                        "invalid_api_key",
+                                        "invalid api key",
+                                    )
+                                )
+                                retryable = retryable or not fatal
+                            raise AIError(message, retryable=retryable, fatal=fatal)
+                        data = json.loads(raw)
+                except TimeoutError as exc:
+                    log.warning(
+                        "AI timeout (%s) — переключаюсь на другую модель", model
+                    )
+                    raise AIError(
+                        "Модель думает слишком долго. Пробую другую.",
+                        retryable=True,
+                    ) from exc
+                except aiohttp.ClientError as exc:
+                    log.warning("AI network error: %r", exc)
+                    raise AIError(
+                        "Сервис ИИ сейчас недоступен. Попробуй через минуту.",
+                        retryable=True,
+                    ) from exc
+                except json.JSONDecodeError as exc:
+                    log.warning("AI вернул не JSON: %s", raw[:300])
+                    raise AIError(
+                        "Сервис ИИ ответил невнятно. Попробуй ещё раз.",
+                        retryable=True,
+                    ) from exc
+                break
+
+        if data is None:
+            raise AIError(
+                "Сервис ИИ ответил невнятно. Попробуй ещё раз.", retryable=True
+            )
+        return self._extract_text(data), self._is_truncated(data)
 
     # ------------------------------------------------------------------ запросы
     def _gemini_request(
@@ -331,6 +498,9 @@ class AIClient:
         prompt: str,
         image: bytes | None,
         image_mime: str,
+        *,
+        max_tokens: int | None = None,
+        assistant_prefix: str | None = None,
     ) -> tuple[str, dict[str, str], dict[str, Any]]:
         s = self._settings
         base = (s.ai_base_url or "https://generativelanguage.googleapis.com").rstrip("/")
@@ -348,6 +518,10 @@ class AIClient:
             for m in history
         ]
 
+        if assistant_prefix:
+            contents.append(
+                {"role": "model", "parts": [{"text": assistant_prefix}]}
+            )
         parts: list[dict[str, Any]] = [{"text": text}]
         if image is not None:
             parts.append(
@@ -363,7 +537,12 @@ class AIClient:
         payload = {
             "system_instruction": {"parts": [{"text": prompt}]},
             "contents": contents,
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4000},
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": max(
+                    500, int(max_tokens or s.ai_max_tokens or 4000)
+                ),
+            },
         }
         return url, headers, payload
 
@@ -375,6 +554,9 @@ class AIClient:
         prompt: str,
         image: bytes | None,
         image_mime: str,
+        *,
+        max_tokens: int | None = None,
+        assistant_prefix: str | None = None,
     ) -> tuple[str, dict[str, str], dict[str, Any]]:
         s = self._settings
         if not model:
@@ -389,6 +571,8 @@ class AIClient:
             {"role": "assistant" if m["role"] == "assistant" else "user", "content": m["content"]}
             for m in history
         ]
+        if assistant_prefix:
+            messages.append({"role": "assistant", "content": assistant_prefix})
 
         if image is not None:
             data_url = f"data:{image_mime};base64,{base64.b64encode(image).decode('ascii')}"
@@ -404,7 +588,7 @@ class AIClient:
             "model": model,
             "messages": messages,
             "temperature": 0.6 if image is not None else 0.7,
-            "max_tokens": 4000,
+            "max_tokens": max(500, int(max_tokens or s.ai_max_tokens or 4000)),
         }
         if s.ai_provider == "openrouter":
             # Не просим и не показываем reasoning: ответ должен быть готовым текстом.

@@ -1755,11 +1755,16 @@ async def send_file(
 
 
 async def send_code_file(
-    message: Message, code: str, language: str, index: int, lang: str
+    message: Message,
+    code: str,
+    language: str,
+    index: int,
+    lang: str,
+    name: str | None = None,
 ) -> bool:
     """Отправляет большой блок кода отдельным файлом. True, если получилось."""
-    ext = CODE_EXT.get((language or "").strip().lower(), "txt")
-    name = f"gazyavaGPT-{index}.{ext}"
+    if name is None:
+        name = code_file_name(language, index)
     data = (code.rstrip() + "\n").encode("utf-8")
     if len(data) > SEND_LIMIT_BYTES:
         return False
@@ -1775,6 +1780,60 @@ async def send_code_file(
     return True
 
 
+def code_file_name(language: str, index: int) -> str:
+    """Понятное имя файла: main.py, index.html, styles.css и т.д."""
+    ext = CODE_EXT.get((language or "").strip().lower(), "txt")
+    default = files.CODE_DEFAULT_NAMES.get(ext)
+    return default or f"gazyavaGPT-{index}.{ext}"
+
+
+def code_file_entries(blocks: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Имена файлов для архива: одинаковые расширения не затирают друг друга."""
+    entries: list[tuple[str, str]] = []
+    used: dict[str, int] = {}
+    for index, (language, source) in enumerate(blocks, 1):
+        name = code_file_name(language, index)
+        if name in used:
+            used[name] += 1
+            stem, dot, ext = name.partition(".")
+            name = f"{stem}-{used[name]}{dot}{ext}"
+        else:
+            used[name] = 1
+        entries.append((name, source))
+    return entries
+
+
+async def send_code_archive(
+    message: Message, blocks: list[tuple[str, str]], lang: str
+) -> int:
+    """Складывает несколько файлов проекта в один архив. 0 — не получилось."""
+    entries = code_file_entries(blocks)
+    try:
+        data = await asyncio.to_thread(files.build_zip, entries)
+    except Exception:  # noqa: BLE001 — архив не должен терять ответ
+        log.exception("Не удалось собрать архив с кодом")
+        return 0
+    if len(data) > SEND_LIMIT_BYTES:
+        return 0
+    name = "gazyavaGPT-project.zip"
+    lines = sum(len(source.splitlines()) for _, source in blocks)
+    try:
+        await message.answer_document(
+            BufferedInputFile(data, filename=name),
+            caption=t(
+                lang,
+                "code.zip_caption",
+                files=len(entries),
+                lines=lines,
+                names=", ".join(name for name, _ in entries[:6]),
+            ),
+        )
+    except TelegramAPIError:
+        log.exception("Не удалось отправить архив %s", name)
+        return 0
+    return len(blocks)
+
+
 async def deliver_answer(
     message: Message,
     text: str,
@@ -1783,12 +1842,15 @@ async def deliver_answer(
     lang: str,
     keyboard: InlineKeyboardMarkup | None = None,
 ) -> None:
-    """Отправляет ответ: большой код — файлами, остальное — текстом."""
+    """Отправляет ответ: большой код — файлами или проектом в ZIP."""
     rest, blocks = split_big_code(text)
     sent_blocks = 0
-    for index, (language, source) in enumerate(blocks, 1):
-        if await send_code_file(message, source, language, index, lang):
-            sent_blocks += 1
+    if len(blocks) >= 2:
+        sent_blocks = await send_code_archive(message, blocks, lang)
+    if not sent_blocks:
+        for index, (language, source) in enumerate(blocks, 1):
+            if await send_code_file(message, source, language, index, lang):
+                sent_blocks += 1
     if rest.strip():
         await send_answer(message, rest, keyboard=keyboard, code=code)
     elif blocks and not sent_blocks:

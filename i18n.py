@@ -1589,6 +1589,12 @@ TR: dict[str, dict[str, str]] = {
         "be": "📄 Код на {lines} радкоў — у файле {name}",
         "en": "📄 {lines} lines of code — in the file {name}",
     },
+    "code.zip_caption": {
+        "ru": "🗂 Проект: {files} файла(ов), {lines} строк — в архиве.\n{names}",
+        "uk": "🗂 Проєкт: {files} файлів, {lines} рядків — в архіві.\n{names}",
+        "be": "🗂 Праект: {files} файлаў, {lines} радкоў — у архіве.\n{names}",
+        "en": "🗂 Project: {files} file(s), {lines} lines — in the archive.\n{names}",
+    },
     "file.pdf_unavailable": {
         "ru": "PDF сейчас недоступен: на сервере нет шрифта. Пришлю DOCX.",
         "uk": "PDF зараз недоступний: на сервері немає шрифту. Надішлю DOCX.",

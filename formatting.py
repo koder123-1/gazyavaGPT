@@ -723,17 +723,21 @@ def to_code_html(text: str) -> str:
     return "\n\n".join(part for part in parts if part.strip())
 
 
-# Код длиннее этого числа строк уходит файлом, а не сообщением.
+# Код длиннее этого числа строк (или очень широкий) уходит файлом.
 CODE_FILE_MIN_LINES = 100
+CODE_FILE_MIN_CHARS = 3500
 
 
 def split_big_code(
-    text: str, min_lines: int = CODE_FILE_MIN_LINES
+    text: str,
+    min_lines: int = CODE_FILE_MIN_LINES,
+    min_chars: int = CODE_FILE_MIN_CHARS,
 ) -> tuple[str, list[tuple[str, str]]]:
     """Делит ответ на текст и большие блоки кода.
 
     Возвращает (текст без больших блоков, [(язык, код), ...]). Блок считается
-    большим, если в нём больше min_lines строк.
+    большим, если в нём больше min_lines строк или больше min_chars символов:
+    широкий код с длинными строками тоже не влезает в сообщение.
     """
     source = text or ""
     blocks: list[tuple[str, str]] = []
@@ -741,7 +745,7 @@ def split_big_code(
     position = 0
     for match in _CODE_FENCE_RE.finditer(source):
         code = match.group(2).strip("\n")
-        if len(code.splitlines()) > min_lines:
+        if len(code.splitlines()) > min_lines or len(code) > min_chars:
             parts.append(source[position : match.start()])
             blocks.append((match.group(1).lower(), code))
             position = match.end()

@@ -326,6 +326,49 @@ def build_code(text: str) -> bytes:
     return (body.rstrip() + "\n").replace("\r\n", "\n").encode("utf-8")
 
 
+# Расширение по языку из ```-блока для файлов в архиве.
+CODE_ZIP_EXTS = {
+    "python": "py", "py": "py", "html": "html", "htm": "html",
+    "css": "css", "scss": "scss", "js": "js", "javascript": "js",
+    "ts": "ts", "typescript": "ts", "tsx": "tsx", "jsx": "jsx",
+    "json": "json", "sql": "sql", "bash": "sh", "sh": "sh",
+    "shell": "sh", "powershell": "ps1", "yaml": "yml", "yml": "yml",
+    "xml": "xml", "java": "java", "kotlin": "kt", "go": "go",
+    "rust": "rs", "c": "c", "cpp": "cpp", "c++": "cpp", "cs": "cs",
+    "php": "php", "ruby": "rb", "swift": "swift", "dart": "dart",
+    "dockerfile": "dockerfile", "markdown": "md", "md": "md",
+}
+
+# Имена, под которыми части проекта удобнее открывать.
+CODE_DEFAULT_NAMES = {
+    "py": "main.py", "html": "index.html", "css": "styles.css",
+    "js": "script.js", "ts": "app.ts", "json": "data.json",
+    "sql": "schema.sql", "sh": "run.sh", "yml": "config.yml",
+    "md": "README.md", "xml": "data.xml",
+}
+
+
+def build_zip(entries: list[tuple[str, str]]) -> bytes:
+    """Собирает архив из (имя файла, текст). Имена делает уникальными."""
+    import zipfile
+
+    buffer = io.BytesIO()
+    used: dict[str, int] = {}
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for raw_name, body in entries:
+            name = sanitize_name(raw_name, "")
+            if not name:
+                name = "file.txt"
+            if name in used:
+                used[name] += 1
+                stem, dot, ext = name.partition(".")
+                name = f"{stem}-{used[name]}{dot}{ext}"
+            else:
+                used[name] = 1
+            archive.writestr(name, (body or "").rstrip() + "\n")
+    return buffer.getvalue()
+
+
 def _table_rows(text: str) -> list[list[str]]:
     rows: list[list[str]] = []
     for raw in (text or "").splitlines():

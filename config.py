@@ -153,6 +153,10 @@ class Settings:
     ai_fallback_provider: str = ""
     ai_api_key: str = ""
     ai_base_url: str = ""
+    # Сколько токенов разрешаем модели в одном ответе и сколько раз просим
+    # продолжить, если ответ оборвался на лимите (для больших листингов кода).
+    ai_max_tokens: int = 8000
+    ai_continue_rounds: int = 2
     bot_name: str = "gazyavaGPT"
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     debug_command_secret: str = ""
@@ -395,6 +399,8 @@ def load_settings() -> Settings:
         ai_fallback_provider=(os.getenv("AI_FALLBACK_PROVIDER", "").strip().lower()),
         ai_api_key=_provider_key(provider),
         ai_base_url=(os.getenv("AI_BASE_URL", "").strip().rstrip("/") or DEFAULT_BASE_URLS[provider]),
+        ai_max_tokens=_int_env("AI_MAX_TOKENS", 8000, minimum=500, maximum=32000),
+        ai_continue_rounds=_int_env("AI_CONTINUE_ROUNDS", 2, minimum=0, maximum=4),
         bot_name=os.getenv("BOT_NAME", "").strip() or "gazyavaGPT",
         system_prompt=os.getenv("AI_SYSTEM_PROMPT", "").strip() or DEFAULT_SYSTEM_PROMPT,
         debug_command_secret=os.getenv("DEBUG_COMMAND_SECRET", "").strip(),
