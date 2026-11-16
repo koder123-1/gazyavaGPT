@@ -82,6 +82,72 @@ TR: dict[str, dict[str, str]] = {
     },
     "btn.lang": {"ru": "🌍 Язык", "uk": "🌍 Мова", "be": "🌍 Мова", "en": "🌍 Language"},
     "menu.model": {"ru": "🧠 Модель", "uk": "🧠 Модель", "be": "🧠 Мадэль", "en": "🧠 Model"},
+    "menu.styles": {
+        "ru": "🎨 Стили",
+        "uk": "🎨 Стилі",
+        "be": "🎨 Стылі",
+        "en": "🎨 Styles",
+    },
+    "styles.title": {
+        "ru": "🎨 <b>Стили ответов</b>",
+        "uk": "🎨 <b>Стилі відповідей</b>",
+        "be": "🎨 <b>Стылі адказаў</b>",
+        "en": "🎨 <b>Answer styles</b>",
+    },
+    "styles.current": {
+        "ru": "Текущий: <b>{value}</b>",
+        "uk": "Поточний: <b>{value}</b>",
+        "be": "Бягучы: <b>{value}</b>",
+        "en": "Current: <b>{value}</b>",
+    },
+    "styles.auto": {
+        "ru": "🌐 Универсальный",
+        "uk": "🌐 Універсальний",
+        "be": "🌐 Універсальны",
+        "en": "🌐 Universal",
+    },
+    "styles.study": {
+        "ru": "🎓 Учебный",
+        "uk": "🎓 Навчальний",
+        "be": "🎓 Навучальны",
+        "en": "🎓 Study",
+    },
+    "styles.code": {
+        "ru": "💻 Кодерский",
+        "uk": "💻 Кодерський",
+        "be": "💻 Кодэрскі",
+        "en": "💻 Code",
+    },
+    "styles.auto.desc": {
+        "ru": "обычные ответы на любые вопросы.",
+        "uk": "звичайні відповіді на будь-які питання.",
+        "be": "звычайныя адказы на любыя пытанні.",
+        "en": "regular answers to any question.",
+    },
+    "styles.study.desc": {
+        "ru": "репетитор: объясняет по шагам, разбирает ошибки и готовит к контрольным.",
+        "uk": "репетитор: пояснює покроково, розбирає помилки й готує до контрольних.",
+        "be": "рэпетытар: тлумачыць па кроках, разбірае памылкі і рыхтуе да кантрольных.",
+        "en": "tutor: explains step by step, breaks down mistakes and prepares for tests.",
+    },
+    "styles.code.desc": {
+        "ru": "senior-разработчик: полный код HTML/CSS/JS и Python, готовые файлы.",
+        "uk": "senior-розробник: повний код HTML/CSS/JS і Python, готові файли.",
+        "be": "senior-распрацоўшчык: поўны код HTML/CSS/JS і Python, гатовыя файлы.",
+        "en": "senior developer: full HTML/CSS/JS and Python code, ready-made files.",
+    },
+    "styles.hint": {
+        "ru": "Стиль влияет на все ответы. Предмет бот по-прежнему определяет сам.",
+        "uk": "Стиль впливає на всі відповіді. Предмет бот і далі визначає сам.",
+        "be": "Стыль уплывае на ўсе адказы. Прадмет бот па-ранейшаму вызначае сам.",
+        "en": "The style affects every answer. The bot still detects the subject itself.",
+    },
+    "styles.saved": {
+        "ru": "Стиль включён: {value}",
+        "uk": "Стиль увімкнено: {value}",
+        "be": "Стыль уключаны: {value}",
+        "en": "Style enabled: {value}",
+    },
     "menu.buy": {
         "ru": "⭐ Купить запросы",
         "uk": "⭐ Купити запити",
@@ -430,6 +496,9 @@ TR: dict[str, dict[str, str]] = {
             "<b>Проверка решения</b>\n"
             "<code>/check</code> → пришли текст или фото своего решения — найду ошибку, "
             "не решая заново.\n\n"
+            "<b>Стили</b>\n"
+            "<code>/style</code> → учебный (объясняет по шагам) или кодерский "
+            "(пишет полный код HTML/CSS/JS и Python).\n\n"
             "<b>Картинки</b>\n"
             "<code>/imagine описание</code> → нарисую картинку.\n"
             "Фото с подписью «измени / перерисуй» → переделаю по описанию.\n\n"
@@ -448,6 +517,9 @@ TR: dict[str, dict[str, str]] = {
             "<b>Перевірка рішення</b>\n"
             "<code>/check</code> → надішли текст або фото свого рішення — знайду помилку, "
             "не розв'язуючи заново.\n\n"
+            "<b>Стилі</b>\n"
+            "<code>/style</code> → навчальний (пояснює покроково) або кодерський "
+            "(пише повний код HTML/CSS/JS і Python).\n\n"
             "<b>Картинки</b>\n"
             "<code>/imagine опис</code> → намалюю картинку.\n"
             "Фото з підписом «зміни / перемалюй» → перероблю за описом.\n\n"
@@ -466,6 +538,9 @@ TR: dict[str, dict[str, str]] = {
             "<b>Праверка рашэння</b>\n"
             "<code>/check</code> → дашлі тэкст або фота свайго рашэння — знойду памылку, "
             "не развязваючы нанова.\n\n"
+            "<b>Стылі</b>\n"
+            "<code>/style</code> → навучальны (тлумачыць па кроках) або кодэрскі "
+            "(піша поўны код HTML/CSS/JS і Python).\n\n"
             "<b>Малюнкі</b>\n"
             "<code>/imagine апісанне</code> → намалюю малюнак.\n"
             "Фота з подпісам «змяні / перамалюй» → перараблю па апісанні.\n\n"
@@ -484,6 +559,9 @@ TR: dict[str, dict[str, str]] = {
             "<b>Checking a solution</b>\n"
             "<code>/check</code> → send your solution as text or photo — I'll find the mistake "
             "without solving it from scratch.\n\n"
+            "<b>Styles</b>\n"
+            "<code>/style</code> → study (explains step by step) or code "
+            "(writes full HTML/CSS/JS and Python code).\n\n"
             "<b>Images</b>\n"
             "<code>/imagine description</code> → I'll draw a picture.\n"
             "A photo captioned \u201cchange / redraw\u201d → I'll redo it from the description.\n\n"
@@ -580,24 +658,28 @@ TR: dict[str, dict[str, str]] = {
             "🪪 ID: <code>{user_id}</code>\n{role_line}{sub_line}"
             "💬 Лимит на сегодня: {limit}\n"
             "⭐ Бонусные запросы: <b>{bonus}</b>\n"
+            "🎨 Стиль: {style}\n"
             "🧠 Модель: {model}{note}"
         ),
         "uk": (
             "🪪 ID: <code>{user_id}</code>\n{role_line}{sub_line}"
             "💬 Ліміт на сьогодні: {limit}\n"
             "⭐ Бонусні запити: <b>{bonus}</b>\n"
+            "🎨 Стиль: {style}\n"
             "🧠 Модель: {model}{note}"
         ),
         "be": (
             "🪪 ID: <code>{user_id}</code>\n{role_line}{sub_line}"
             "💬 Ліміт на сёння: {limit}\n"
             "⭐ Бонусныя запыты: <b>{bonus}</b>\n"
+            "🎨 Стыль: {style}\n"
             "🧠 Мадэль: {model}{note}"
         ),
         "en": (
             "🪪 ID: <code>{user_id}</code>\n{role_line}{sub_line}"
             "💬 Today's limit: {limit}\n"
             "⭐ Bonus requests: <b>{bonus}</b>\n"
+            "🎨 Style: {style}\n"
             "🧠 Model: {model}{note}"
         ),
     },
@@ -999,7 +1081,7 @@ TR: dict[str, dict[str, str]] = {
             "• «переведи на английский и пришли DOCX»\n\n"
             "Можно ответить на готовый ответ «пришли в PDF» — пришлю его файлом.\n\n"
             "<b>Читаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (до {mb} МБ, PDF до {pages} страниц).\n"
-            "<b>Создаю:</b> TXT, DOCX, PDF, CSV, XLSX.\n\n"
+            "<b>Создаю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
             "Скан без текстового слоя не читается — пришли фото страницы."
         ),
         "uk": (
@@ -1011,7 +1093,7 @@ TR: dict[str, dict[str, str]] = {
             "• «переклади англійською й надішли DOCX»\n\n"
             "Можна відповісти на готову відповідь «надішли в PDF» — надішлю її файлом.\n\n"
             "<b>Читаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (до {mb} МБ, PDF до {pages} сторінок).\n"
-            "<b>Створюю:</b> TXT, DOCX, PDF, CSV, XLSX.\n\n"
+            "<b>Створюю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
             "Скан без текстового шару не читається — надішли фото сторінки."
         ),
         "be": (
@@ -1023,7 +1105,7 @@ TR: dict[str, dict[str, str]] = {
             "• «перакладзі на англійскую і дашлі DOCX»\n\n"
             "Можна адказаць на гатовы адказ «дашлі ў PDF» — дашлю яго файлам.\n\n"
             "<b>Чытаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (да {mb} МБ, PDF да {pages} старонак).\n"
-            "<b>Ствараю:</b> TXT, DOCX, PDF, CSV, XLSX.\n\n"
+            "<b>Ствараю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
             "Скан без тэкставага слоя не чытаецца — дашлі фота старонкі."
         ),
         "en": (
@@ -1035,7 +1117,7 @@ TR: dict[str, dict[str, str]] = {
             "• \"translate to English and send a DOCX\"\n\n"
             "You can also reply to a finished answer with \"send it as PDF\" — I'll attach it as a file.\n\n"
             "<b>I read:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (up to {mb} MB, PDF up to {pages} pages).\n"
-            "<b>I create:</b> TXT, DOCX, PDF, CSV, XLSX.\n\n"
+            "<b>I create:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
             "Scans without a text layer can't be read — send a photo of the page."
         ),
     },

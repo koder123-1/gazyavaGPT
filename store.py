@@ -73,6 +73,9 @@ class Store(Protocol):
     ) -> None: ...
     async def delete_profile(self, user_id: int) -> None: ...
 
+    async def get_style(self, user_id: int) -> str | None: ...
+    async def set_style(self, user_id: int, style: str | None) -> None: ...
+
     async def get_role(self, user_id: int) -> str | None: ...
     async def set_role(self, user_id: int, role: str, granted_by: int = 0) -> None: ...
     async def delete_role(self, user_id: int) -> None: ...
@@ -104,6 +107,7 @@ class MemoryStore:
         self._settings: dict[str, str] = {}
         self._exchanges: dict[int, dict] = {}
         self._profiles: dict[int, dict] = {}
+        self._styles: dict[int, str] = {}
         self._payments: dict[str, dict] = {}
         self._model_access: dict[int, set[str]] = {}
         self._roles: dict[int, str] = {}
@@ -445,6 +449,15 @@ class MemoryStore:
 
     async def delete_profile(self, user_id: int) -> None:
         self._profiles.pop(user_id, None)
+
+    async def get_style(self, user_id: int) -> str | None:
+        return self._styles.get(user_id)
+
+    async def set_style(self, user_id: int, style: str | None) -> None:
+        if style:
+            self._styles[user_id] = style
+        else:
+            self._styles.pop(user_id, None)
 
     # ------------------------------------------------------------------ роли
     async def get_role(self, user_id: int) -> str | None:
@@ -1145,6 +1158,19 @@ class PostgresStore:
         assert self._pool is not None
         await self._pool.execute("DELETE FROM profiles WHERE user_id = $1", user_id)
 
+    async def get_style(self, user_id: int) -> str | None:
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            "SELECT style FROM users WHERE user_id = $1", user_id
+        )
+        return (row["style"] if row else None) or None
+
+    async def set_style(self, user_id: int, style: str | None) -> None:
+        assert self._pool is not None
+        await self._pool.execute(
+            "UPDATE users SET style = $2 WHERE user_id = $1", user_id, style
+        )
+
     # ------------------------------------------------------------------ роли
     async def get_role(self, user_id: int) -> str | None:
         assert self._pool is not None
@@ -1356,6 +1382,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_requests INTEGER NOT NULL DEFAU
 ALTER TABLE users ADD COLUMN IF NOT EXISTS lang TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_until TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS style TEXT;
 
 CREATE TABLE IF NOT EXISTS usage (
     user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,

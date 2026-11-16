@@ -53,6 +53,11 @@ from payments import send_model_invoice
 from roles import has_admin_access, is_staff, resolve_role, role_title
 from runtime import Runtime, load_runtime
 from store import Store
+from styles import (
+    STYLE_KEYS,
+    normalize_style,
+    style_hint,
+)
 from subjects import detect_subject, subject_hint, subject_title
 
 log = logging.getLogger("handlers")
@@ -196,6 +201,7 @@ async def send_model_menu(
 
 MENU_KEYS = (
     "menu.model",
+    "menu.styles",
     "menu.check",
     "menu.imagine",
     "menu.buy",
@@ -208,6 +214,80 @@ MENU_KEYS = (
     "menu.terms",
     "menu.admin",
 )
+
+
+def styles_kb(current: str, lang: str) -> InlineKeyboardMarkup:
+    """Выбор стиля: текущий помечен галочкой."""
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=("✅ " if key == current else "") + t(lang, f"styles.{key}"),
+                callback_data=f"sty:{key}",
+            )
+        ]
+        for key in STYLE_KEYS
+    ]
+    rows.append([InlineKeyboardButton(text=t(lang, "menu.home"), callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def render_styles(
+    store: Store, user_id: int, lang: str
+) -> tuple[str, InlineKeyboardMarkup]:
+    current = normalize_style(await store.get_style(user_id))
+    lines = [
+        t(lang, "styles.title"),
+        "",
+        t(lang, "styles.current", value=t(lang, f"styles.{current}")),
+        "",
+    ]
+    for key in STYLE_KEYS:
+        mark = "✅ " if key == current else ""
+        lines.append(
+            f"{mark}<b>{t(lang, f'styles.{key}')}</b> — {t(lang, f'styles.{key}.desc')}"
+        )
+    lines += ["", t(lang, "styles.hint")]
+    return "\n".join(lines), styles_kb(current, lang)
+
+
+async def send_styles(
+    message: Message, store: Store, settings: Settings, lang: str, user_id: int
+) -> None:
+    text, kb = await render_styles(store, user_id, lang)
+    await message.answer(text, reply_markup=kb)
+
+
+@router.message(Command("style", "styles"))
+async def cmd_style(message: Message, store: Store, settings: Settings) -> None:
+    user = message.from_user
+    if user is None:
+        return
+    await store.ensure_user(user.id, user.username, user.first_name)
+    lang = await user_lang(store, settings, user.id)
+    await send_styles(message, store, settings, lang, user.id)
+
+
+@router.callback_query(F.data.startswith("sty:"))
+async def cb_style(call: CallbackQuery, store: Store, settings: Settings) -> None:
+    user = call.from_user
+    if user is None or call.data is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    action = call.data.split(":", 1)[1]
+
+    if action != "menu":
+        if action not in STYLE_KEYS:
+            await call.answer(t(lang, "fb.stale"), show_alert=True)
+            return
+        await store.set_style(user.id, None if action == "auto" else action)
+
+    text, kb = await render_styles(store, user.id, lang)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    if action == "menu":
+        await call.answer()
+    else:
+        await call.answer(t(lang, "styles.saved", value=t(lang, f"styles.{action}")))
 
 
 def menu_label_map() -> dict[str, str]:
@@ -224,19 +304,19 @@ def main_menu_kb(
 ) -> ReplyKeyboardMarkup:
     """Постоянная клавиатура: почти всё меню под рукой, команды помнить не надо."""
     rows = [
-        _button_row(lang, "menu.model", "menu.check"),
-        _button_row(lang, "menu.imagine", "menu.files"),
+        _button_row(lang, "menu.model", "menu.styles"),
+        _button_row(lang, "menu.check", "menu.imagine"),
     ]
     if payments:
         rows.append(_button_row(lang, "menu.buy", "menu.support"))
     else:
         rows.append(_button_row(lang, "menu.support"))
-    rows.append(_button_row(lang, "menu.tickets", "menu.lang"))
+    rows.append(_button_row(lang, "menu.tickets", "menu.files"))
+    rows.append(_button_row(lang, "menu.lang", "menu.help"))
     if payments:
-        rows.append(_button_row(lang, "menu.help", "menu.terms"))
-        rows.append(_button_row(lang, "menu.reset"))
+        rows.append(_button_row(lang, "menu.terms", "menu.reset"))
     else:
-        rows.append(_button_row(lang, "menu.help", "menu.reset"))
+        rows.append(_button_row(lang, "menu.reset"))
     if staff:
         rows.append(_button_row(lang, "menu.admin"))
     return ReplyKeyboardMarkup(
@@ -251,11 +331,11 @@ def menu_inline(
     rows = [
         [
             InlineKeyboardButton(text=t(lang, "menu.model"), callback_data="mdl:menu"),
-            InlineKeyboardButton(text=t(lang, "menu.check"), callback_data="menu:act:check"),
+            InlineKeyboardButton(text=t(lang, "menu.styles"), callback_data="sty:menu"),
         ],
         [
+            InlineKeyboardButton(text=t(lang, "menu.check"), callback_data="menu:act:check"),
             InlineKeyboardButton(text=t(lang, "menu.imagine"), callback_data="menu:act:imagine"),
-            InlineKeyboardButton(text=t(lang, "menu.files"), callback_data="menu:act:files"),
         ],
     ]
     if payments:
@@ -274,32 +354,32 @@ def menu_inline(
             InlineKeyboardButton(
                 text=t(lang, "menu.tickets"), callback_data="menu:act:tickets"
             ),
+            InlineKeyboardButton(text=t(lang, "menu.files"), callback_data="menu:act:files"),
+        ]
+    )
+    rows.append(
+        [
             InlineKeyboardButton(text=t(lang, "menu.lang"), callback_data="lang:menu"),
+            InlineKeyboardButton(text=t(lang, "menu.help"), callback_data="menu:act:help"),
         ]
     )
     if payments:
         rows.append(
             [
-                InlineKeyboardButton(text=t(lang, "menu.help"), callback_data="menu:act:help"),
                 InlineKeyboardButton(
                     text=t(lang, "menu.terms"), callback_data="menu:act:terms"
                 ),
-            ]
-        )
-        rows.append(
-            [
                 InlineKeyboardButton(
                     text=t(lang, "menu.reset"), callback_data="menu:act:reset"
-                )
+                ),
             ]
         )
     else:
         rows.append(
             [
-                InlineKeyboardButton(text=t(lang, "menu.help"), callback_data="menu:act:help"),
                 InlineKeyboardButton(
                     text=t(lang, "menu.reset"), callback_data="menu:act:reset"
-                ),
+                )
             ]
         )
     if staff:
@@ -389,9 +469,9 @@ def split_text(text: str, limit: int = CHUNK) -> list[str]:
     return [chunk for chunk in chunks if chunk.strip()]
 
 
-def readable_answer(text: str) -> str:
+def readable_answer(text: str, *, code: bool = False) -> str:
     """Приводит ответ модели к читаемому тексту; пустой результат не пропускает."""
-    cleaned = humanize_answer(text).strip()
+    cleaned = humanize_answer(text, code=code).strip()
     return cleaned or (text or "").strip()
 
 
@@ -416,13 +496,15 @@ async def keep_typing(bot: Bot, chat_id: int) -> AsyncIterator[None]:
             await task
 
 
-def html_parts(chunk: str, limit: int = HTML_LIMIT) -> list[tuple[str, str]]:
+def html_parts(
+    chunk: str, limit: int = HTML_LIMIT, *, code: bool = False
+) -> list[tuple[str, str]]:
     """(html, plain) куски: HTML не должен вылезти за лимит Telegram.
 
     Экранирование (< -> &lt;) и теги удлиняют текст, поэтому кусок, который
     в plain-виде влезал, в HTML может не влезть. Тогда дробим ещё мельче.
     """
-    html = to_telegram_html(chunk)
+    html = to_telegram_html(chunk, code=code)
     if len(html) <= limit:
         return [(html, chunk)]
     # Пропорционально ужимаем plain-кусок под HTML-лимит.
@@ -432,15 +514,21 @@ def html_parts(chunk: str, limit: int = HTML_LIMIT) -> list[tuple[str, str]]:
         pieces = [chunk[i : i + max(100, smaller)] for i in range(0, len(chunk), max(100, smaller))]
     result: list[tuple[str, str]] = []
     for piece in pieces:
-        result.extend(html_parts(piece, limit))
+        result.extend(html_parts(piece, limit, code=code))
     return result
 
 
-async def send_answer(message: Message, text: str, keyboard: InlineKeyboardMarkup | None = None) -> None:
+async def send_answer(
+    message: Message,
+    text: str,
+    keyboard: InlineKeyboardMarkup | None = None,
+    *,
+    code: bool = False,
+) -> None:
     """Отправляет решение HTML-блоками; при ошибке разметки — обычным текстом."""
     parts: list[tuple[str, str]] = []
     for chunk in split_text(text):
-        parts.extend(html_parts(chunk))
+        parts.extend(html_parts(chunk, code=code))
     for index, (html, plain) in enumerate(parts):
         markup = keyboard if index == len(parts) - 1 else None
         try:
@@ -763,8 +851,11 @@ async def answer_with_ai(
     payload_text = f"{instruction}\n\n---\n{question}" if instruction else question
 
     # Роутер предметов: смотрит на задание и подмешивает правила нужного предмета.
+    # В кодерском стиле предметный блок не нужен: там свои правила оформления.
+    style_key = normalize_style(await store.get_style(user.id))
+    style_note = style_hint(style_key)
     subject_key = detect_subject(payload_text, has_image=image is not None)
-    subject_note = subject_hint(subject_key)
+    subject_note = None if style_key == "code" else subject_hint(subject_key)
     if subject_note:
         log.info("Предмет задания для %s: %s", user.id, subject_title(subject_key))
 
@@ -785,6 +876,7 @@ async def answer_with_ai(
                 image_mime=image_mime,
                 vision_model=runtime.vision_model,
                 subject_note=subject_note,
+                style_note=style_note,
                 lang=lang,
                 task_lang=task_lang or detect_lang(question),
             )
@@ -796,7 +888,7 @@ async def answer_with_ai(
         await message.reply(t(lang, "err.generic"))
         return
 
-    answer = readable_answer(answer)
+    answer = readable_answer(answer, code=style_key == "code")
     if not answer:
         log.warning("Модель вернула только рассуждения, ответ не отправлен")
         await message.reply(t(lang, "err.retry"))
@@ -813,7 +905,7 @@ async def answer_with_ai(
     )
     await store.add_exchange_record(user.id, label, answer, kind)
     if deliver:
-        await send_answer(message, answer)
+        await send_answer(message, answer, code=style_key == "code")
     return answer
 
 
@@ -1095,6 +1187,7 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
         limit_text = t(lang, "me.limit_left", left=daily_left, total=runtime.daily_limit)
 
     banned = await store.is_banned(user.id)
+    style_key = normalize_style(await store.get_style(user.id))
     note = t(lang, "me.banned_note") if banned else ""
     rows = []
     if settings.payments_enabled:
@@ -1118,6 +1211,7 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
             sub_line="",
             limit=limit_text,
             bonus=bonus,
+            style=t(lang, f"styles.{style_key}"),
             model=escape(model_title(current_model)),
             note=note,
         ),
@@ -1423,6 +1517,7 @@ async def cb_feedback(
 
     await call.answer(t(lang, "fb.working"))
     runtime = await load_runtime(store, settings)
+    style_key = normalize_style(await store.get_style(owner))
     history = [
         {"role": "user", "content": exchange["question"]},
         {"role": "assistant", "content": exchange["answer"]},
@@ -1437,6 +1532,7 @@ async def cb_feedback(
                 model=chosen_model,
                 system_prompt=runtime.system_prompt,
                 vision_model=runtime.vision_model,
+                style_note=style_hint(style_key),
                 lang=lang,
                 task_lang=detect_lang(exchange["question"]),
             )
@@ -1448,12 +1544,12 @@ async def cb_feedback(
         await call.message.answer(t(lang, "err.retry"))
         return
 
-    answer = readable_answer(answer)
+    answer = readable_answer(answer, code=style_key == "code")
     if not answer:
         await call.message.answer(t(lang, "err.retry"))
         return
     new_id = await store.add_exchange_record(owner, exchange["question"], answer, action)
-    await send_answer(call.message, answer)
+    await send_answer(call.message, answer, code=style_key == "code")
 
 
 # --------------------------------------------------------------------------- главное меню
@@ -1482,6 +1578,8 @@ async def on_menu_button(
 
     if action == "menu.model":
         await send_model_menu(message, store, settings, lang, user.id)
+    elif action == "menu.styles":
+        await send_styles(message, store, settings, lang, user.id)
     elif action == "menu.check":
         await state.set_state(Check.awaiting)
         await message.answer(t(lang, "check.hint"))
@@ -1589,6 +1687,9 @@ async def cb_menu_action(
     if action == "check":
         await state.set_state(Check.awaiting)
         await call.message.answer(t(lang, "check.hint"))
+    elif action == "styles":
+        await store.ensure_user(user.id, user.username, user.first_name)
+        await send_styles(call.message, store, settings, lang, user.id)
     elif action == "imagine":
         await state.set_state(Imagine.awaiting)
         await call.message.answer(t(lang, "img.ask_prompt"))

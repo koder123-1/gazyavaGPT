@@ -49,6 +49,7 @@ COMMANDS = [
     BotCommand(command="files", description="Чтение и создание файлов"),
     BotCommand(command="lang", description="Сменить язык"),
     BotCommand(command="model", description="Выбрать модель ИИ"),
+    BotCommand(command="style", description="Стиль ответов: учёба или код"),
     BotCommand(command="buy", description="Пополнить запросы за звёзды"),
     BotCommand(command="terms", description="Условия покупки"),
     BotCommand(command="support", description="Написать в поддержку"),

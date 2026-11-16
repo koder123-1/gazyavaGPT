@@ -35,6 +35,10 @@ OUTPUT_EXTS = {
     "pdf": ".pdf",
     "csv": ".csv",
     "xlsx": ".xlsx",
+    "py": ".py",
+    "html": ".html",
+    "css": ".css",
+    "js": ".js",
 }
 
 # Расширения по MIME: Telegram не всегда присылает file_name.
@@ -227,6 +231,23 @@ def build_txt(text: str) -> bytes:
     return (text or "").replace("\r\n", "\n").encode("utf-8")
 
 
+_FENCE_ONLY_RE = re.compile(
+    r"^\s*```[ \t]*[A-Za-z0-9_+.-]*[ \t]*\n(.*?)\n?```\s*$", re.S
+)
+
+
+def build_code(text: str) -> bytes:
+    """Файл с кодом: снимаем markdown-забор, если модель его поставила."""
+    body = text or ""
+    match = _FENCE_ONLY_RE.match(body)
+    if match:
+        body = match.group(1)
+    else:
+        body = re.sub(r"^\s*```[ \t]*[A-Za-z0-9_+.-]*\s*$", "", body, flags=re.M)
+        body = re.sub(r"^\s*```\s*$", "", body, flags=re.M)
+    return (body.rstrip() + "\n").replace("\r\n", "\n").encode("utf-8")
+
+
 def _table_rows(text: str) -> list[list[str]]:
     rows: list[list[str]] = []
     for raw in (text or "").splitlines():
@@ -388,18 +409,36 @@ def build_output(text: str, fmt: str) -> tuple[bytes, str]:
         "pdf": build_pdf,
         "csv": build_csv,
         "xlsx": build_xlsx,
+        "py": build_code,
+        "html": build_code,
+        "css": build_code,
+        "js": build_code,
     }
     builder = builders.get(fmt)
     if builder is None:
         raise FileError("file.unsupported", ext=fmt)
     ext = OUTPUT_EXTS[fmt]
-    name = sanitize_name("gazyavaGPT-решение", ext)
+    base = "gazyavaGPT-код" if fmt in {"py", "html", "css", "js"} else "gazyavaGPT-решение"
+    name = sanitize_name(base, ext)
     return builder(text), name
 
 
 # --------------------------------------------------------------------------- формат ответа
 
 _FORMAT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    # Код: только явные просьбы про файл с расширением, чтобы «что такое Python»
+    # не превращалось в .py-вложение.
+    ("py", re.compile(
+        r"\.py\b|\bpy[- ]?файл|\bpython[- ]?файл|\bфайл\w*\s+(?:на\s+)?python",
+        re.IGNORECASE,
+    )),
+    ("html", re.compile(
+        r"\.html?\b|\bhtml[- ]?файл|\bфайл\w*\s+html", re.IGNORECASE
+    )),
+    ("css", re.compile(r"\.css\b|\bcss[- ]?файл", re.IGNORECASE)),
+    ("js", re.compile(
+        r"\.js\b|\bjs[- ]?файл|\bjavascript[- ]?файл", re.IGNORECASE
+    )),
     ("pdf", re.compile(r"\bpdf\b|пдф|пэдэф|пдэф", re.IGNORECASE)),
     ("docx", re.compile(r"\bdocx?\b|\bword\b|ворд|докс", re.IGNORECASE)),
     ("xlsx", re.compile(r"\bxlsx\b|\bexcel\b|эксель|ексель", re.IGNORECASE)),

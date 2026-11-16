@@ -362,14 +362,24 @@ def strip_thinking(text: str) -> str:
     return rest
 
 
-def humanize_answer(text: str) -> str:
-    """Убирает LaTeX/markdown и делает решение читаемым в обычном тексте."""
+def humanize_answer(text: str, *, code: bool = False) -> str:
+    """Убирает LaTeX/markdown и делает решение читаемым в обычном тексте.
+
+    code=True — ответ в кодерском стиле: код не трогаем, сохраняем отступы,
+    решётки, обратные кавычки и HTML-теги, иначе примеры ломаются.
+    """
     if not text:
         return ""
     text = strip_thinking(text)
     if not text:
         return ""
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\u00a0", " ")
+
+    if code:
+        text = text.replace("\t", "    ")
+        text = "\n".join(line.rstrip() for line in text.split("\n"))
+        text = re.sub(r"\n{4,}", "\n\n\n", text)
+        return text.strip()
 
     text = re.sub(r"\$\$(.+?)\$\$", r"\1", text, flags=re.S)
     text = re.sub(r"(?<!\$)\$(?!\$)([^$\n]+?)(?<!\$)\$(?!\$)", r"\1", text)
@@ -493,8 +503,10 @@ def _render_section_body(lines: list[str]) -> str:
     return body
 
 
-def to_telegram_html(text: str) -> str:
+def to_telegram_html(text: str, *, code: bool = False) -> str:
     """Превращает готовый текстовый ответ в аккуратные HTML-блоки Telegram."""
+    if code:
+        return to_code_html(text)
     from html import escape
 
     text = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -537,3 +549,34 @@ def to_telegram_html(text: str) -> str:
 
     result = "\n\n".join(part for part in parts if part.strip())
     return re.sub(r"\n{3,}", "\n\n", result).strip()
+
+
+# ```язык ... ``` — блок кода в кодерском стиле.
+_CODE_FENCE_RE = re.compile(r"```[ \t]*([A-Za-z0-9_+.-]*)[ \t]*\n(.*?)```", re.S)
+
+
+def to_code_html(text: str) -> str:
+    """HTML для кодерского стиля: код уходит в <pre>, текст — обычными блоками."""
+    from html import escape
+
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not text:
+        return ""
+    if "```" not in text:
+        # Модель не использовала заборы — не рискуем разметкой, отдаём как есть.
+        return escape(text)
+
+    parts: list[str] = []
+    position = 0
+    for match in _CODE_FENCE_RE.finditer(text):
+        before = text[position : match.start()].strip()
+        if before:
+            parts.append(to_telegram_html(before))
+        block = match.group(2).strip("\n")
+        if block:
+            parts.append("<pre>" + escape(block) + "</pre>")
+        position = match.end()
+    tail = text[position:].strip()
+    if tail:
+        parts.append(to_telegram_html(tail))
+    return "\n\n".join(part for part in parts if part.strip())

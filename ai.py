@@ -125,6 +125,7 @@ class AIClient:
         image_mime: str = "image/jpeg",
         vision_model: str | None = None,
         subject_note: str | None = None,
+        style_note: str | None = None,
         lang: str = "ru",
         task_lang: str | None = None,
     ) -> str:
@@ -167,6 +168,7 @@ class AIClient:
             system_prompt or settings.system_prompt,
             has_image=image is not None,
             subject_note=subject_note,
+            style_note=style_note,
             lang=lang,
             task_lang=task_lang,
         )
@@ -201,6 +203,7 @@ class AIClient:
                             image_mime=image_mime,
                             vision_model=vision_model,
                             subject_note=subject_note,
+                            style_note=style_note,
                             lang=lang,
                             task_lang=task_lang,
                         )
@@ -225,6 +228,7 @@ class AIClient:
             image_mime=image_mime,
             vision_model=vision_model,
             subject_note=subject_note,
+            style_note=style_note,
             lang=lang,
             task_lang=task_lang,
         )
