@@ -1065,6 +1065,12 @@ TR: dict[str, dict[str, str]] = {
         "be": "Разбяры гэты файл: коратка перакажы змест і выдзелі галоўнае.",
         "en": "Go through this file: briefly summarise it and highlight the key points.",
     },
+    "file.convert_task": {
+        "ru": "Переоформи содержимое файла аккуратно: сохрани структуру, заголовки и ничего не потеряй.",
+        "uk": "Переоформи вміст файлу ахайна: збережи структуру, заголовки й нічого не загубі.",
+        "be": "Перааформі змест файла акуратна: захавай структуру, загалоўкі і нічога не страці.",
+        "en": "Reformat the file neatly: keep the structure, headings and all content.",
+    },
     "file.caption": {
         "ru": "📄 Готово: {name}",
         "uk": "📄 Готово: {name}",
@@ -1097,7 +1103,8 @@ TR: dict[str, dict[str, str]] = {
             "• «исправь ошибки»\n"
             "• «реши задания и оформи в PDF»\n"
             "• «переведи на английский и пришли DOCX»\n\n"
-            "Можно ответить на готовый ответ «пришли в PDF» — пришлю его файлом.\n\n"
+            "Можно ответить на готовый ответ «пришли в PDF» — пришлю его файлом.\n"
+            "А можно попросить файл с нуля: «сделай PDF с планом урока», «создай .py файл с ботом».\n\n"
             "<b>Читаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (до {mb} МБ, PDF до {pages} страниц).\n"
             "<b>Создаю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
             "Скан без текстового слоя не читается — пришли фото страницы."
@@ -1109,7 +1116,8 @@ TR: dict[str, dict[str, str]] = {
             "• «виправ помилки»\n"
             "• «розв'яжи завдання й оформи в PDF»\n"
             "• «переклади англійською й надішли DOCX»\n\n"
-            "Можна відповісти на готову відповідь «надішли в PDF» — надішлю її файлом.\n\n"
+            "Можна відповісти на готову відповідь «надішли в PDF» — надішлю її файлом.\n"
+            "А можна попросити файл з нуля: «зроби PDF із планом уроку», «створи .py файл із ботом».\n\n"
             "<b>Читаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (до {mb} МБ, PDF до {pages} сторінок).\n"
             "<b>Створюю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
             "Скан без текстового шару не читається — надішли фото сторінки."
@@ -1121,7 +1129,8 @@ TR: dict[str, dict[str, str]] = {
             "• «выпраў памылкі»\n"
             "• «развяжы заданні і аформі ў PDF»\n"
             "• «перакладзі на англійскую і дашлі DOCX»\n\n"
-            "Можна адказаць на гатовы адказ «дашлі ў PDF» — дашлю яго файлам.\n\n"
+            "Можна адказаць на гатовы адказ «дашлі ў PDF» — дашлю яго файлам.\n"
+            "А можна папрасіць файл з нуля: «зрабі PDF з планам урока», «ствары .py файл з ботам».\n\n"
             "<b>Чытаю:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (да {mb} МБ, PDF да {pages} старонак).\n"
             "<b>Ствараю:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
             "Скан без тэкставага слоя не чытаецца — дашлі фота старонкі."
@@ -1133,7 +1142,8 @@ TR: dict[str, dict[str, str]] = {
             "• \"fix the mistakes\"\n"
             "• \"solve the tasks and export to PDF\"\n"
             "• \"translate to English and send a DOCX\"\n\n"
-            "You can also reply to a finished answer with \"send it as PDF\" — I'll attach it as a file.\n\n"
+            "You can also reply to a finished answer with \"send it as PDF\" — I'll attach it as a file.\n"
+            "Or ask for a file from scratch: \"make a PDF with a lesson plan\", \"create a .py file with a bot\".\n\n"
             "<b>I read:</b> TXT, MD, CSV, JSON, DOCX, PDF, XLSX (up to {mb} MB, PDF up to {pages} pages).\n"
             "<b>I create:</b> TXT, DOCX, PDF, CSV, XLSX, PY, HTML, CSS, JS.\n\n"
             "Scans without a text layer can't be read — send a photo of the page."

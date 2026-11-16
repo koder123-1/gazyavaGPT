@@ -868,6 +868,13 @@ async def answer_with_ai(
 
     payload_text = f"{instruction}\n\n---\n{question}" if instruction else question
 
+    # «Сделай PDF с планом», «создай .py файл» — просим ИИ контент и отдаём файлом.
+    out_fmt = (
+        files.detect_output_format(question)
+        if deliver and files.wants_new_file(question)
+        else None
+    )
+
     # Роутер предметов: смотрит на задание и подмешивает правила нужного предмета.
     # В кодерском стиле предметный блок не нужен: там свои правила оформления.
     style_key = normalize_style(await store.get_style(user.id))
@@ -877,9 +884,31 @@ async def answer_with_ai(
     if subject_note:
         log.info("Предмет задания для %s: %s", user.id, subject_title(subject_key))
 
+    if out_fmt:
+        if out_fmt in {"py", "html", "css", "js"}:
+            payload_text += (
+                f"\n\n[Верни только код для файла .{out_fmt} в одном блоке "
+                "без пояснений и без фраз «вот файл».]"
+            )
+        else:
+            payload_text += (
+                "\n\n[Верни готовое содержимое документа: заголовки, списки и шаги. "
+                "Без вступлений и без упоминания файлов.]"
+            )
+
     history = []
     if use_history and runtime.max_context > 0:
         history = await store.history(user.id, runtime.max_context)
+
+    if out_fmt and files.is_pure_file_request(question):
+        last = next(
+            (item for item in reversed(history) if item.get("role") == "assistant"),
+            None,
+        )
+        if last and (last.get("content") or "").strip():
+            # Пользователь просит только переоформить прошлый ответ — не тратим ИИ.
+            await send_file(message, last["content"], out_fmt, lang)
+            return last["content"]
 
     chosen_model = await user_model(store, settings, runtime, user.id)
 
@@ -909,7 +938,11 @@ async def answer_with_ai(
     # Крупный код отдаём файлом: для этого сохраняем fences при чистке ответа.
     # В кодерском стиле код сохраняется всегда, даже если он короткий.
     _, big_blocks = split_big_code(answer)
-    code_view = style_key == "code" or bool(big_blocks)
+    code_view = (
+        style_key == "code"
+        or bool(big_blocks)
+        or out_fmt in {"py", "html", "css", "js"}
+    )
     answer = readable_answer(answer, code=code_view)
     if not answer:
         log.warning("Модель вернула только рассуждения, ответ не отправлен")
@@ -926,7 +959,9 @@ async def answer_with_ai(
         keep=max(2, runtime.max_context * 2) if runtime.max_context else 2,
     )
     await store.add_exchange_record(user.id, label, answer, kind)
-    if deliver:
+    if out_fmt:
+        await send_file(message, answer, out_fmt, lang)
+    elif deliver:
         await deliver_answer(message, answer, code=code_view, lang=lang)
     return answer
 
@@ -1322,10 +1357,14 @@ async def send_file(message: Message, text: str, fmt: str, lang: str) -> None:
         await send_answer(message, text)
         return
 
-    await message.answer_document(
-        BufferedInputFile(data, filename=filename),
-        caption=t(lang, "file.caption", name=filename),
-    )
+    try:
+        await message.answer_document(
+            BufferedInputFile(data, filename=filename),
+            caption=t(lang, "file.caption", name=filename),
+        )
+    except TelegramAPIError:
+        log.exception("Не удалось отправить файл %s — отдаю текстом", filename)
+        await send_answer(message, text)
 
 
 async def send_code_file(
@@ -1338,10 +1377,14 @@ async def send_code_file(
     if len(data) > SEND_LIMIT_BYTES:
         return False
     lines = len(code.splitlines())
-    await message.answer_document(
-        BufferedInputFile(data, filename=name),
-        caption=t(lang, "code.file_caption", name=name, lines=lines),
-    )
+    try:
+        await message.answer_document(
+            BufferedInputFile(data, filename=name),
+            caption=t(lang, "code.file_caption", name=name, lines=lines),
+        )
+    except TelegramAPIError:
+        log.exception("Не удалось отправить код файлом %s", name)
+        return False
     return True
 
 
@@ -1424,9 +1467,16 @@ async def handle_document(
         return
 
     task = (instruction or "").strip()
-    fmt = files.detect_output_format(task)
+    fmt = (
+        files.detect_output_format(task)
+        if files.wants_document_output(task)
+        else None
+    )
     if not task:
         task = t(lang, "file.default_task")
+    elif fmt and files.is_pure_file_request(task):
+        # «PDF», «пришли в DOCX» — просят переоформить, а не пересказать.
+        task = t(lang, "file.convert_task")
 
     wrapper = f"{task}\n\nСодержимое файла «{name}»:\n---\n{text}\n---"
     answer = await answer_with_ai(
@@ -1840,7 +1890,7 @@ async def on_text(
         and replied.from_user.id == bot.id
         and replied.text
     ):
-        fmt = files.detect_output_format(text) if files.wants_file(text) else None
+        fmt = files.detect_output_format(text) if files.wants_new_file(text) else None
         if fmt:
             plain = unescape(re.sub(r"<[^>]+>", "", replied.text))
             await send_file(message, plain, fmt, lang)

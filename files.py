@@ -231,17 +231,15 @@ def build_txt(text: str) -> bytes:
     return (text or "").replace("\r\n", "\n").encode("utf-8")
 
 
-_FENCE_ONLY_RE = re.compile(
-    r"^\s*```[ \t]*[A-Za-z0-9_+.-]*[ \t]*\n(.*?)\n?```\s*$", re.S
-)
-
-
 def build_code(text: str) -> bytes:
     """Файл с кодом: снимаем markdown-забор, если модель его поставила."""
     body = text or ""
-    match = _FENCE_ONLY_RE.match(body)
-    if match:
-        body = match.group(1)
+    blocks = re.findall(
+        r"```[ \t]*[A-Za-z0-9_+.-]*[ \t]*\n(.*?)```", body, flags=re.S
+    )
+    if blocks:
+        # В файл кладём только код: пояснения модели вокруг блоков не нужны.
+        body = "\n\n".join(block.strip("\n") for block in blocks)
     else:
         body = re.sub(r"^\s*```[ \t]*[A-Za-z0-9_+.-]*\s*$", "", body, flags=re.M)
         body = re.sub(r"^\s*```\s*$", "", body, flags=re.M)
@@ -475,3 +473,62 @@ def wants_file(instruction: str | None) -> bool:
     """
     text = (instruction or "").strip()
     return bool(text) and bool(_FILE_VERB.search(text)) and detect_output_format(text) is not None
+
+
+# Глаголы, с которых начинается просьба именно СОЗДАТЬ файл.
+_CREATE_VERB = re.compile(
+    r"(?i)\b(?:созда\w*|сдела\w*|сгенер\w*|сформир\w*|напиш\w*|оформ\w*|сохран\w*|пришл\w*|"
+    r"отправ\w*|скин\w*|выгруз\w*|экспорт\w*|собер\w*|подготов\w*|перевед\w*|"
+    r"конверт\w*|нужен|нужно|надо|хочу\w*|можно|дай\w*|пришлите|сделайте|создайте)\b"
+)
+_QUESTION_START = re.compile(
+    r"(?i)^\s*(?:как|что|почему|зачем|где|когда|можно\s+ли|расскажи|объясни|"
+    r"подскажи|how|what|why|where|when|can\s+i)\b"
+)
+_EXPLICIT_DOC = re.compile(r"(?i)\b(?:файл|документ|word|ворд|докс|docx?)\b")
+
+# Слова, которые не несут содержания в просьбе «пришли файлом».
+_FILE_NOISE = re.compile(
+    r"(?i)\b(?:а|и|ну|мне|это|этот|эту|его|её|ее|всё|все|в|во|на|с|со|по|как|"
+    r"пожалуйста|плиз|теперь|просто|можешь|можно|нужно|нужен|надо|давай|"
+    r"созда\w*|сдела\w*|сгенер\w*|напиш\w*|оформ\w*|сохран\w*|пришл\w*|"
+    r"отправ\w*|скин\w*|выгруз\w*|экспорт\w*|собер\w*|подготов\w*|перевед\w*|"
+    r"конверт\w*|дай\w*|файл\w*|документ\w*|вложени\w*|"
+    r"pdf|docx?|word|ворд|докс|xlsx|excel|эксель|csv|txt|текстов\w*|"
+    r"py|python|html|css|js|javascript)\b"
+)
+
+
+def wants_new_file(text: str | None) -> bool:
+    """Просит ли пользователь СОЗДАТЬ файл с нуля (а не спросить о файлах).
+
+    «Сделай PDF с планом» — да. «Как отправить файл в Telegram?» — нет.
+    """
+    raw = (text or "").strip()
+    if not raw or _QUESTION_START.match(raw):
+        return False
+    if detect_output_format(raw) is None or not _CREATE_VERB.search(raw):
+        return False
+    # Общий DOCX включаем только при явном слове «файл/документ/word».
+    if detect_output_format(raw) == "docx" and not _EXPLICIT_DOC.search(raw):
+        return False
+    return True
+
+
+def wants_document_output(text: str | None) -> bool:
+    """Нужен ли файл в ответ на присланный документ.
+
+    Здесь контекст уже есть: достаточно формата («PDF») или просьбы
+    («переведи и пришли DOCX»). Вопросы «что такое PDF» отсекаются.
+    """
+    raw = (text or "").strip()
+    if not raw or _QUESTION_START.match(raw):
+        return False
+    return detect_output_format(raw) is not None
+
+
+def is_pure_file_request(text: str | None) -> bool:
+    """В просьбе нет содержания — только «пришли это файлом»."""
+    leftover = _FILE_NOISE.sub(" ", text or "")
+    leftover = re.sub(r"[\W_]+", "", leftover, flags=re.UNICODE)
+    return len(leftover) < 3
