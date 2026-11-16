@@ -905,9 +905,26 @@ async def answer_with_ai(
     # «Сделай PDF с планом», «создай .py файл» — просим ИИ контент и отдаём файлом.
     out_fmt = (
         files.detect_output_format(question)
-        if deliver and files.wants_new_file(question)
+        if deliver
+        and (
+            files.wants_new_file(question)
+            or files.is_empty_file_request(question)
+        )
         else None
     )
+
+    # «Сделай пустой файл html» — не тратим ИИ: отдаём ровно пустой файл
+    # с коротким именем, а не страницу-заготовку с именем «gazyavaGPT-код».
+    if out_fmt and deliver and files.is_empty_file_request(question):
+        await send_file(
+            message,
+            "",
+            out_fmt,
+            lang,
+            name=files.suggest_filename(question, out_fmt),
+            empty=True,
+        )
+        return ""
 
     # Роутер предметов: смотрит на задание и подмешивает правила нужного предмета.
     # В кодерском стиле предметный блок не нужен: там свои правила оформления.
@@ -941,7 +958,13 @@ async def answer_with_ai(
         )
         if last and (last.get("content") or "").strip():
             # Пользователь просит только переоформить прошлый ответ — не тратим ИИ.
-            await send_file(message, last["content"], out_fmt, lang)
+            await send_file(
+                message,
+                last["content"],
+                out_fmt,
+                lang,
+                name=files.suggest_filename(question, out_fmt),
+            )
             return last["content"]
 
     chosen_model = await user_model(store, settings, runtime, user.id)
@@ -1019,7 +1042,13 @@ async def answer_with_ai(
     )
     await store.add_exchange_record(user.id, label, answer, kind)
     if out_fmt:
-        await send_file(message, answer, out_fmt, lang)
+        await send_file(
+            message,
+            answer,
+            out_fmt,
+            lang,
+            name=files.suggest_filename(question, out_fmt),
+        )
     elif deliver:
         await deliver_answer(message, answer, code=code_view, lang=lang)
     return answer
@@ -1424,11 +1453,24 @@ async def on_check_input(
 SEND_LIMIT_BYTES = 45 * 1024 * 1024
 
 
-async def send_file(message: Message, text: str, fmt: str, lang: str) -> None:
+async def send_file(
+    message: Message,
+    text: str,
+    fmt: str,
+    lang: str,
+    *,
+    name: str | None = None,
+    empty: bool = False,
+) -> None:
     """Собирает файл с ответом и отправляет его в чат."""
     fmt = fmt.lower()
     try:
-        data, filename = await asyncio.to_thread(files.build_output, text, fmt)
+        if empty:
+            data, filename = files.build_empty(fmt, name)
+        else:
+            data, filename = await asyncio.to_thread(
+                files.build_output, text, fmt, name
+            )
     except files.FileError:
         if fmt == "pdf":
             try:
@@ -1453,8 +1495,21 @@ async def send_file(message: Message, text: str, fmt: str, lang: str) -> None:
             caption=t(lang, "file.caption", name=filename),
         )
     except TelegramAPIError:
+        # Telegram не любит совсем пустые документы: шлём один перевод строки.
+        if not data:
+            try:
+                await message.answer_document(
+                    BufferedInputFile(b"\n", filename=filename),
+                    caption=t(lang, "file.caption", name=filename),
+                )
+                return
+            except TelegramAPIError:
+                pass
         log.exception("Не удалось отправить файл %s — отдаю текстом", filename)
-        await send_answer(message, text)
+        if text.strip():
+            await send_answer(message, text)
+        else:
+            await message.reply(t(lang, "file.empty"))
 
 
 async def send_code_file(
@@ -1584,7 +1639,13 @@ async def handle_document(
     )
 
     if answer and fmt:
-        await send_file(message, answer, fmt, lang)
+        await send_file(
+            message,
+            answer,
+            fmt,
+            lang,
+            name=files.suggest_filename(instruction or name, fmt),
+        )
 
 
 # --------------------------------------------------------------------------- картинки (фото)
@@ -2142,7 +2203,13 @@ async def on_text(
         fmt = files.detect_output_format(text) if files.wants_new_file(text) else None
         if fmt:
             plain = unescape(re.sub(r"<[^>]+>", "", replied.text))
-            await send_file(message, plain, fmt, lang)
+            await send_file(
+                message,
+                plain,
+                fmt,
+                lang,
+                name=files.suggest_filename(text, fmt),
+            )
             return
 
     draw_match = DRAW_RE.match(text)

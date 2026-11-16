@@ -399,7 +399,7 @@ def build_pdf(text: str) -> bytes:
     return bytes(pdf.output())
 
 
-def build_output(text: str, fmt: str) -> tuple[bytes, str]:
+def build_output(text: str, fmt: str, name: str | None = None) -> tuple[bytes, str]:
     """Собирает файл нужного формата. Возвращает (данные, имя файла)."""
     builders = {
         "txt": build_txt,
@@ -416,9 +416,68 @@ def build_output(text: str, fmt: str) -> tuple[bytes, str]:
     if builder is None:
         raise FileError("file.unsupported", ext=fmt)
     ext = OUTPUT_EXTS[fmt]
-    base = "gazyavaGPT-код" if fmt in {"py", "html", "css", "js"} else "gazyavaGPT-решение"
-    name = sanitize_name(base, ext)
-    return builder(text), name
+    base = name or ("gazyavaGPT-код" if fmt in {"py", "html", "css", "js"} else "gazyavaGPT-решение")
+    filename = sanitize_name(base, ext)
+    return builder(text), filename
+
+
+def build_empty(fmt: str, name: str | None = None) -> tuple[bytes, str]:
+    """Пустой файл (0 байт) с правильным расширением.
+
+    «Сделай пустой файл html» — это именно пустой файл, а не страница-заготовка
+    на 188 байт и не имя вида «gazyavaGPT-код»: так пользователь сразу видит,
+    что получил то, о чём просил.
+    """
+    if fmt not in OUTPUT_EXTS:
+        raise FileError("file.unsupported", ext=fmt)
+    ext = OUTPUT_EXTS[fmt]
+    base = name or suggest_filename("пустой", fmt)
+    return b"", sanitize_name(base, ext)
+
+
+# Слова, которые не должны попадать в имя файла: это команды и формат, а не смысл.
+_NAME_NOISE = re.compile(
+    r"(?i)\b(?:созда\w*|сдела\w*|сгенер\w*|сформир\w*|напиш\w*|оформ\w*|сохран\w*|"
+    r"пришл\w*|отправ\w*|скин\w*|выгруз\w*|экспорт\w*|собер\w*|подготов\w*|"
+    r"перевед\w*|конверт\w*|пожалуйста|плиз|мне|нужен|нужно|надо|хочу|дай\w*|"
+    r"файл\w*|документ\w*|вложени\w*|"
+    r"pdf|docx?|word|ворд|докс|xlsx|excel|эксель|csv|txt|текстов\w*|"
+    r"py|python|html|css|js|javascript|"
+    r"а|и|в|во|на|с|со|по|для|от|до|из|к|о|об|это|этот|эту|этого)\b"
+)
+_EMPTY_WORD = re.compile(r"(?i)\b(?:пуст\w*|empty)\b")
+_PAGE_WORD = re.compile(r"(?i)\b(?:сайт\w*|страниц\w*|лендинг\w*|site|page|index)\b")
+
+
+def is_empty_file_request(text: str | None) -> bool:
+    """Просит именно пустой файл: «сделай пустой html», «пустой txt файл»."""
+    raw = (text or "").strip()
+    if not raw or not _EMPTY_WORD.search(raw):
+        return False
+    if detect_output_format(raw) not in {"txt", "html", "css", "js", "py", "csv"}:
+        return False
+    # «Пустой шаблон с формой» — это уже содержание, а не пустой файл.
+    leftover = _EMPTY_WORD.sub(" ", _NAME_NOISE.sub(" ", raw))
+    leftover = re.sub(r"[\W_]+", "", leftover, flags=re.UNICODE)
+    return len(leftover) < 3
+
+
+def suggest_filename(instruction: str | None, fmt: str) -> str:
+    """Короткое осмысленное имя из просьбы вместо «gazyavaGPT-код»."""
+    ext = OUTPUT_EXTS[fmt]
+    text = (instruction or "").strip()
+    if is_empty_file_request(text):
+        base = "пустой"
+    elif fmt in {"html", "css", "js"} and _PAGE_WORD.search(text):
+        base = "index"
+    else:
+        cleaned = _NAME_NOISE.sub(" ", text)
+        words = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+", cleaned)
+        base = "-".join(words[:4])
+        base = re.sub(r"-{2,}", "-", base).strip("-")[:40]
+        if not base:
+            base = "gazyavaGPT-код" if fmt in {"py", "html", "css", "js"} else "gazyavaGPT-решение"
+    return sanitize_name(base, ext)
 
 
 # --------------------------------------------------------------------------- формат ответа
@@ -446,6 +505,16 @@ _FORMAT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 _GENERIC_FILE = re.compile(
     r"\bфайл\w*\b|\bскач\w*\b|\bсохран\w*\b|\bвыгруз\w*\b|\bэкспорт\w*\b", re.IGNORECASE
 )
+# Формат без слова «файл»: «создай пустой html», «напиши игру на python».
+_FORMAT_WORDS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("py", re.compile(r"\bpython\b", re.IGNORECASE)),
+    ("html", re.compile(r"\bhtml?\b", re.IGNORECASE)),
+    ("css", re.compile(r"\bcss\b", re.IGNORECASE)),
+    ("js", re.compile(r"\b(?:js|javascript)\b", re.IGNORECASE)),
+)
+_ASK_ABOUT = re.compile(
+    r"(?i)\b(?:что такое|как работает|как сделать|почему|зачем|объясни|расскажи|подскажи)\b"
+)
 _FILE_VERB = re.compile(
     r"пришл|отправ|сдел|оформ|сохран|скач|выгруз|экспорт|перев|нужен|нужн|"
     r"в виде|файл",
@@ -461,6 +530,10 @@ def detect_output_format(instruction: str | None) -> str | None:
     for fmt, pattern in _FORMAT_PATTERNS:
         if pattern.search(text):
             return fmt
+    if _CREATE_VERB.search(text) and not _QUESTION_START.search(text) and not _ASK_ABOUT.search(text):
+        for fmt, pattern in _FORMAT_WORDS:
+            if pattern.search(text):
+                return fmt
     if _GENERIC_FILE.search(text):
         return "docx"
     return None
