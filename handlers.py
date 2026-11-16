@@ -1717,11 +1717,13 @@ async def handle_document(
     )
 
     if answer and fmt:
-        out_name = (
-            files.edited_filename(name, fmt)
-            if editing
-            else files.suggest_filename(instruction or name, fmt)
-        )
+        if editing and (requested is None or requested == source_fmt):
+            out_name = files.edited_filename(name, fmt)
+        elif source_fmt:
+            # Конвертация присланного файла: сохраняем имя, меняем расширение.
+            out_name = files.retarget_filename(name, fmt)
+        else:
+            out_name = files.suggest_filename(instruction or name, fmt)
         await send_file(message, answer, fmt, lang, name=out_name)
 
 

@@ -553,6 +553,14 @@ def edited_filename(filename: str | None, fmt: str) -> str:
     return sanitize_name(f"{stem}-исправлено", ext)
 
 
+def retarget_filename(filename: str | None, fmt: str) -> str:
+    """То же имя с новым расширением: «конспект.txt» -> «конспект.pdf»."""
+    original = Path(filename or "document").name
+    stem = Path(original).stem or "document"
+    ext = OUTPUT_EXTS.get(fmt, Path(original).suffix or ".txt")
+    return sanitize_name(stem, ext)
+
+
 def edit_instruction(text: str | None) -> bool:
     """True when the user asks to make changes, not just summarize the file."""
     return bool(re.search(
