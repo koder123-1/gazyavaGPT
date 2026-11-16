@@ -1747,7 +1747,9 @@ VIDEO_INSTRUCTION = (
     "Если кадров мало, честно скажи, что видно не всё."
 )
 STICKER_INSTRUCTION = (
-    "Пользователь прислал стикер. Опиши, что на нём изображено, и объясни смысл или настроение."
+    "Пользователь прислал стикер. Если передано несколько кадров, это анимированный "
+    "стикер: опиши, что происходит по ходу анимации. Если кадр один — опиши, что на нём "
+    "изображено, и объясни смысл или настроение."
 )
 
 
@@ -1853,18 +1855,58 @@ async def on_sticker(
         return
     lang = await user_lang(store, settings, user.id)
     sticker = message.sticker
-
-    # Анимированный .tgs — это gzip с векторами, его нельзя отдать vision-модели.
-    if getattr(sticker, "is_animated", False):
-        await message.reply(t(lang, "media.sticker_animated"))
-        return
+    animated = bool(getattr(sticker, "is_animated", False))
+    is_video = bool(getattr(sticker, "is_video", False))
 
     data: bytes | None = None
-    if getattr(sticker, "is_video", False):
-        thumb_data, _ = await _download_bytes(
-            bot, getattr(sticker, "thumbnail", None), 5 * 1024 * 1024
-        )
-        data = thumb_data
+    note = ""
+    if is_video:
+        # .webm: достаём несколько кадров, чтобы увидеть движение.
+        raw, error = await _download_bytes(bot, sticker, 5 * 1024 * 1024)
+        if error == "too_big":
+            await message.reply(t(lang, "media.too_big", mb=5))
+            return
+        if raw:
+            frames = await asyncio.to_thread(media.sticker_video_frames, raw, 4)
+            if frames:
+                data = await asyncio.to_thread(media.contact_sheet, frames)
+        if not data:
+            thumb_data, _ = await _download_bytes(
+                bot, getattr(sticker, "thumbnail", None), 5 * 1024 * 1024
+            )
+            data = (
+                await asyncio.to_thread(media.sticker_image, thumb_data)
+                if thumb_data
+                else None
+            )
+        note = " Тебе передали несколько кадров анимированного стикера."
+    elif animated:
+        # .tgs — Lottie: рендерим кадры, а если пакета нет — берём превью.
+        raw, error = await _download_bytes(bot, sticker, 5 * 1024 * 1024)
+        if error == "too_big":
+            await message.reply(t(lang, "media.too_big", mb=5))
+            return
+        if raw:
+            frames = await asyncio.to_thread(media.tgs_frames, raw, 3)
+            if len(frames) > 1:
+                data = await asyncio.to_thread(media.contact_sheet, frames)
+            elif frames:
+                data = await asyncio.to_thread(media.sticker_image, frames[0])
+            if not data:
+                embedded = media.tgs_text(raw)
+                if embedded:
+                    note += f" Текст на стикере: «{embedded}»."
+        if not data:
+            thumb_data, _ = await _download_bytes(
+                bot, getattr(sticker, "thumbnail", None), 5 * 1024 * 1024
+            )
+            data = (
+                await asyncio.to_thread(media.sticker_image, thumb_data)
+                if thumb_data
+                else None
+            )
+        if data:
+            note += " Это кадры анимированного стикера."
     else:
         raw, error = await _download_bytes(bot, sticker, 5 * 1024 * 1024)
         if error == "too_big":
@@ -1880,6 +1922,7 @@ async def on_sticker(
     question = text.strip() or STICKER_PROMPT
     if emoji:
         question += f" Эмодзи стикера: {emoji}."
+    question += note
     await answer_with_ai(
         message,
         bot=bot,
