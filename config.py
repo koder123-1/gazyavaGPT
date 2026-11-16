@@ -197,7 +197,7 @@ class Settings:
     image_fallback: str = "pollinations"
     image_daily_limit: int = 1
 
-    file_max_mb: int = 10
+    file_max_mb: int = 20
     file_max_chars: int = 20000
     file_max_pdf_pages: int = 60
 
@@ -377,7 +377,7 @@ def load_settings() -> Settings:
         image_base_url=(os.getenv("IMAGE_BASE_URL", "").strip().rstrip("/")),
         image_fallback=(os.getenv("IMAGE_FALLBACK", "").strip() or "pollinations").lower(),
         image_daily_limit=max(0, _int_env("IMAGE_DAILY_LIMIT", 1)),
-        file_max_mb=max(1, _int_env("FILE_MAX_MB", 10)),
+        file_max_mb=max(1, _int_env("FILE_MAX_MB", 20)),
         file_max_chars=max(2000, _int_env("FILE_MAX_CHARS", 20000)),
         file_max_pdf_pages=max(1, _int_env("FILE_MAX_PDF_PAGES", 60)),
     )

@@ -15,7 +15,7 @@ from html import escape, unescape
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatAction
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramNetworkError
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -1650,7 +1650,8 @@ async def handle_document(
         if len(data) > files.TELEGRAM_DOWNLOAD_LIMIT:
             await message.reply(t(lang, "file.too_big", mb=20))
             return
-    except TelegramAPIError:
+    except (TelegramAPIError, TelegramNetworkError, OSError, TimeoutError):
+        log.exception("Не удалось скачать файл %s", name)
         await message.reply(t(lang, "file.download_failed"))
         return
     finally:
@@ -1741,7 +1742,7 @@ async def on_image(
     user = message.from_user
     lang = await user_lang(store, settings, user.id) if user else settings.default_lang
 
-    # A file without a caption should be sent back unchanged, including images.
+    # Файл без подписи возвращаем как есть — включая картинки-документы.
     if message.document is not None and not caption.strip():
         await handle_document(
             message,
@@ -1752,6 +1753,21 @@ async def on_image(
             instruction="",
         )
         return
+
+    # «нарисуй …» / «сделай фото …» с любым вложением — это генерация картинки,
+    # а не чтение документа: просьба нарисовать важнее вложенного файла.
+    if caption:
+        draw_match = DRAW_RE.match(caption)
+        if draw_match:
+            await send_generated(
+                message,
+                images,
+                settings,
+                lang,
+                caption[draw_match.end() :].strip(),
+                store=store,
+            )
+            return
 
     if message.document is not None and not files.is_image_document(
         message.document.file_name, message.document.mime_type
@@ -1771,18 +1787,6 @@ async def on_image(
         await message.reply(error)
         return
     assert data is not None
-
-    draw_match = DRAW_RE.match(caption or "")
-    if draw_match:
-        await send_generated(
-            message,
-            images,
-            settings,
-            lang,
-            (caption or "")[draw_match.end() :].strip(),
-            store=store,
-        )
-        return
 
     if caption and EDIT_RE.search(caption):
         await send_generated(

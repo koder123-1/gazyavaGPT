@@ -48,7 +48,9 @@ OUTPUT_EXTS = {
 
 # Обратное соответствие: по расширению присланного файла понять формат ответа.
 FORMAT_BY_EXT = {ext: fmt for fmt, ext in OUTPUT_EXTS.items()}
-FORMAT_BY_EXT.update({".md": "txt", ".markdown": "txt", ".tsv": "csv"})
+FORMAT_BY_EXT.update(
+    {".md": "txt", ".markdown": "txt", ".tsv": "csv", ".htm": "html"}
+)
 
 # Расширения по MIME: Telegram не всегда присылает file_name.
 _EXT_BY_MIME = {

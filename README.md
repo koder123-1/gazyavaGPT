@@ -114,7 +114,7 @@ tg-bot-render/
 | `AI_BASE_URL` | зависит от провайдера | подставляется сам: `openrouter.ai`, OpenAI, Google |
 | `DAILY_LIMIT` | `30` | запросов в день на пользователя; `0` = без лимита |
 | `MAX_CONTEXT` | `12` | число последних сообщений на запрос; `0` = без контекста |
-| `FILE_MAX_MB` | `10` | максимальный размер входящего файла, МБ (Telegram даёт до 20) |
+| `FILE_MAX_MB` | `20` | максимальный размер входящего файла, МБ (потолок Bot API — 20) |
 | `FILE_MAX_CHARS` | `20000` | сколько символов текста из файла уходит в модель |
 | `FILE_MAX_PDF_PAGES` | `60` | сколько первых страниц PDF читать |
 | `PDF_FONT_PATH` | `assets/DejaVuSans.ttf` | TTF-шрифт для PDF с кириллицей |
@@ -541,7 +541,7 @@ markdown — так требует `guards.py`), а `formatting.to_telegram_html
 
 **Что читает.** TXT, MD, CSV, TSV, JSON, LOG, код и разметка (`.py`, `.js`,
 `.html`, `.xml`, `.yaml`, `.sql` и т.п.), DOCX, PDF с текстовым слоем, XLSX,
-PPTX. Лимиты: `FILE_MAX_MB` (10 МБ), `FILE_MAX_CHARS` (20 000 символов в модель),
+PPTX. Лимиты: `FILE_MAX_MB` (20 МБ), `FILE_MAX_CHARS` (20 000 символов в модель),
 `FILE_MAX_PDF_PAGES` (60 страниц). Длинный текст обрезается с пометкой.
 
 **Что создаёт.** TXT, DOCX, PDF, CSV, XLSX, PPTX и файлы кода PY, HTML, CSS, JS.
