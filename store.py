@@ -86,6 +86,7 @@ class Store(Protocol):
     async def set_setting(self, key: str, value: str) -> None: ...
     async def delete_setting(self, key: str) -> None: ...
     async def all_settings(self) -> dict[str, str]: ...
+    async def settings_with_prefix(self, prefix: str) -> dict[str, str]: ...
 
     async def add_exchange_record(
         self, user_id: int, question: str, answer: str, kind: str
@@ -662,6 +663,13 @@ class MemoryStore:
 
     async def all_settings(self) -> dict[str, str]:
         return dict(self._settings)
+
+    async def settings_with_prefix(self, prefix: str) -> dict[str, str]:
+        return {
+            key: value
+            for key, value in self._settings.items()
+            if key.startswith(prefix)
+        }
 
     async def add_exchange_record(
         self, user_id: int, question: str, answer: str, kind: str
@@ -1798,6 +1806,13 @@ class PostgresStore:
     async def all_settings(self) -> dict[str, str]:
         assert self._pool is not None
         rows = await self._pool.fetch("SELECT key, value FROM settings")
+        return {r["key"]: r["value"] for r in rows}
+
+    async def settings_with_prefix(self, prefix: str) -> dict[str, str]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            "SELECT key, value FROM settings WHERE key LIKE $1", f"{prefix}%"
+        )
         return {r["key"]: r["value"] for r in rows}
 
     async def add_exchange_record(

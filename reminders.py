@@ -228,14 +228,14 @@ async def _tick(bot: Bot, store: Store, settings: Settings) -> int:
     """Один проход: отправляет всё, что уже наступило. Возвращает число отправок."""
     sent = 0
     try:
-        mapping = await store.all_settings()
+        # Только напоминания: тащить все settings (todo, card, debug_mode…)
+        # каждые 20 секунд — лишняя нагрузка на Postgres.
+        mapping = await store.settings_with_prefix(REMINDER_PREFIX)
     except Exception:  # noqa: BLE001 — база может моргнуть
         log.exception("Не удалось прочитать напоминания")
         return 0
     now = datetime.now(timezone.utc)
     for key, raw in list(mapping.items()):
-        if not key.startswith(REMINDER_PREFIX):
-            continue
         suffix = key[len(REMINDER_PREFIX) :]
         if not suffix.lstrip("-").isdigit():
             continue
