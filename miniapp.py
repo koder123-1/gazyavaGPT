@@ -35,6 +35,7 @@ import styles as style_catalog
 import toolbox
 from config import Settings
 from i18n import LANGS, normalize_lang
+from roles import is_staff, resolve_role
 from runtime import load_runtime
 from store import Store
 from subscription import (
@@ -191,7 +192,10 @@ async def api_me(request: web.Request) -> web.Response:
     lang = _lang_of(await store.get_lang(user_id), settings)
     style = style_catalog.normalize_style(await store.get_style(user_id))
     model = await store.get_model(user_id) or runtime.model
-    unlimited = runtime.daily_limit <= 0
+    # Сотрудники лимитом не ограничены (бот им не отказывает), поэтому в кабинете
+    # показываем «∞», хотя расход всё равно считается в статистике.
+    role = await resolve_role(user_id, settings, store)
+    unlimited = runtime.daily_limit <= 0 or is_staff(role)
     left = await store.remaining(user_id, runtime.daily_limit)
     card = await store.user_card(user_id) or {}
     username = _bot_username

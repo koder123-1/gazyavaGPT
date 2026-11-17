@@ -1008,26 +1008,30 @@ async def answer_with_ai(
 
     # Резервируем запрос до обращения к ИИ: два параллельных сообщения не должны
     # оба пройти по последнему бесплатному лимиту и по одному бонусу.
-    reserved: str | None = None
-    if not admin:
-        reserved = await store.try_consume(user.id, runtime.daily_limit)
-        if reserved is None:
-            kb = None
-            if settings.payments_enabled:
-                kb = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text=t(lang, "btn.buy"), callback_data="pay:menu"
-                            )
-                        ]
+    #
+    # Считаем расход всегда — иначе у админов и владельца статистика остаётся
+    # пустой («Сколько запросов» = 0), хотя они пользуются ботом. Лимит при этом
+    # действует только на обычных пользователей: `daily_limit=0` в `try_consume`
+    # означает «записать расход, но не ограничивать».
+    limit_for_user = 0 if admin else runtime.daily_limit
+    reserved: str | None = await store.try_consume(user.id, limit_for_user)
+    if reserved is None:
+        kb = None
+        if settings.payments_enabled:
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=t(lang, "btn.buy"), callback_data="pay:menu"
+                        )
                     ]
-                )
-            text = t(lang, "limit.exhausted", limit=runtime.daily_limit)
-            if settings.payments_enabled:
-                text += t(lang, "limit.buy_hint")
-            await message.reply(text, reply_markup=kb)
-            return
+                ]
+            )
+        text = t(lang, "limit.exhausted", limit=runtime.daily_limit)
+        if settings.payments_enabled:
+            text += t(lang, "limit.buy_hint")
+        await message.reply(text, reply_markup=kb)
+        return
 
     # «Режим отладки»: заскриптованный спектакль с внутренними шагами.
     # Показываем только при реальной отправке ответа, не для служебных вызовов.
