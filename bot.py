@@ -42,6 +42,8 @@ from toolbox import router as toolbox_router
 import autopost
 import channelkit
 import giveaways
+import keepalive
+import reminders
 
 WEBHOOK_PATH = "/webhook"
 
@@ -86,6 +88,13 @@ COMMANDS = [
     BotCommand(command="time", description="Время UTC и МСК"),
     BotCommand(command="todo", description="Список дел"),
     BotCommand(command="stats", description="Моя статистика"),
+    BotCommand(command="remind", description="Напоминание: /remind 10м текст"),
+    BotCommand(command="reminders", description="Мои напоминания"),
+    BotCommand(command="unremind", description="Отменить напоминание"),
+    BotCommand(command="timer", description="Таймер: /timer 10м"),
+    BotCommand(command="poll", description="Опрос: /poll Вопрос | A | B"),
+    BotCommand(command="card", description="Карточки: /card add Вопрос | Ответ"),
+    BotCommand(command="cards", description="Все мои карточки"),
     BotCommand(command="translate", description="Перевести текст"),
     BotCommand(command="summary", description="Краткий пересказ текста"),
     BotCommand(command="explain", description="Объяснить простыми словами"),
@@ -112,6 +121,13 @@ GROUP_COMMANDS = [
     BotCommand(command="summary", description="Краткий пересказ"),
     BotCommand(command="explain", description="Объяснить просто"),
     BotCommand(command="quiz", description="Тест из 5 вопросов"),
+    BotCommand(command="remind", description="Напоминание: /remind 10м текст"),
+    BotCommand(command="reminders", description="Мои напоминания"),
+    BotCommand(command="unremind", description="Отменить напоминание"),
+    BotCommand(command="timer", description="Таймер: /timer 10м"),
+    BotCommand(command="poll", description="Опрос: /poll Вопрос | A | B"),
+    BotCommand(command="card", description="Карточки: /card add Вопрос | Ответ"),
+    BotCommand(command="cards", description="Все карточки"),
     BotCommand(command="rules", description="Правила чата"),
     BotCommand(command="help", description="Справка"),
     BotCommand(command="group", description="Управление чатом"),
@@ -147,6 +163,8 @@ async def on_startup(
     giveaways.start_loop(bot, store)
     autopost.start_loop(bot, store, settings)
     channelkit.start_loop(bot, store)
+    reminders.start_loop(bot, store, settings)
+    keepalive.start_loop(settings)
     await bot.set_my_commands(COMMANDS)
     with contextlib.suppress(TelegramAPIError):
         await bot.set_my_commands(GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())
@@ -199,6 +217,8 @@ async def on_shutdown(bot: Bot, store: Store, ai: AIClient, images: ImageClient)
     await giveaways.stop_loop()
     await autopost.stop_loop()
     await channelkit.stop_loop()
+    await reminders.stop_loop()
+    await keepalive.stop_loop()
     await ai.close()
     await images.close()
     await store.close()
@@ -253,6 +273,7 @@ def create_dispatcher(
     dispatcher.include_router(group_router)
     dispatcher.include_router(moderation_router)
     dispatcher.include_router(payments_router)
+    dispatcher.include_router(reminders.router)
     dispatcher.include_router(toolbox_router)
     dispatcher.include_router(user_router)
     # Спам, антифлуд и «личные» команды — до всех хендлеров.

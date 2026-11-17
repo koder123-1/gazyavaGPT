@@ -2647,7 +2647,18 @@ async def on_text(
     images: ImageClient,
 ) -> None:
     if message.text.startswith("/"):
-        return  # неизвестная команда — молча игнорируем
+        # Неизвестную команду в личке не оставляем без ответа: иначе человек
+        # думает, что бот сломан, а Telegram считает сообщение «без ответа».
+        # Скрытые служебные команды (например, /admin) не подсвечиваем.
+        command = message.text[1:].split()[0].split("@")[0].lower()
+        if message.chat.type == "private" and command not in {"admin"}:
+            lang = (
+                await user_lang(store, settings, message.from_user.id)
+                if message.from_user
+                else settings.default_lang
+            )
+            await message.reply(t(lang, "err.unknown_command"))
+        return  # в группах чужие команды молча пропускаем
     text = await addressed_text(message, bot, settings)
     if text is None:
         return

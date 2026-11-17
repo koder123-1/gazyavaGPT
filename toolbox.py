@@ -24,10 +24,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from html import escape
 
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from ai import AIClient
 from config import Settings
@@ -772,6 +772,263 @@ async def cmd_quiz(
     )
 
 
+# --------------------------------------------------------------------------- опросы
+@router.message(Command("poll", "опрос"))
+async def cmd_poll(message: Message, store: Store, settings: Settings) -> None:
+    """`/poll Вопрос | вариант | вариант` и `/poll -m ...` для нескольких ответов."""
+    user = message.from_user
+    lang = await _lang(store, settings, user.id) if user else normalize_lang(settings.default_lang)
+    raw = _arg(message)
+    multiple = False
+    lowered = raw.lower()
+    if lowered.startswith("-m ") or lowered.startswith("--multi "):
+        multiple = True
+        raw = raw.split(maxsplit=1)[1] if " " in raw else ""
+    if not raw:
+        await message.reply(t(lang, "poll.help"), parse_mode="HTML")
+        return
+    chunks = [part.strip() for part in raw.split("|")]
+    question = chunks[0][:300]
+    options = [part[:100] for part in chunks[1:] if part][:10]
+    if len(options) < 2 or not question:
+        await message.reply(t(lang, "poll.error"), parse_mode="HTML")
+        return
+    try:
+        await message.bot.send_poll(
+            chat_id=message.chat.id,
+            question=question,
+            options=options,
+            is_anonymous=True,
+            allows_multiple_answers=multiple,
+        )
+    except TelegramAPIError:
+        await message.reply(t(lang, "poll.error"), parse_mode="HTML")
+
+
+# --------------------------------------------------------------------------- карточки
+CARD_LIMIT = 100
+CARD_ITEM_CHARS = 400
+
+
+async def _card_owner(message: Message) -> int:
+    """В канале автора нет: карточки канала живут под его chat_id."""
+    return message.from_user.id if message.from_user else message.chat.id
+
+
+async def _cards_load(store: Store, owner: int) -> list[dict]:
+    raw = await store.get_setting(f"card:{owner}")
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(data, list):
+        return []
+    cards: list[dict] = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        question = str(row.get("q") or "").strip()
+        answer = str(row.get("a") or "").strip()
+        if question and answer:
+            cards.append({"q": question[:CARD_ITEM_CHARS], "a": answer[:CARD_ITEM_CHARS]})
+    return cards[:CARD_LIMIT]
+
+
+async def _cards_save(store: Store, owner: int, cards: list[dict]) -> None:
+    key = f"card:{owner}"
+    if not cards:
+        await store.delete_setting(key)
+        return
+    await store.set_setting(key, json.dumps(cards, ensure_ascii=False))
+
+
+def _card_keyboard(lang: str, owner: int, index: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="👀 " + t(lang, "card.show_button"),
+                    callback_data=f"card:a:{owner}:{index}",
+                )
+            ]
+        ]
+    )
+
+
+async def _send_random_card(
+    message: Message, store: Store, settings: Settings, lang: str, owner: int
+) -> None:
+    cards = await _cards_load(store, owner)
+    if not cards:
+        await message.reply(t(lang, "card.empty"), parse_mode="HTML")
+        return
+    index = random.randrange(len(cards))
+    card = cards[index]
+    await message.reply(
+        t(lang, "card.show", id=index + 1, question=escape(card["q"])),
+        parse_mode="HTML",
+        reply_markup=_card_keyboard(lang, owner, index),
+    )
+
+
+@router.message(Command("cards", "карточки"))
+async def cmd_cards(message: Message, store: Store, settings: Settings) -> None:
+    owner = await _card_owner(message)
+    lang = await _lang(store, settings, owner)
+    cards = await _cards_load(store, owner)
+    if not cards:
+        await message.reply(t(lang, "card.empty"), parse_mode="HTML")
+        return
+    items = "\n".join(
+        t(lang, "card.item", id=index, question=escape(card["q"]))
+        for index, card in enumerate(cards, 1)
+    )
+    await message.reply(
+        t(lang, "card.list", count=len(cards), items=items), parse_mode="HTML"
+    )
+
+
+@router.message(Command("card", "карточка"))
+async def cmd_card(message: Message, store: Store, settings: Settings) -> None:
+    owner = await _card_owner(message)
+    lang = await _lang(store, settings, owner)
+    raw = _arg(message)
+    if not raw:
+        await _send_random_card(message, store, settings, lang, owner)
+        return
+    action, _, rest = raw.partition(" ")
+    action = action.strip().lower()
+    rest = rest.strip()
+    cards = await _cards_load(store, owner)
+
+    if action in {"add", "добавь", "добавить", "+"}:
+        if "|" not in rest:
+            await message.reply(t(lang, "card.need_both"), parse_mode="HTML")
+            return
+        question, _, answer = rest.partition("|")
+        question, answer = question.strip(), answer.strip()
+        if not question or not answer:
+            await message.reply(t(lang, "card.need_both"), parse_mode="HTML")
+            return
+        if len(cards) >= CARD_LIMIT:
+            await message.reply(t(lang, "card.full", limit=CARD_LIMIT), parse_mode="HTML")
+            return
+        cards.append(
+            {"q": question[:CARD_ITEM_CHARS], "a": answer[:CARD_ITEM_CHARS]}
+        )
+        await _cards_save(store, owner, cards)
+        await message.reply(
+            t(lang, "card.added", id=len(cards), question=escape(question[:CARD_ITEM_CHARS])),
+            parse_mode="HTML",
+        )
+        return
+
+    if action in {"del", "delete", "удали", "удалить", "-"}:
+        try:
+            index = int(rest)
+        except ValueError:
+            await message.reply(t(lang, "card.del_help"), parse_mode="HTML")
+            return
+        if not 1 <= index <= len(cards):
+            await message.reply(t(lang, "card.not_found", id=index), parse_mode="HTML")
+            return
+        cards.pop(index - 1)
+        await _cards_save(store, owner, cards)
+        await message.reply(t(lang, "card.deleted", id=index), parse_mode="HTML")
+        return
+
+    if action in {"clear", "очисти", "сброс"}:
+        await _cards_save(store, owner, [])
+        await message.reply(t(lang, "card.cleared"), parse_mode="HTML")
+        return
+
+    # `/card Вопрос | Ответ` — короткий путь вместо `add`.
+    if "|" in raw:
+        question, _, answer = raw.partition("|")
+        question, answer = question.strip(), answer.strip()
+        if not question or not answer:
+            await message.reply(t(lang, "card.need_both"), parse_mode="HTML")
+            return
+        if len(cards) >= CARD_LIMIT:
+            await message.reply(t(lang, "card.full", limit=CARD_LIMIT), parse_mode="HTML")
+            return
+        cards.append(
+            {"q": question[:CARD_ITEM_CHARS], "a": answer[:CARD_ITEM_CHARS]}
+        )
+        await _cards_save(store, owner, cards)
+        await message.reply(
+            t(lang, "card.added", id=len(cards), question=escape(question[:CARD_ITEM_CHARS])),
+            parse_mode="HTML",
+        )
+        return
+
+    await message.reply(t(lang, "card.help"), parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("card:a:"))
+async def cb_card_answer(
+    callback: CallbackQuery, store: Store, settings: Settings
+) -> None:
+    parts = (callback.data or "").split(":")
+    if len(parts) != 4 or not parts[2].lstrip("-").isdigit() or not parts[3].isdigit():
+        await callback.answer()
+        return
+    owner, index = int(parts[2]), int(parts[3])
+    lang = await _lang(store, settings, owner)
+    cards = await _cards_load(store, owner)
+    if not 0 <= index < len(cards):
+        await callback.answer(t(lang, "card.not_found", id=index + 1), show_alert=True)
+        return
+    card = cards[index]
+    text = (
+        t(lang, "card.show", id=index + 1, question=escape(card["q"]))
+        + "\n\n"
+        + t(lang, "card.answer", answer=escape(card["a"]))
+    )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔄 " + t(lang, "card.next_button"),
+                    callback_data=f"card:r:{owner}",
+                )
+            ]
+        ]
+    )
+    with contextlib.suppress(TelegramAPIError):
+        await callback.message.edit_text(
+            text, parse_mode="HTML", reply_markup=keyboard
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("card:r:"))
+async def cb_card_next(
+    callback: CallbackQuery, store: Store, settings: Settings
+) -> None:
+    parts = (callback.data or "").split(":")
+    if len(parts) != 3 or not parts[2].lstrip("-").isdigit():
+        await callback.answer()
+        return
+    owner = int(parts[2])
+    lang = await _lang(store, settings, owner)
+    cards = await _cards_load(store, owner)
+    if not cards:
+        await callback.answer(t(lang, "card.empty"), show_alert=True)
+        return
+    index = random.randrange(len(cards))
+    card = cards[index]
+    with contextlib.suppress(TelegramAPIError):
+        await callback.message.edit_text(
+            t(lang, "card.show", id=index + 1, question=escape(card["q"])),
+            parse_mode="HTML",
+            reply_markup=_card_keyboard(lang, owner, index),
+        )
+    await callback.answer()
+
+
 # --------------------------------------------------------------------------- справка
 @router.message(Command("tools", "инструменты"))
 async def cmd_tools(message: Message, store: Store, settings: Settings) -> None:
@@ -796,6 +1053,9 @@ _CHANNEL_COMMANDS: tuple[tuple[object, tuple[str, ...]], ...] = (
     (cmd_id, ("id",)),
     (cmd_ping, ("ping", "пинг")),
     (cmd_time, ("time", "время")),
+    (cmd_poll, ("poll", "опрос")),
+    (cmd_card, ("card", "карточка")),
+    (cmd_cards, ("cards", "карточки")),
     (cmd_tools, ("tools", "инструменты", "help", "помощь")),
     # Личные команды в канале не выполняются, но вежливо зовут в личку.
     (cmd_password, ("password", "пароль")),

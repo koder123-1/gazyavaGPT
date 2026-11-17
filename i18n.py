@@ -1923,6 +1923,11 @@ TR: dict[str, dict[str, str]] = {
             "🕒 <code>/time</code> — время UTC и МСК\n"
             "📝 <code>/todo add купить хлеб</code> — дела (в личке)\n"
             "📈 <code>/stats</code> — моя статистика (в личке)\n\n"
+            "<b>Полезное</b>\n"
+            "⏰ <code>/remind 10м текст</code> — напоминание\n"
+            "⏳ <code>/timer 10м</code> — таймер (без аргумента 25 минут)\n"
+            "📊 <code>/poll Вопрос | A | B</code> — опрос\n"
+            "🃏 <code>/card add Вопрос | Ответ</code> — карточки для запоминания\n\n"
             "<b>Учёба</b>\n"
             "🌍 <code>/translate en текст</code> — перевод\n"
             "✂️ <code>/summary текст</code> — краткий пересказ\n"
@@ -1946,6 +1951,11 @@ TR: dict[str, dict[str, str]] = {
             "🕒 <code>/time</code> — час UTC і за Києвом\n"
             "📝 <code>/todo add купити хліб</code> — справи (в особистих)\n"
             "📈 <code>/stats</code> — моя статистика (в особистих)\n\n"
+            "<b>Корисне</b>\n"
+            "⏰ <code>/remind 10х текст</code> — нагадування\n"
+            "⏳ <code>/timer 10х</code> — таймер (без аргументу 25 хвилин)\n"
+            "📊 <code>/poll Питання | A | B</code> — опитування\n"
+            "🃏 <code>/card add Питання | Відповідь</code> — картки для запам'ятовування\n\n"
             "<b>Навчання</b>\n"
             "🌍 <code>/translate en текст</code> — переклад\n"
             "✂️ <code>/summary текст</code> — короткий переказ\n"
@@ -1969,6 +1979,11 @@ TR: dict[str, dict[str, str]] = {
             "🕒 <code>/time</code> — час UTC і па Мінску\n"
             "📝 <code>/todo add купіць хлеб</code> — справы (у асабістых)\n"
             "📈 <code>/stats</code> — мая статыстыка (у асабістых)\n\n"
+            "<b>Карыснае</b>\n"
+            "⏰ <code>/remind 10х тэкст</code> — напамін\n"
+            "⏳ <code>/timer 10х</code> — таймер (без аргументу 25 хвілін)\n"
+            "📊 <code>/poll Пытанне | A | B</code> — апытанне\n"
+            "🃏 <code>/card add Пытанне | Адказ</code> — карткі для запамінання\n\n"
             "<b>Вучоба</b>\n"
             "🌍 <code>/translate en тэкст</code> — пераклад\n"
             "✂️ <code>/summary тэкст</code> — кароткі пераказ\n"
@@ -1992,6 +2007,11 @@ TR: dict[str, dict[str, str]] = {
             "🕒 <code>/time</code> — UTC and Moscow time\n"
             "📝 <code>/todo add buy bread</code> — to-do list (private)\n"
             "📈 <code>/stats</code> — my stats (private)\n\n"
+            "<b>Useful</b>\n"
+            "⏰ <code>/remind 10m text</code> — reminder\n"
+            "⏳ <code>/timer 10m</code> — timer (25 minutes with no argument)\n"
+            "📊 <code>/poll Question | A | B</code> — poll\n"
+            "🃏 <code>/card add Question | Answer</code> — flashcards\n\n"
             "<b>Study</b>\n"
             "🌍 <code>/translate en text</code> — translation\n"
             "✂️ <code>/summary text</code> — short summary\n"
@@ -2195,10 +2215,336 @@ TR: dict[str, dict[str, str]] = {
         "en": "❓ Send a topic: <code>/quiz fractions</code> or reply to a text — I'll make a 5-question quiz.",
     },
     "help.tools": {
-        "ru": "\n<b>Инструменты и учёба</b>\n<code>/tools</code> — все быстрые команды: калькулятор, генераторы, перевод, тест.\nВ группах тоже работают: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
-        "uk": "\n<b>Інструменти й навчання</b>\n<code>/tools</code> — усі швидкі команди: калькулятор, генератори, переклад, тест.\nУ групах теж працюють: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
-        "be": "\n<b>Інструменты і вучоба</b>\n<code>/tools</code> — усе хуткія каманды: калькулятар, генератары, пераклад, тэст.\nУ групах таксама працуюць: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
-        "en": "\n<b>Tools and study</b>\n<code>/tools</code> — all quick commands: calculator, generators, translation, quiz.\nThey also work in groups: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+        "ru": "\n<b>Инструменты и учёба</b>\n<code>/tools</code> — все быстрые команды: калькулятор, генераторы, перевод, тест.\nЕщё: <code>/remind 10м текст</code> — напоминание, <code>/timer 10м</code> — таймер, <code>/poll Вопрос | A | B</code> — опрос, <code>/card add Вопрос | Ответ</code> — карточки.\nВ группах тоже работают: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+        "uk": "\n<b>Інструменти й навчання</b>\n<code>/tools</code> — усі швидкі команди: калькулятор, генератори, переклад, тест.\nЩе: <code>/remind 10х текст</code> — нагадування, <code>/timer 10х</code> — таймер, <code>/poll Питання | A | B</code> — опитування, <code>/card add Питання | Відповідь</code> — картки.\nУ групах теж працюють: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+        "be": "\n<b>Інструменты і вучоба</b>\n<code>/tools</code> — усе хуткія каманды: калькулятар, генератары, пераклад, тэст.\nЯшчэ: <code>/remind 10х тэкст</code> — напамін, <code>/timer 10х</code> — таймер, <code>/poll Пытанне | A | B</code> — апытанне, <code>/card add Пытанне | Адказ</code> — карткі.\nУ групах таксама працуюць: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+        "en": "\n<b>Tools and study</b>\n<code>/tools</code> — all quick commands: calculator, generators, translation, quiz.\nAlso: <code>/remind 10m text</code> — reminder, <code>/timer 10m</code> — timer, <code>/poll Question | A | B</code> — poll, <code>/card add Question | Answer</code> — flashcards.\nThey also work in groups: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+    },
+    # ------------------------------------------------------------------ напоминания
+    "rem.help": {
+        "ru": (
+            "⏰ <b>Напоминания</b>\n\n"
+            "<code>/remind 10м выпить воды</code>\n"
+            "Форматы: <code>30с</code>, <code>15м</code>, <code>2ч</code>, <code>1д</code>, "
+            "<code>1ч30м</code>. Без единицы число — это минуты.\n\n"
+            "📋 <code>/reminders</code> — мои напоминания\n"
+            "❌ <code>/unremind 1</code> — отменить по номеру"
+        ),
+        "uk": (
+            "⏰ <b>Нагадування</b>\n\n"
+            "<code>/remind 10х випити води</code>\n"
+            "Формати: <code>30с</code>, <code>15х</code>, <code>2г</code>, <code>1д</code>, "
+            "<code>1г30х</code>. Без одиниці число — це хвилини.\n\n"
+            "📋 <code>/reminders</code> — мої нагадування\n"
+            "❌ <code>/unremind 1</code> — скасувати за номером"
+        ),
+        "be": (
+            "⏰ <b>Напаміны</b>\n\n"
+            "<code>/remind 10х выпіць вады</code>\n"
+            "Фарматы: <code>30с</code>, <code>15х</code>, <code>2г</code>, <code>1д</code>, "
+            "<code>1г30х</code>. Без адзінкі лік — гэта хвіліны.\n\n"
+            "📋 <code>/reminders</code> — мае напаміны\n"
+            "❌ <code>/unremind 1</code> — адмяніць па нумары"
+        ),
+        "en": (
+            "⏰ <b>Reminders</b>\n\n"
+            "<code>/remind 10m drink water</code>\n"
+            "Formats: <code>30s</code>, <code>15m</code>, <code>2h</code>, <code>1d</code>, "
+            "<code>1h30m</code>. A bare number means minutes.\n\n"
+            "📋 <code>/reminders</code> — my reminders\n"
+            "❌ <code>/unremind 1</code> — cancel by number"
+        ),
+    },
+    "rem.default_text": {
+        "ru": "не забудь про важное дело",
+        "uk": "не забудь про важливу справу",
+        "be": "не забудзь пра важную справу",
+        "en": "don't forget your important task",
+    },
+    "rem.set": {
+        "ru": "✅ Напомню через <b>{when}</b>:\n{text}\n\n<i>Номер {id}. Отменить: /unremind {id}</i>",
+        "uk": "✅ Нагадаю через <b>{when}</b>:\n{text}\n\n<i>Номер {id}. Скасувати: /unremind {id}</i>",
+        "be": "✅ Нагадаю праз <b>{when}</b>:\n{text}\n\n<i>Нумар {id}. Адмяніць: /unremind {id}</i>",
+        "en": "✅ I'll remind you in <b>{when}</b>:\n{text}\n\n<i>Number {id}. Cancel: /unremind {id}</i>",
+    },
+    "rem.fired": {
+        "ru": "🔔 <b>Напоминание!</b>\n{text}",
+        "uk": "🔔 <b>Нагадування!</b>\n{text}",
+        "be": "🔔 <b>Напамін!</b>\n{text}",
+        "en": "🔔 <b>Reminder!</b>\n{text}",
+    },
+    "rem.empty": {
+        "ru": "📋 Активных напоминаний нет. Создать: <code>/remind 10м выпить воды</code>",
+        "uk": "📋 Активних нагадувань немає. Створити: <code>/remind 10х випити води</code>",
+        "be": "📋 Актыўных напамінаў няма. Стварыць: <code>/remind 10х выпіць вады</code>",
+        "en": "📋 No active reminders. Create one: <code>/remind 10m drink water</code>",
+    },
+    "rem.list": {
+        "ru": "📋 <b>Напоминания ({count})</b>\n{items}\n\n<i>Отменить: /unremind номер</i>",
+        "uk": "📋 <b>Нагадування ({count})</b>\n{items}\n\n<i>Скасувати: /unremind номер</i>",
+        "be": "📋 <b>Напаміны ({count})</b>\n{items}\n\n<i>Адмяніць: /unremind нумар</i>",
+        "en": "📋 <b>Reminders ({count})</b>\n{items}\n\n<i>Cancel: /unremind number</i>",
+    },
+    "rem.in_time": {
+        "ru": "через {when}",
+        "uk": "через {when}",
+        "be": "праз {when}",
+        "en": "in {when}",
+    },
+    "rem.full": {
+        "ru": "⏰ Уже {limit} напоминаний — это максимум. Убери лишнее: /unremind 1",
+        "uk": "⏰ Уже {limit} нагадувань — це максимум. Прибери зайве: /unremind 1",
+        "be": "⏰ Ужо {limit} напамінаў — гэта максімум. Прыбяры лішняе: /unremind 1",
+        "en": "⏰ You already have {limit} reminders, the maximum. Remove one: /unremind 1",
+    },
+    "rem.unremind_help": {
+        "ru": "❌ Напиши номер: <code>/unremind 1</code>. Номера видно в /reminders.",
+        "uk": "❌ Напиши номер: <code>/unremind 1</code>. Номери видно в /reminders.",
+        "be": "❌ Напішы нумар: <code>/unremind 1</code>. Нумары відаць у /reminders.",
+        "en": "❌ Send a number: <code>/unremind 1</code>. Numbers are shown in /reminders.",
+    },
+    "rem.not_found": {
+        "ru": "❌ Напоминания №{id} нет. Посмотри список: /reminders",
+        "uk": "❌ Нагадування №{id} немає. Подивись список: /reminders",
+        "be": "❌ Напаміну №{id} няма. Паглядзі спіс: /reminders",
+        "en": "❌ No reminder #{id}. Check the list: /reminders",
+    },
+    "rem.removed": {
+        "ru": "✅ Напоминание №{id} отменено.",
+        "uk": "✅ Нагадування №{id} скасовано.",
+        "be": "✅ Напамін №{id} адменены.",
+        "en": "✅ Reminder #{id} cancelled.",
+    },
+    # ------------------------------------------------------------------ таймер
+    "timer.help": {
+        "ru": (
+            "⏳ <b>Таймер</b>\n\n"
+            "<code>/timer 10м</code> — через 10 минут\n"
+            "<code>/timer 1ч30м перерыв</code> — со своим текстом\n"
+            "Без аргумента — таймер Помодоро на 25 минут.\n"
+            "Остановить: <code>/timer стоп</code>"
+        ),
+        "uk": (
+            "⏳ <b>Таймер</b>\n\n"
+            "<code>/timer 10х</code> — через 10 хвилин\n"
+            "<code>/timer 1г30х перерва</code> — зі своїм текстом\n"
+            "Без аргументу — таймер Помодоро на 25 хвилин.\n"
+            "Зупинити: <code>/timer стоп</code>"
+        ),
+        "be": (
+            "⏳ <b>Таймер</b>\n\n"
+            "<code>/timer 10х</code> — праз 10 хвілін\n"
+            "<code>/timer 1г30х перапынак</code> — са сваім тэкстам\n"
+            "Без аргументу — таймер Памадора на 25 хвілін.\n"
+            "Спыніць: <code>/timer стоп</code>"
+        ),
+        "en": (
+            "⏳ <b>Timer</b>\n\n"
+            "<code>/timer 10m</code> — in 10 minutes\n"
+            "<code>/timer 1h30m break</code> — with your own text\n"
+            "With no argument — a 25-minute Pomodoro timer.\n"
+            "Stop: <code>/timer stop</code>"
+        ),
+    },
+    "rem.timer_default": {
+        "ru": "время вышло",
+        "uk": "час вийшов",
+        "be": "час выйшаў",
+        "en": "time is up",
+    },
+    "rem.timer_set": {
+        "ru": "⏳ Таймер на <b>{when}</b> запущен.\n{text}\n\n<i>Остановить: /timer стоп</i>",
+        "uk": "⏳ Таймер на <b>{when}</b> запущено.\n{text}\n\n<i>Зупинити: /timer стоп</i>",
+        "be": "⏳ Таймер на <b>{when}</b> запушчаны.\n{text}\n\n<i>Спыніць: /timer стоп</i>",
+        "en": "⏳ Timer set for <b>{when}</b>.\n{text}\n\n<i>Stop: /timer stop</i>",
+    },
+    "rem.timer_fired": {
+        "ru": "⏳ <b>Таймер сработал!</b>\n{text}",
+        "uk": "⏳ <b>Таймер спрацював!</b>\n{text}",
+        "be": "⏳ <b>Таймер спрацаваў!</b>\n{text}",
+        "en": "⏳ <b>Timer finished!</b>\n{text}",
+    },
+    "rem.timer_stopped": {
+        "ru": "⏹ Остановлено таймеров: <b>{count}</b>.",
+        "uk": "⏹ Зупинено таймерів: <b>{count}</b>.",
+        "be": "⏹ Спынена таймераў: <b>{count}</b>.",
+        "en": "⏹ Timers stopped: <b>{count}</b>.",
+    },
+    # ------------------------------------------------------------------ опросы
+    "poll.help": {
+        "ru": (
+            "📊 <b>Опрос</b>\n\n"
+            "<code>/poll Обед? | Пицца | Суши</code>\n"
+            "Вопрос и варианты — через <code>|</code>, от 2 до 10 вариантов.\n"
+            "Несколько ответов: <code>/poll -m Вопрос | A | B</code>"
+        ),
+        "uk": (
+            "📊 <b>Опитування</b>\n\n"
+            "<code>/poll Обід? | Піца | Суші</code>\n"
+            "Питання й варіанти — через <code>|</code>, від 2 до 10 варіантів.\n"
+            "Кілька відповідей: <code>/poll -m Питання | A | B</code>"
+        ),
+        "be": (
+            "📊 <b>Апытанне</b>\n\n"
+            "<code>/poll Абед? | Піца | Сушы</code>\n"
+            "Пытанне і варыянты — праз <code>|</code>, ад 2 да 10 варыянтаў.\n"
+            "Некалькі адказаў: <code>/poll -m Пытанне | A | B</code>"
+        ),
+        "en": (
+            "📊 <b>Poll</b>\n\n"
+            "<code>/poll Lunch? | Pizza | Sushi</code>\n"
+            "Question and options separated by <code>|</code>, 2 to 10 options.\n"
+            "Multiple answers: <code>/poll -m Question | A | B</code>"
+        ),
+    },
+    "poll.error": {
+        "ru": "📊 Нужно 2–10 вариантов: <code>/poll Вопрос | вариант 1 | вариант 2</code>",
+        "uk": "📊 Потрібно 2–10 варіантів: <code>/poll Питання | варіант 1 | варіант 2</code>",
+        "be": "📊 Патрэбна 2–10 варыянтаў: <code>/poll Пытанне | варыянт 1 | варыянт 2</code>",
+        "en": "📊 Need 2–10 options: <code>/poll Question | option 1 | option 2</code>",
+    },
+    "poll.sent": {
+        "ru": "📊 Опрос создан.",
+        "uk": "📊 Опитування створено.",
+        "be": "📊 Апытанне створана.",
+        "en": "📊 Poll created.",
+    },
+    # ------------------------------------------------------------------ карточки
+    "card.help": {
+        "ru": (
+            "🃏 <b>Карточки для запоминания</b>\n\n"
+            "<code>/card add Вопрос | Ответ</code> — добавить\n"
+            "<code>/card</code> — случайная карточка с кнопкой «Показать ответ»\n"
+            "<code>/cards</code> — все карточки\n"
+            "<code>/card del 1</code> · <code>/card clear</code>\n\n"
+            "<i>До 100 карточек. Удобно для формул, слов и дат.</i>"
+        ),
+        "uk": (
+            "🃏 <b>Картки для запам'ятовування</b>\n\n"
+            "<code>/card add Питання | Відповідь</code> — додати\n"
+            "<code>/card</code> — випадкова картка з кнопкою «Показати відповідь»\n"
+            "<code>/cards</code> — усі картки\n"
+            "<code>/card del 1</code> · <code>/card clear</code>\n\n"
+            "<i>До 100 карток. Зручно для формул, слів і дат.</i>"
+        ),
+        "be": (
+            "🃏 <b>Карткі для запамінання</b>\n\n"
+            "<code>/card add Пытанне | Адказ</code> — дадаць\n"
+            "<code>/card</code> — выпадковая картка з кнопкай «Паказаць адказ»\n"
+            "<code>/cards</code> — усе карткі\n"
+            "<code>/card del 1</code> · <code>/card clear</code>\n\n"
+            "<i>Да 100 картак. Зручна для формул, слоў і дат.</i>"
+        ),
+        "en": (
+            "🃏 <b>Flashcards</b>\n\n"
+            "<code>/card add Question | Answer</code> — add one\n"
+            "<code>/card</code> — a random card with a “Show answer” button\n"
+            "<code>/cards</code> — all cards\n"
+            "<code>/card del 1</code> · <code>/card clear</code>\n\n"
+            "<i>Up to 100 cards. Handy for formulas, words and dates.</i>"
+        ),
+    },
+    "card.empty": {
+        "ru": "🃏 Карточек нет. Добавь первую: <code>/card add Вопрос | Ответ</code>",
+        "uk": "🃏 Карток немає. Додай першу: <code>/card add Питання | Відповідь</code>",
+        "be": "🃏 Картак няма. Дадай першую: <code>/card add Пытанне | Адказ</code>",
+        "en": "🃏 No cards yet. Add the first: <code>/card add Question | Answer</code>",
+    },
+    "card.added": {
+        "ru": "🃏 Карточка №{id} добавлена.\n<b>{question}</b>",
+        "uk": "🃏 Картка №{id} додана.\n<b>{question}</b>",
+        "be": "🃏 Картка №{id} дададзена.\n<b>{question}</b>",
+        "en": "🃏 Card #{id} added.\n<b>{question}</b>",
+    },
+    "card.full": {
+        "ru": "🃏 Уже {limit} карточек — это максимум. Удали лишние: <code>/card del 1</code>",
+        "uk": "🃏 Уже {limit} карток — це максимум. Видали зайвыя: <code>/card del 1</code>",
+        "be": "🃏 Ужо {limit} картак — гэта максімум. Выдалі лішнія: <code>/card del 1</code>",
+        "en": "🃏 You already have {limit} cards, the maximum. Remove some: <code>/card del 1</code>",
+    },
+    "card.list": {
+        "ru": "🃏 <b>Карточки ({count})</b>\n{items}\n\n<i>Открыть случайную: /card</i>",
+        "uk": "🃏 <b>Картки ({count})</b>\n{items}\n\n<i>Відкрити випадкову: /card</i>",
+        "be": "🃏 <b>Карткі ({count})</b>\n{items}\n\n<i>Адкрыць выпадковую: /card</i>",
+        "en": "🃏 <b>Cards ({count})</b>\n{items}\n\n<i>Open a random one: /card</i>",
+    },
+    "card.item": {
+        "ru": "<b>{id}.</b> {question}",
+        "uk": "<b>{id}.</b> {question}",
+        "be": "<b>{id}.</b> {question}",
+        "en": "<b>{id}.</b> {question}",
+    },
+    "card.show": {
+        "ru": "🃏 <b>Карточка №{id}</b>\n\n<b>{question}</b>\n\n<i>Подумай и нажми кнопку.</i>",
+        "uk": "🃏 <b>Картка №{id}</b>\n\n<b>{question}</b>\n\n<i>Подумай і натисни кнопку.</i>",
+        "be": "🃏 <b>Картка №{id}</b>\n\n<b>{question}</b>\n\n<i>Падумай і націсні кнопку.</i>",
+        "en": "🃏 <b>Card #{id}</b>\n\n<b>{question}</b>\n\n<i>Think, then press the button.</i>",
+    },
+    "card.show_button": {
+        "ru": "Показать ответ",
+        "uk": "Показати відповідь",
+        "be": "Паказаць адказ",
+        "en": "Show answer",
+    },
+    "card.next_button": {
+        "ru": "Ещё карточка",
+        "uk": "Ще картка",
+        "be": "Яшчэ картка",
+        "en": "Another card",
+    },
+    "card.answer": {
+        "ru": "✅ <b>Ответ:</b>\n{answer}",
+        "uk": "✅ <b>Відповідь:</b>\n{answer}",
+        "be": "✅ <b>Адказ:</b>\n{answer}",
+        "en": "✅ <b>Answer:</b>\n{answer}",
+    },
+    "card.del_help": {
+        "ru": "🃏 Напиши номер: <code>/card del 1</code>. Номера видно в <code>/cards</code>.",
+        "uk": "🃏 Напиши номер: <code>/card del 1</code>. Номери видно в <code>/cards</code>.",
+        "be": "🃏 Напішы нумар: <code>/card del 1</code>. Нумары відаць у <code>/cards</code>.",
+        "en": "🃏 Send a number: <code>/card del 1</code>. Numbers are shown in <code>/cards</code>.",
+    },
+    "card.not_found": {
+        "ru": "🃏 Карточки №{id} нет.",
+        "uk": "🃏 Картки №{id} немає.",
+        "be": "🃏 Карткі №{id} няма.",
+        "en": "🃏 No card #{id}.",
+    },
+    "card.deleted": {
+        "ru": "🗑 Карточка №{id} удалена.",
+        "uk": "🗑 Картка №{id} видалена.",
+        "be": "🗑 Картка №{id} выдалена.",
+        "en": "🗑 Card #{id} deleted.",
+    },
+    "card.cleared": {
+        "ru": "🧹 Все карточки удалены.",
+        "uk": "🧹 Усі картки видалено.",
+        "be": "🧹 Усе карткі выдалены.",
+        "en": "🧹 All cards deleted.",
+    },
+    "card.need_both": {
+        "ru": "🃏 Нужны вопрос и ответ через <code>|</code>: <code>/card add Вопрос | Ответ</code>",
+        "uk": "🃏 Потрібні питання й відповідь через <code>|</code>: <code>/card add Питання | Відповідь</code>",
+        "be": "🃏 Патрэбны пытанне і адказ праз <code>|</code>: <code>/card add Пытанне | Адказ</code>",
+        "en": "🃏 Need both question and answer, separated by <code>|</code>: <code>/card add Question | Answer</code>",
+    },
+    "err.unknown_command": {
+        "ru": (
+            "🤔 Такой команды я не знаю. Посмотри /help или /tools — "
+            "а можно просто написать вопрос словами."
+        ),
+        "uk": (
+            "🤔 Такої команди я не знаю. Подивись /help або /tools — "
+            "а можна просто написати питання словами."
+        ),
+        "be": (
+            "🤔 Такой каманды я не ведаю. Паглядзі /help або /tools — "
+            "а можна проста напісаць пытанне словамі."
+        ),
+        "en": (
+            "🤔 I don't know that command. Check /help or /tools — "
+            "or simply ask your question in plain words."
+        ),
     },
 }
 
