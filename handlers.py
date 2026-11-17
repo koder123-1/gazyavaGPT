@@ -1102,7 +1102,7 @@ async def answer_with_ai(
         answer,
         keep=max(2, runtime.max_context * 2) if runtime.max_context else 2,
     )
-    exchange_id = await store.add_exchange_record(user.id, label, answer, kind)
+    await store.add_exchange_record(user.id, label, answer, kind)
     if out_fmt:
         await send_file(
             message,
@@ -1112,12 +1112,12 @@ async def answer_with_ai(
             name=files.suggest_filename(question, out_fmt),
         )
     elif deliver:
+        # Под ответом не показываем никаких кнопок: ни оценок, ни «проще/глубже».
         await deliver_answer(
             message,
             answer,
             code=code_view,
             lang=lang,
-            keyboard=answer_kb(exchange_id, lang=lang),
         )
     return answer
 
