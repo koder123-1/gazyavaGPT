@@ -1468,6 +1468,7 @@ async def help_text(store: Store, settings: Settings, lang: str, user_id: int | 
         staff_note = ""
     return (
         t(lang, "help.body")
+        + t(lang, "help.tools")
         + t(lang, "help.support")
         + t(lang, "help.tail", model=escape(model_title(current_model)), lang=LANG_NAMES[normalize_lang(lang)])
         + staff_note

@@ -14,7 +14,12 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand, BotCommandScopeAllGroupChats, TelegramObject
+from aiogram.types import (
+    BotCommand,
+    BotCommandScopeAllChatAdministrators,
+    BotCommandScopeAllGroupChats,
+    TelegramObject,
+)
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
@@ -33,6 +38,7 @@ from store import Store, create_store
 from subscription import SubscriptionMiddleware, probe_channel
 from subscription import router as subscription_router
 from tickets import router as tickets_router
+from toolbox import router as toolbox_router
 import autopost
 import channelkit
 import giveaways
@@ -65,6 +71,25 @@ COMMANDS = [
     BotCommand(command="bonus", description="Бонус дня за ежедневный вход"),
     BotCommand(command="invite", description="Пригласить друга и получить запросы"),
     BotCommand(command="me", description="Мой ID и остаток лимита"),
+    BotCommand(command="tools", description="Все быстрые команды"),
+    BotCommand(command="calc", description="Калькулятор: /calc 2+2*2"),
+    BotCommand(command="random", description="Случайное число или выбор"),
+    BotCommand(command="coin", description="Орёл или решка"),
+    BotCommand(command="dice", description="Кубик: /dice 20"),
+    BotCommand(command="password", description="Сгенерировать пароль"),
+    BotCommand(command="uuid", description="Сгенерировать UUID"),
+    BotCommand(command="hash", description="SHA-256 от текста"),
+    BotCommand(command="base64", description="Кодировать/раскодировать Base64"),
+    BotCommand(command="count", description="Символы, слова и строки в тексте"),
+    BotCommand(command="id", description="ID пользователя и чата"),
+    BotCommand(command="ping", description="Проверить задержку"),
+    BotCommand(command="time", description="Время UTC и МСК"),
+    BotCommand(command="todo", description="Список дел"),
+    BotCommand(command="stats", description="Моя статистика"),
+    BotCommand(command="translate", description="Перевести текст"),
+    BotCommand(command="summary", description="Краткий пересказ текста"),
+    BotCommand(command="explain", description="Объяснить простыми словами"),
+    BotCommand(command="quiz", description="Тест из 5 вопросов по теме"),
     BotCommand(command="rules", description="Правила чата"),
     BotCommand(command="help", description="Справка"),
 ]
@@ -74,6 +99,19 @@ GROUP_COMMANDS = [
     BotCommand(command="ai", description="Спросить ИИ"),
     BotCommand(command="imagine", description="Нарисовать картинку"),
     BotCommand(command="reset", description="Очистить контекст"),
+    BotCommand(command="tools", description="Все быстрые команды"),
+    BotCommand(command="calc", description="Калькулятор: /calc 2+2*2"),
+    BotCommand(command="random", description="Случайное число или выбор"),
+    BotCommand(command="coin", description="Орёл или решка"),
+    BotCommand(command="dice", description="Кубик: /dice 20"),
+    BotCommand(command="count", description="Символы, слова и строки"),
+    BotCommand(command="id", description="ID чата и автора"),
+    BotCommand(command="ping", description="Задержка ответа"),
+    BotCommand(command="time", description="Время UTC и МСК"),
+    BotCommand(command="translate", description="Перевести текст"),
+    BotCommand(command="summary", description="Краткий пересказ"),
+    BotCommand(command="explain", description="Объяснить просто"),
+    BotCommand(command="quiz", description="Тест из 5 вопросов"),
     BotCommand(command="rules", description="Правила чата"),
     BotCommand(command="help", description="Справка"),
     BotCommand(command="group", description="Управление чатом"),
@@ -112,6 +150,11 @@ async def on_startup(
     await bot.set_my_commands(COMMANDS)
     with contextlib.suppress(TelegramAPIError):
         await bot.set_my_commands(GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())
+    with contextlib.suppress(TelegramAPIError):
+        # Админам групп и каналов — тот же набор: в канале пишут только они.
+        await bot.set_my_commands(
+            GROUP_COMMANDS, scope=BotCommandScopeAllChatAdministrators()
+        )
 
     if not ai.configured:
         log.error("AI_API_KEY не задан — бот ответит пользователям, что ИИ не настроен")
@@ -210,6 +253,7 @@ def create_dispatcher(
     dispatcher.include_router(group_router)
     dispatcher.include_router(moderation_router)
     dispatcher.include_router(payments_router)
+    dispatcher.include_router(toolbox_router)
     dispatcher.include_router(user_router)
     # Спам, антифлуд и «личные» команды — до всех хендлеров.
     # Guard первым: он ловит падения всех кнопок, включая гейт подписки.

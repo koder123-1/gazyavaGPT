@@ -1905,6 +1905,301 @@ TR: dict[str, dict[str, str]] = {
     "group.reason_caps": {"ru": "капс", "uk": "капс", "be": "капс", "en": "ALL CAPS"},
     "group.reason_forward": {"ru": "пересланное сообщение", "uk": "переслане повідомлення", "be": "перасланае паведамленне", "en": "forwarded message"},
     "group.reason_bot": {"ru": "бот в чате", "uk": "бот у чаті", "be": "бот у чаце", "en": "a bot in the chat"},
+    # ------------------------------------------------------------------ инструменты
+    "tools.help": {
+        "ru": (
+            "🧰 <b>Инструменты</b>\n\n"
+            "🧮 <code>/calc 2+2*2</code> — калькулятор\n"
+            "🎲 <code>/random 1 100</code> или <code>/random да|нет</code>\n"
+            "🪙 <code>/coin</code> — орёл или решка\n"
+            "🎲 <code>/dice 20</code> — кубик\n"
+            "🔐 <code>/password 20</code> — пароль (в личке)\n"
+            "🆔 <code>/uuid 3</code> — UUID\n"
+            "🔒 <code>/hash текст</code> — SHA-256\n"
+            "🔁 <code>/base64 encode текст</code> · <code>/base64 decode ...</code>\n"
+            "📊 <code>/count текст</code> — символы, слова, строки\n"
+            "🪪 <code>/id</code> — ID пользователя и чата\n"
+            "🏓 <code>/ping</code> — задержка ответа\n"
+            "🕒 <code>/time</code> — время UTC и МСК\n"
+            "📝 <code>/todo add купить хлеб</code> — дела (в личке)\n"
+            "📈 <code>/stats</code> — моя статистика (в личке)\n\n"
+            "<b>Учёба</b>\n"
+            "🌍 <code>/translate en текст</code> — перевод\n"
+            "✂️ <code>/summary текст</code> — краткий пересказ\n"
+            "💡 <code>/explain текст</code> — объяснить просто\n"
+            "❓ <code>/quiz тема</code> — тест из 5 вопросов\n\n"
+            "<i>Утилиты запросы не тратят. Работают и в группах.</i>"
+        ),
+        "uk": (
+            "🧰 <b>Інструменти</b>\n\n"
+            "🧮 <code>/calc 2+2*2</code> — калькулятор\n"
+            "🎲 <code>/random 1 100</code> або <code>/random так|ні</code>\n"
+            "🪙 <code>/coin</code> — орел чи решка\n"
+            "🎲 <code>/dice 20</code> — кубик\n"
+            "🔐 <code>/password 20</code> — пароль (в особистих)\n"
+            "🆔 <code>/uuid 3</code> — UUID\n"
+            "🔒 <code>/hash текст</code> — SHA-256\n"
+            "🔁 <code>/base64 encode текст</code> · <code>/base64 decode ...</code>\n"
+            "📊 <code>/count текст</code> — символи, слова, рядки\n"
+            "🪪 <code>/id</code> — ID користувача й чату\n"
+            "🏓 <code>/ping</code> — затримка відповіді\n"
+            "🕒 <code>/time</code> — час UTC і за Києвом\n"
+            "📝 <code>/todo add купити хліб</code> — справи (в особистих)\n"
+            "📈 <code>/stats</code> — моя статистика (в особистих)\n\n"
+            "<b>Навчання</b>\n"
+            "🌍 <code>/translate en текст</code> — переклад\n"
+            "✂️ <code>/summary текст</code> — короткий переказ\n"
+            "💡 <code>/explain текст</code> — пояснити просто\n"
+            "❓ <code>/quiz тема</code> — тест із 5 питань\n\n"
+            "<i>Утиліти не витрачають запити. Працюють і в групах.</i>"
+        ),
+        "be": (
+            "🧰 <b>Інструменты</b>\n\n"
+            "🧮 <code>/calc 2+2*2</code> — калькулятар\n"
+            "🎲 <code>/random 1 100</code> або <code>/random так|не</code>\n"
+            "🪙 <code>/coin</code> — арол або рэшка\n"
+            "🎲 <code>/dice 20</code> — кубік\n"
+            "🔐 <code>/password 20</code> — пароль (у асабістых)\n"
+            "🆔 <code>/uuid 3</code> — UUID\n"
+            "🔒 <code>/hash тэкст</code> — SHA-256\n"
+            "🔁 <code>/base64 encode тэкст</code> · <code>/base64 decode ...</code>\n"
+            "📊 <code>/count тэкст</code> — сімвалы, словы, радкі\n"
+            "🪪 <code>/id</code> — ID карыстальніка і чата\n"
+            "🏓 <code>/ping</code> — затрымка адказу\n"
+            "🕒 <code>/time</code> — час UTC і па Мінску\n"
+            "📝 <code>/todo add купіць хлеб</code> — справы (у асабістых)\n"
+            "📈 <code>/stats</code> — мая статыстыка (у асабістых)\n\n"
+            "<b>Вучоба</b>\n"
+            "🌍 <code>/translate en тэкст</code> — пераклад\n"
+            "✂️ <code>/summary тэкст</code> — кароткі пераказ\n"
+            "💡 <code>/explain тэкст</code> — патлумачыць проста\n"
+            "❓ <code>/quiz тэма</code> — тэст з 5 пытанняў\n\n"
+            "<i>Утыліты не марнуюць запыты. Працуюць і ў групах.</i>"
+        ),
+        "en": (
+            "🧰 <b>Tools</b>\n\n"
+            "🧮 <code>/calc 2+2*2</code> — calculator\n"
+            "🎲 <code>/random 1 100</code> or <code>/random yes|no</code>\n"
+            "🪙 <code>/coin</code> — heads or tails\n"
+            "🎲 <code>/dice 20</code> — dice roll\n"
+            "🔐 <code>/password 20</code> — password (private)\n"
+            "🆔 <code>/uuid 3</code> — UUIDs\n"
+            "🔒 <code>/hash text</code> — SHA-256\n"
+            "🔁 <code>/base64 encode text</code> · <code>/base64 decode ...</code>\n"
+            "📊 <code>/count text</code> — chars, words, lines\n"
+            "🪪 <code>/id</code> — user and chat IDs\n"
+            "🏓 <code>/ping</code> — response latency\n"
+            "🕒 <code>/time</code> — UTC and Moscow time\n"
+            "📝 <code>/todo add buy bread</code> — to-do list (private)\n"
+            "📈 <code>/stats</code> — my stats (private)\n\n"
+            "<b>Study</b>\n"
+            "🌍 <code>/translate en text</code> — translation\n"
+            "✂️ <code>/summary text</code> — short summary\n"
+            "💡 <code>/explain text</code> — explain simply\n"
+            "❓ <code>/quiz topic</code> — a 5-question quiz\n\n"
+            "<i>Tools don't spend requests and work in groups.</i>"
+        ),
+    },
+    "calc.help": {
+        "ru": "🧮 Напиши выражение: <code>/calc 2+2*2</code> или <code>/calc sqrt(16)+5</code>.",
+        "uk": "🧮 Напиши вираз: <code>/calc 2+2*2</code> або <code>/calc sqrt(16)+5</code>.",
+        "be": "🧮 Напішы выраз: <code>/calc 2+2*2</code> або <code>/calc sqrt(16)+5</code>.",
+        "en": "🧮 Send an expression: <code>/calc 2+2*2</code> or <code>/calc sqrt(16)+5</code>.",
+    },
+    "calc.error": {
+        "ru": "🧮 Не смог посчитать. Проверь запись, например: <code>/calc (3+5)*2</code>.",
+        "uk": "🧮 Не зміг порахувати. Перевір запис, наприклад: <code>/calc (3+5)*2</code>.",
+        "be": "🧮 Не змог палічыць. Правер запіс, напрыклад: <code>/calc (3+5)*2</code>.",
+        "en": "🧮 Could not compute that. Try <code>/calc (3+5)*2</code>.",
+    },
+    "calc.result": {
+        "ru": "🧮 <code>{expr}</code> = <b>{result}</b>",
+        "uk": "🧮 <code>{expr}</code> = <b>{result}</b>",
+        "be": "🧮 <code>{expr}</code> = <b>{result}</b>",
+        "en": "🧮 <code>{expr}</code> = <b>{result}</b>",
+    },
+    "random.help": {
+        "ru": "🎲 Примеры: <code>/random</code>, <code>/random 10</code>, <code>/random 5 20</code>, <code>/random да|нет|может</code>.",
+        "uk": "🎲 Приклади: <code>/random</code>, <code>/random 10</code>, <code>/random 5 20</code>, <code>/random так|ні|може</code>.",
+        "be": "🎲 Прыклады: <code>/random</code>, <code>/random 10</code>, <code>/random 5 20</code>, <code>/random так|не|можа</code>.",
+        "en": "🎲 Examples: <code>/random</code>, <code>/random 10</code>, <code>/random 5 20</code>, <code>/random yes|no|maybe</code>.",
+    },
+    "random.number": {
+        "ru": "🎲 Случайное число от {low} до {high}: <b>{value}</b>",
+        "uk": "🎲 Випадкове число від {low} до {high}: <b>{value}</b>",
+        "be": "🎲 Выпадковае лік ад {low} да {high}: <b>{value}</b>",
+        "en": "🎲 Random number from {low} to {high}: <b>{value}</b>",
+    },
+    "random.choice": {
+        "ru": "🎲 Выпало: <b>{value}</b>",
+        "uk": "🎲 Випало: <b>{value}</b>",
+        "be": "🎲 Выпала: <b>{value}</b>",
+        "en": "🎲 Picked: <b>{value}</b>",
+    },
+    "coin.result": {
+        "ru": "🪙 {value}",
+        "uk": "🪙 {value}",
+        "be": "🪙 {value}",
+        "en": "🪙 {value}",
+    },
+    "coin.heads": {"ru": "Орёл", "uk": "Орел", "be": "Арол", "en": "Heads"},
+    "coin.tails": {"ru": "Решка", "uk": "Решка", "be": "Рэшка", "en": "Tails"},
+    "dice.result": {
+        "ru": "🎲 Кубик d{sides}: <b>{value}</b>",
+        "uk": "🎲 Кубик d{sides}: <b>{value}</b>",
+        "be": "🎲 Кубік d{sides}: <b>{value}</b>",
+        "en": "🎲 d{sides} roll: <b>{value}</b>",
+    },
+    "password.result": {
+        "ru": "🔐 Пароль на {length} символов:\n<code>{value}</code>\n\n<i>Сохрани его в менеджере паролей.</i>",
+        "uk": "🔐 Пароль на {length} символів:\n<code>{value}</code>\n\n<i>Збережи його в менеджері паролів.</i>",
+        "be": "🔐 Пароль на {length} сімвалаў:\n<code>{value}</code>\n\n<i>Захавай яго ў мэнэджары пароляў.</i>",
+        "en": "🔐 A {length}-character password:\n<code>{value}</code>\n\n<i>Keep it in a password manager.</i>",
+    },
+    "uuid.result": {
+        "ru": "🆔 UUID ({count}):\n<code>{value}</code>",
+        "uk": "🆔 UUID ({count}):\n<code>{value}</code>",
+        "be": "🆔 UUID ({count}):\n<code>{value}</code>",
+        "en": "🆔 UUID ({count}):\n<code>{value}</code>",
+    },
+    "hash.result": {
+        "ru": "🔒 SHA-256:\n<code>{value}</code>",
+        "uk": "🔒 SHA-256:\n<code>{value}</code>",
+        "be": "🔒 SHA-256:\n<code>{value}</code>",
+        "en": "🔒 SHA-256:\n<code>{value}</code>",
+    },
+    "b64.encoded": {
+        "ru": "🔁 Base64:\n<code>{value}</code>",
+        "uk": "🔁 Base64:\n<code>{value}</code>",
+        "be": "🔁 Base64:\n<code>{value}</code>",
+        "en": "🔁 Base64:\n<code>{value}</code>",
+    },
+    "b64.decoded": {
+        "ru": "🔁 Раскодировано:\n<code>{value}</code>",
+        "uk": "🔁 Розкодовано:\n<code>{value}</code>",
+        "be": "🔁 Раскадавана:\n<code>{value}</code>",
+        "en": "🔁 Decoded:\n<code>{value}</code>",
+    },
+    "b64.error": {
+        "ru": "🔁 Это не похоже на Base64. Проверь строку.",
+        "uk": "🔁 Це не схоже на Base64. Перевір рядок.",
+        "be": "🔁 Гэта не падобна на Base64. Правер радок.",
+        "en": "🔁 That does not look like Base64. Check the string.",
+    },
+    "count.result": {
+        "ru": "📊 Символов: <b>{chars}</b> · без пробелов: <b>{nospace}</b>\nСлов: <b>{words}</b> · строк: <b>{lines}</b>",
+        "uk": "📊 Символів: <b>{chars}</b> · без пробілів: <b>{nospace}</b>\nСлів: <b>{words}</b> · рядків: <b>{lines}</b>",
+        "be": "📊 Сімвалаў: <b>{chars}</b> · без прабелаў: <b>{nospace}</b>\nСлоў: <b>{words}</b> · радкоў: <b>{lines}</b>",
+        "en": "📊 Characters: <b>{chars}</b> · without spaces: <b>{nospace}</b>\nWords: <b>{words}</b> · lines: <b>{lines}</b>",
+    },
+    "id.result": {
+        "ru": "🪪 Твой ID: <code>{user_id}</code>\n💬 ID чата: <code>{chat_id}</code>{reply}",
+        "uk": "🪪 Твій ID: <code>{user_id}</code>\n💬 ID чату: <code>{chat_id}</code>{reply}",
+        "be": "🪪 Твой ID: <code>{user_id}</code>\n💬 ID чата: <code>{chat_id}</code>{reply}",
+        "en": "🪪 Your ID: <code>{user_id}</code>\n💬 Chat ID: <code>{chat_id}</code>{reply}",
+    },
+    "id.reply": {
+        "ru": "\n↩️ Автор сообщения: <b>{name}</b>, ID <code>{user_id}</code>",
+        "uk": "\n↩️ Автор повідомлення: <b>{name}</b>, ID <code>{user_id}</code>",
+        "be": "\n↩️ Аўтар паведамлення: <b>{name}</b>, ID <code>{user_id}</code>",
+        "en": "\n↩️ Message author: <b>{name}</b>, ID <code>{user_id}</code>",
+    },
+    "ping.checking": {
+        "ru": "🏓 Пингую…",
+        "uk": "🏓 Пінгую…",
+        "be": "🏓 Пінгую…",
+        "en": "🏓 Pinging…",
+    },
+    "ping.result": {
+        "ru": "🏓 Понг!\nЗадержка: <b>{ms} мс</b>\n🕒 {time}",
+        "uk": "🏓 Понг!\nЗатримка: <b>{ms} мс</b>\n🕒 {time}",
+        "be": "🏓 Понг!\nЗатрымка: <b>{ms} мс</b>\n🕒 {time}",
+        "en": "🏓 Pong!\nLatency: <b>{ms} ms</b>\n🕒 {time}",
+    },
+    "time.result": {
+        "ru": "🕒 UTC: <b>{utc}</b> · 🇷🇺 Москва: <b>{msk}</b>\n📅 {date}",
+        "uk": "🕒 UTC: <b>{utc}</b> · 🇺🇦 Київ: <b>{msk}</b>\n📅 {date}",
+        "be": "🕒 UTC: <b>{utc}</b> · 🇧🇾 Мінск: <b>{msk}</b>\n📅 {date}",
+        "en": "🕒 UTC: <b>{utc}</b> · 🇷🇺 Moscow: <b>{msk}</b>\n📅 {date}",
+    },
+    "todo.help": {
+        "ru": "📝 <code>/todo add купить хлеб</code> · <code>/todo</code> — список · <code>/todo done 1</code> · <code>/todo clear</code>",
+        "uk": "📝 <code>/todo add купити хліб</code> · <code>/todo</code> — список · <code>/todo done 1</code> · <code>/todo clear</code>",
+        "be": "📝 <code>/todo add купіць хлеб</code> · <code>/todo</code> — спіс · <code>/todo done 1</code> · <code>/todo clear</code>",
+        "en": "📝 <code>/todo add buy bread</code> · <code>/todo</code> — list · <code>/todo done 1</code> · <code>/todo clear</code>",
+    },
+    "todo.empty": {
+        "ru": "📝 Список дел пуст. Добавь: <code>/todo add купить хлеб</code>",
+        "uk": "📝 Список справ порожній. Додай: <code>/todo add купити хліб</code>",
+        "be": "📝 Спіс спраў пусты. Дадай: <code>/todo add купіць хлеб</code>",
+        "en": "📝 Your to-do list is empty. Add one: <code>/todo add buy bread</code>",
+    },
+    "todo.list": {
+        "ru": "📝 <b>Дела ({count})</b>\n{items}",
+        "uk": "📝 <b>Справи ({count})</b>\n{items}",
+        "be": "📝 <b>Справы ({count})</b>\n{items}",
+        "en": "📝 <b>To-do ({count})</b>\n{items}",
+    },
+    "todo.added": {
+        "ru": "📝 Добавлено: <b>{item}</b>",
+        "uk": "📝 Додано: <b>{item}</b>",
+        "be": "📝 Дададзена: <b>{item}</b>",
+        "en": "📝 Added: <b>{item}</b>",
+    },
+    "todo.done": {
+        "ru": "✅ Готово: <s>{item}</s>",
+        "uk": "✅ Готово: <s>{item}</s>",
+        "be": "✅ Гатово: <s>{item}</s>",
+        "en": "✅ Done: <s>{item}</s>",
+    },
+    "todo.cleared": {
+        "ru": "🧹 Список дел очищен.",
+        "uk": "🧹 Список справ очищено.",
+        "be": "🧹 Спіс спраў ачышчаны.",
+        "en": "🧹 To-do list cleared.",
+    },
+    "todo.bad_index": {
+        "ru": "📝 Такого номера нет. Открой список: <code>/todo</code>",
+        "uk": "📝 Такого номера немає. Відкрий список: <code>/todo</code>",
+        "be": "📝 Такога нумара няма. Адкрый спіс: <code>/todo</code>",
+        "en": "📝 No such number. Open the list: <code>/todo</code>",
+    },
+    "todo.full": {
+        "ru": "📝 В списке уже {limit} дел. Удали что-нибудь: <code>/todo done 1</code>",
+        "uk": "📝 У списку вже {limit} справ. Видали щось: <code>/todo done 1</code>",
+        "be": "📝 У спісе ўжо {limit} спраў. Выдалі нешта: <code>/todo done 1</code>",
+        "en": "📝 The list already has {limit} items. Remove one: <code>/todo done 1</code>",
+    },
+    "stats.body": {
+        "ru": "📈 <b>Моя статистика</b>\n\n💬 Сегодня: <b>{used}</b> · всего: <b>{total}</b>\n⭐ Осталось запросов: <b>{left}</b> (бонусных: <b>{bonus}</b>)\n🔥 Серия бонусов: <b>{streak}</b> дн.\n👥 Приглашено друзей: <b>{invites}</b>\n🖌 Бонусных генераций картинок: <b>{images}</b>",
+        "uk": "📈 <b>Моя статистика</b>\n\n💬 Сьогодні: <b>{used}</b> · усього: <b>{total}</b>\n⭐ Залишилось запитів: <b>{left}</b> (бонусних: <b>{bonus}</b>)\n🔥 Серія бонусів: <b>{streak}</b> дн.\n👥 Запрошено друзів: <b>{invites}</b>\n🖌 Бонусних генерацій картинок: <b>{images}</b>",
+        "be": "📈 <b>Мая статыстыка</b>\n\n💬 Сёння: <b>{used}</b> · усяго: <b>{total}</b>\n⭐ Засталося запытаў: <b>{left}</b> (бонусных: <b>{bonus}</b>)\n🔥 Серыя бонусаў: <b>{streak}</b> дз.\n👥 Запрошана сяброў: <b>{invites}</b>\n🖌 Бонусных генерацый малюнкаў: <b>{images}</b>",
+        "en": "📈 <b>My stats</b>\n\n💬 Today: <b>{used}</b> · total: <b>{total}</b>\n⭐ Requests left: <b>{left}</b> (bonus: <b>{bonus}</b>)\n🔥 Bonus streak: <b>{streak}</b> day(s)\n👥 Friends invited: <b>{invites}</b>\n🖌 Bonus image generations: <b>{images}</b>",
+    },
+    "tool.private": {
+        "ru": "🔒 Эта команда работает в личке. Напиши мне: @{username}",
+        "uk": "🔒 Ця команда працює в особистих. Напиши мені: @{username}",
+        "be": "🔒 Гэтая каманда працуе ў асабістых. Напішы мне: @{username}",
+        "en": "🔒 This command works in private. Message me: @{username}",
+    },
+    "tool.need_text": {
+        "ru": "✍️ Напиши текст после команды или ответь на сообщение.",
+        "uk": "✍️ Напиши текст після команди або відповідай на повідомлення.",
+        "be": "✍️ Напішы тэкст пасля каманды або адкажы на паведамленне.",
+        "en": "✍️ Send the text after the command or reply to a message.",
+    },
+    "quiz.help": {
+        "ru": "❓ Напиши тему: <code>/quiz дроби</code> или ответь на текст — составлю тест из 5 вопросов.",
+        "uk": "❓ Напиши тему: <code>/quiz дроби</code> або відповідай на текст — складу тест із 5 питань.",
+        "be": "❓ Напішы тэму: <code>/quiz дробі</code> або адкажы на тэкст — складу тэст з 5 пытанняў.",
+        "en": "❓ Send a topic: <code>/quiz fractions</code> or reply to a text — I'll make a 5-question quiz.",
+    },
+    "help.tools": {
+        "ru": "\n<b>Инструменты и учёба</b>\n<code>/tools</code> — все быстрые команды: калькулятор, генераторы, перевод, тест.\nВ группах тоже работают: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+        "uk": "\n<b>Інструменти й навчання</b>\n<code>/tools</code> — усі швидкі команди: калькулятор, генератори, переклад, тест.\nУ групах теж працюють: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+        "be": "\n<b>Інструменты і вучоба</b>\n<code>/tools</code> — усе хуткія каманды: калькулятар, генератары, пераклад, тэст.\nУ групах таксама працуюць: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+        "en": "\n<b>Tools and study</b>\n<code>/tools</code> — all quick commands: calculator, generators, translation, quiz.\nThey also work in groups: <code>/calc</code>, <code>/random</code>, <code>/coin</code>, <code>/dice</code>, <code>/count</code>, <code>/id</code>, <code>/ping</code>, <code>/time</code>, <code>/translate</code>.\n",
+    },
 }
 
 
