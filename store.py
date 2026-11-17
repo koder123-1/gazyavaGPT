@@ -34,6 +34,7 @@ class Store(Protocol):
         self, user_id: int, base: int = 3, maximum: int = 10
     ) -> dict[str, int | bool]: ...
     async def bonus_streak(self, user_id: int) -> int: ...
+    async def bonus_claimed_today(self, user_id: int) -> bool: ...
     async def claim_referral(
         self, referrer_id: int, invited_id: int, window_seconds: int = 900
     ) -> bool: ...
@@ -365,6 +366,9 @@ class MemoryStore:
 
     async def bonus_streak(self, user_id: int) -> int:
         return int(self._users.get(user_id, {}).get("bonus_streak", 0))
+
+    async def bonus_claimed_today(self, user_id: int) -> bool:
+        return self._users.get(user_id, {}).get("bonus_day") == date.today()
 
     async def claim_referral(
         self, referrer_id: int, invited_id: int, window_seconds: int = 900
@@ -1358,6 +1362,17 @@ class PostgresStore:
             "SELECT bonus_streak FROM users WHERE user_id = $1", user_id
         )
         return int(value or 0)
+
+    async def bonus_claimed_today(self, user_id: int) -> bool:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            """
+            SELECT (bonus_day IS NOT DISTINCT FROM CURRENT_DATE)
+            FROM users WHERE user_id = $1
+            """,
+            user_id,
+        )
+        return bool(value)
 
     async def claim_referral(
         self, referrer_id: int, invited_id: int, window_seconds: int = 900

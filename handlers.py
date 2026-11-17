@@ -29,6 +29,7 @@ from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
     User,
+    WebAppInfo,
 )
 
 import files
@@ -1189,6 +1190,36 @@ async def cmd_start(message: Message, store: Store, settings: Settings) -> None:
         )
     if not stored:
         await message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))
+
+
+@router.message(Command("app", "кабинет", "cabinet"))
+async def cmd_app(message: Message, store: Store, settings: Settings) -> None:
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    if message.chat.type != "private":
+        me = await message.bot.me()
+        await message.answer(
+            t(lang, "app.private", username=me.username or settings.bot_name)
+        )
+        return
+    if not settings.use_webhook:
+        await message.answer(t(lang, "app.disabled"))
+        return
+    url = f"{settings.base_url.rstrip('/')}/app"
+    await message.answer(
+        t(lang, "app.open"),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=t(lang, "app.button"), web_app=WebAppInfo(url=url)
+                    )
+                ]
+            ]
+        ),
+    )
 
 
 async def _accept_referral(

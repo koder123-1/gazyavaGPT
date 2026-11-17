@@ -18,7 +18,9 @@ from aiogram.types import (
     BotCommand,
     BotCommandScopeAllChatAdministrators,
     BotCommandScopeAllGroupChats,
+    MenuButtonWebApp,
     TelegramObject,
+    WebAppInfo,
 )
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
@@ -43,6 +45,7 @@ import autopost
 import channelkit
 import giveaways
 import keepalive
+import miniapp
 import reminders
 
 WEBHOOK_PATH = "/webhook"
@@ -55,6 +58,7 @@ log = logging.getLogger("bot")
 
 COMMANDS = [
     BotCommand(command="start", description="Запустить ассистента"),
+    BotCommand(command="app", description="Личный кабинет (Mini App)"),
     BotCommand(command="ai", description="Задать вопрос ИИ"),
     BotCommand(command="reset", description="Очистить контекст диалога"),
     BotCommand(command="check", description="Проверить моё решение"),
@@ -173,6 +177,20 @@ async def on_startup(
         await bot.set_my_commands(
             GROUP_COMMANDS, scope=BotCommandScopeAllChatAdministrators()
         )
+
+    # Кнопка Mini App рядом с полем ввода. Без публичного адреса (polling)
+    # открывать нечего, поэтому молча пропускаем.
+    app_url = miniapp.webapp_url(settings)
+    if app_url:
+        with contextlib.suppress(TelegramAPIError):
+            me = await bot.me()
+            miniapp.set_bot_username(me.username)
+        with contextlib.suppress(TelegramAPIError):
+            await bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="🚀 Кабинет", web_app=WebAppInfo(url=app_url)
+                )
+            )
 
     if not ai.configured:
         log.error("AI_API_KEY не задан — бот ответит пользователям, что ИИ не настроен")
@@ -313,6 +331,7 @@ def create_app(
 
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
+    miniapp.setup(app, settings, store, bot)
     return app
 
 
