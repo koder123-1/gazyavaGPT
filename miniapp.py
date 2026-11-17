@@ -154,6 +154,20 @@ def _lang_of(value: str | None, settings: Settings) -> str:
 
 
 # --------------------------------------------------------------------------- обработчики
+async def _no_cache(request: web.Request, response: web.StreamResponse) -> None:
+    """Оболочка Mini App не кешируется.
+
+    Иначе после деплоя браузер продолжает отдавать старый CSS/JS: HTML и ассеты
+    живут по одним и тем же путям, а без `Cache-Control` webview применяет
+    эвристическое кеширование. `no-cache` не запрещает кеш, а требует
+    ревалидацию — при неизменном файле aiohttp ответит 304 и трафик не вырастет.
+    """
+    path = request.path
+    if path in ("/app", "/app/") or path.startswith("/app/assets/"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+
+
 async def index(_: web.Request) -> web.FileResponse:
     """Отдаёт страницу Mini App."""
     return web.FileResponse(BASE_DIR / "index.html")
@@ -538,6 +552,10 @@ def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> N
     app["miniapp_settings"] = settings
     app["miniapp_store"] = store
     app["miniapp_bot"] = bot
+
+    if not app.get("miniapp_no_cache_hook"):
+        app["miniapp_no_cache_hook"] = True
+        app.on_response_prepare.append(_no_cache)
 
     app.router.add_get("/app", index)
     app.router.add_get("/app/", index)
