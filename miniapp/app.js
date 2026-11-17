@@ -3,11 +3,52 @@
   "use strict";
 
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+
+  var THEME_BG = { dark: "#070a13", light: "#f3f5fd" };
+
+  function currentScheme() {
+    var scheme = "";
+    try { scheme = (tg && tg.colorScheme) || ""; } catch (e) {}
+    if (scheme !== "light" && scheme !== "dark") {
+      try {
+        scheme = (window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+      } catch (e) { scheme = "dark"; }
+    }
+    return scheme;
+  }
+
+  function applyTheme() {
+    var light = currentScheme() === "light";
+    var bg = light ? THEME_BG.light : THEME_BG.dark;
+    document.documentElement.setAttribute("data-theme", light ? "light" : "dark");
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", bg);
+    if (!tg) return;
+    try { if (tg.setHeaderColor) tg.setHeaderColor(bg); } catch (e) {}
+    try { if (tg.setBackgroundColor) tg.setBackgroundColor(bg); } catch (e) {}
+    try { if (tg.setBottomBarColor) tg.setBottomBarColor(bg); } catch (e) {}
+  }
+
+  applyTheme();
+
   if (tg) {
     try { tg.ready(); } catch (e) {}
     try { tg.expand(); } catch (e) {}
-    try { if (tg.setHeaderColor) tg.setHeaderColor("secondary_bg_color"); } catch (e) {}
-    try { if (tg.setBackgroundColor) tg.setBackgroundColor("bg_color"); } catch (e) {}
+    try { if (tg.onEvent) tg.onEvent("themeChanged", applyTheme); } catch (e) {}
+  }
+
+  function haptic(kind) {
+    if (!tg || !tg.HapticFeedback) return;
+    try {
+      if (kind === "success" || kind === "error" || kind === "warning") {
+        tg.HapticFeedback.notificationOccurred(kind);
+      } else if (kind === "select") {
+        tg.HapticFeedback.selectionChanged();
+      } else {
+        tg.HapticFeedback.impactOccurred(kind || "light");
+      }
+    } catch (e) {}
   }
 
   var STYLE_ORDER = ["auto", "expert", "study", "code"];
@@ -51,7 +92,7 @@
       rem_add: "Напоминание", rem_empty: "Напоминаний нет", rem_bad: "Не понял время — например 10м, 1ч30м",
       rem_limit: "Больше 10 напоминаний нельзя", rem_hint: "Время: 30с, 10м, 2ч, 1д. Придёт в этот чат.",
       buy_title: "⭐ Купить запросы", buy_disabled: "Пополнение сейчас отключено.",
-      buy_balance: "Твой запас: {n} запросов", buy_packages: "Готовые наборы",
+      buy_balance: "Твой запас: {n} запросов", buy_packages: "Готовые наборы", pkg_requests: "запросов",
       buy_custom: "Своя сумма", buy_stars_ph: "Звёзд", buy_button: "Купить",
       buy_models: "Модели ИИ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запросов",
       paid: "Оплата получена, спасибо!", pay_failed: "Оплата не прошла", already_owned: "Уже куплено",
@@ -100,7 +141,7 @@
       rem_add: "Нагадування", rem_empty: "Нагадувань немає", rem_bad: "Не зрозумів час — наприклад 10х, 1г30х",
       rem_limit: "Більше 10 нагадувань не можна", rem_hint: "Час: 30с, 10х, 2г, 1д. Прийде в цей чат.",
       buy_title: "⭐ Купити запити", buy_disabled: "Поповнення зараз вимкнене.",
-      buy_balance: "Твій запас: {n} запитів", buy_packages: "Готові набори",
+      buy_balance: "Твій запас: {n} запитів", buy_packages: "Готові набори", pkg_requests: "запитів",
       buy_custom: "Своя сума", buy_stars_ph: "Зірок", buy_button: "Купити",
       buy_models: "Моделі ШІ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запитів",
       paid: "Оплату отримано, дякую!", pay_failed: "Оплата не пройшла", already_owned: "Уже куплено",
@@ -149,7 +190,7 @@
       rem_add: "Напамін", rem_empty: "Напамінаў няма", rem_bad: "Не зразумеў час — напрыклад 10х, 1г30х",
       rem_limit: "Больш за 10 напамінаў нельга", rem_hint: "Час: 30с, 10х, 2г, 1д. Прыйдзе ў гэты чат.",
       buy_title: "⭐ Купіць запыты", buy_disabled: "Папаўненне зараз выключана.",
-      buy_balance: "Твой запас: {n} запытаў", buy_packages: "Гатовыя наборы",
+      buy_balance: "Твой запас: {n} запытаў", buy_packages: "Гатовыя наборы", pkg_requests: "запытаў",
       buy_custom: "Свая сума", buy_stars_ph: "Зорак", buy_button: "Купіць",
       buy_models: "Мадэлі ШІ", buy_owned: "Куплена", buy_rate: "Курс: 1 ⭐ = {rate} запытаў",
       paid: "Аплату атрымана, дзякуй!", pay_failed: "Аплата не прайшла", already_owned: "Ужо куплена",
@@ -198,7 +239,7 @@
       rem_add: "Reminder", rem_empty: "No reminders", rem_bad: "Couldn't read the time — e.g. 10m, 1h30m",
       rem_limit: "No more than 10 reminders", rem_hint: "Time: 30s, 10m, 2h, 1d. Delivered to this chat.",
       buy_title: "⭐ Buy requests", buy_disabled: "Top-ups are disabled right now.",
-      buy_balance: "Your balance: {n} requests", buy_packages: "Ready packages",
+      buy_balance: "Your balance: {n} requests", buy_packages: "Ready packages", pkg_requests: "requests",
       buy_custom: "Custom amount", buy_stars_ph: "Stars", buy_button: "Buy",
       buy_models: "AI models", buy_owned: "Owned", buy_rate: "Rate: 1 ⭐ = {rate} requests",
       paid: "Payment received, thank you!", pay_failed: "Payment failed", already_owned: "Already owned",
@@ -539,10 +580,13 @@
     }
 
     var packages = data.packages.length
-      ? data.packages.map(function (p) {
-          return '<button class="btn secondary" data-action="invoice" data-requests="' + p.requests +
-            '" data-stars="' + p.stars + '">' + esc(p.requests) + " — " + esc(p.stars) + " ⭐</button>";
-        }).join("")
+      ? '<div class="pkgs">' + data.packages.map(function (p) {
+          return '<button class="pkg" data-action="invoice" data-requests="' + p.requests +
+            '" data-stars="' + p.stars + '">' +
+            '<span class="pkg-num">' + esc(p.requests) + "</span>" +
+            '<span class="pkg-sub">' + esc(t("pkg_requests")) + "</span>" +
+            '<span class="pkg-star">' + esc(p.stars) + " ⭐</span></button>";
+        }).join("") + "</div>"
       : "";
 
     var models = data.models.map(function (m) {
@@ -666,6 +710,7 @@
         state.me.bonus_claimed_today = true;
       }
       toast(data.claimed ? t("bonus_claimed", { amount: data.amount }) : t("bonus_already"));
+      haptic(data.claimed ? "success" : "warning");
     }).catch(function () {
       toast(t("error_text"));
     }).then(function () { state.busy = false; render(); });
@@ -685,7 +730,7 @@
   function toolsAction(payload, okMessage) {
     return api("tools", payload).then(function (data) {
       state.tools = data;
-      if (data.ok) { if (okMessage) toast(okMessage); }
+      if (data.ok) { if (okMessage) { toast(okMessage); haptic("success"); } }
       else if (data.error === "rem_bad_duration") toast(t("rem_bad"));
       else if (data.error === "rem_limit") toast(t("rem_limit"));
       else if (data.error === "todo_limit") toast(t("todo_limit"));
@@ -733,9 +778,11 @@
         tg.openInvoice(data.url, function (status) {
           if (status === "paid") {
             toast(t("paid"));
+            haptic("success");
             load().then(function () { if (state.screen === "buy") refreshBuy(); });
           } else if (status === "failed") {
             toast(t("pay_failed"));
+            haptic("error");
           }
         });
       } else {
@@ -775,6 +822,8 @@
     if (!node) return;
     var action = node.getAttribute("data-action");
     var value = node.getAttribute("data-value");
+
+    haptic(action === "tab" || action === "set-lang" || action === "set-style" ? "select" : "light");
 
     if (action === "tab") {
       state.screen = null;
