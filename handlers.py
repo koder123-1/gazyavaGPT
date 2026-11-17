@@ -583,6 +583,24 @@ async def send_answer(
                     await message.answer(plain, parse_mode=None, reply_markup=markup)
 
 
+def cabinet_webapp_kb(settings: Settings, lang: str) -> InlineKeyboardMarkup | None:
+    """Кнопка «📊 Кабинет» под ответом ИИ — открывает Mini App."""
+    if not settings.use_webhook:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=t(lang, "app.after"),
+                    web_app=WebAppInfo(
+                        url=settings.base_url.rstrip("/") + "/app"
+                    ),
+                )
+            ]
+        ]
+    )
+
+
 def answer_kb(
     exchange_id: int, voted: str | None = None, lang: str = "ru"
 ) -> InlineKeyboardMarkup:
@@ -1117,12 +1135,15 @@ async def answer_with_ai(
             name=files.suggest_filename(question, out_fmt),
         )
     elif deliver:
-        # Под ответом не показываем никаких кнопок: ни оценок, ни «проще/глубже».
+        # Под ответом не показываем кнопок оценок или вариантов — только кнопку
+        # «📊 Кабинет», если Mini App включён, чтобы пользователь сразу видел
+        # статистику (остаток, историю, инструменты).
         await deliver_answer(
             message,
             answer,
             code=code_view,
             lang=lang,
+            keyboard=cabinet_webapp_kb(settings, lang),
         )
     return answer
 

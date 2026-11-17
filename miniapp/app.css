@@ -130,12 +130,22 @@ body { overflow-x: hidden; }
 .view {
   flex: 1;
   padding: 6px 16px 120px;
-  animation: view-in 0.2s var(--ease);
 }
 
-@keyframes view-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+/* каскадное появление карточек при входе на экран */
+.view > * {
+  animation: rise 0.38s var(--ease) both;
+}
+.view > *:nth-child(1) { animation-delay: 0ms; }
+.view > *:nth-child(2) { animation-delay: 40ms; }
+.view > *:nth-child(3) { animation-delay: 70ms; }
+.view > *:nth-child(4) { animation-delay: 95ms; }
+.view > *:nth-child(5) { animation-delay: 115ms; }
+.view > *:nth-child(n+6) { animation-delay: 130ms; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ---------------------------------------------------------------- типографика */
@@ -221,10 +231,12 @@ p { margin: 0 0 10px; }
   align-items: center;
   gap: 8px;
   box-shadow: var(--shadow);
-  transition: background 0.15s, transform 0.15s;
+  transition: transform 0.18s var(--ease), box-shadow 0.18s, border-color 0.18s;
+  transform: translateY(0);
 }
 
-.tile:active { background: var(--surface-2); transform: scale(0.99); }
+.tile:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.12); border-color: var(--accent); }
+.tile:active { transform: translateY(0) scale(0.98); }
 
 .tile .tile-icon {
   font-size: 19px;
@@ -306,10 +318,10 @@ p { margin: 0 0 10px; }
   background: var(--accent);
   color: var(--accent-text);
   cursor: pointer;
-  transition: filter 0.15s, transform 0.12s;
+  transition: transform 0.12s var(--ease), filter 0.15s, box-shadow 0.15s;
 }
-.btn:active { transform: scale(0.99); filter: brightness(1.06); }
-.btn:disabled { opacity: 0.5; cursor: default; }
+.btn:active { transform: scale(0.96); filter: brightness(1.08); box-shadow: 0 0 0 4px var(--accent-soft); }
+.btn:disabled { opacity: 0.5; cursor: default; transform: none; filter: none; box-shadow: none; }
 
 .btn.secondary {
   background: var(--surface-2);
@@ -465,6 +477,13 @@ p { margin: 0 0 10px; }
   background: var(--surface-2);
   border-radius: 10px;
   font-size: 13.5px;
+  animation: reveal-in 0.28s var(--ease);
+  overflow: hidden;
+}
+
+@keyframes reveal-in {
+  from { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
+  to   { opacity: 1; max-height: 600px; }
 }
 
 .head { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; }
@@ -513,8 +532,9 @@ p { margin: 0 0 10px; }
   align-items: center;
   gap: 3px;
   font-family: inherit;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.2s, transform 0.2s var(--ease);
 }
+.tab:active { transform: scale(0.94); }
 
 .tab .tab-icon {
   font-size: 18px;
@@ -557,7 +577,7 @@ p { margin: 0 0 10px; }
   left: 50%;
   bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   z-index: 40;
-  transform: translate(-50%, 8px);
+  transform: translate(-50%, 12px) scale(0.94);
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--stroke-strong);
@@ -567,13 +587,13 @@ p { margin: 0 0 10px; }
   font-weight: 500;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.18s var(--ease), transform 0.18s var(--ease);
+  transition: opacity 0.2s var(--ease), transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
   max-width: min(88vw, 420px);
   text-align: center;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
 }
 
-.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
 
 /* ---------------------------------------------------------------- тарифы */
 .pkgs {

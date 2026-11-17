@@ -300,6 +300,19 @@
     return value;
   }
 
+  function countUp(el, target, duration) {
+    if (!el || isNaN(target) || target <= 0) return;
+    var start = performance.now();
+    function step(now) {
+      var elapsed = now - start;
+      var progress = Math.min(1, elapsed / duration);
+      var eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(target * eased);
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
@@ -413,6 +426,14 @@
       '</div></div></div><div class="row"><div><div class="row-title">' +
       esc(styleMeta[0] || me.style) + '</div><div class="row-sub">' + esc(styleMeta[1] || "") +
       "</div></div></div></div>";
+
+    // Анимация счётчика в герое (только один раз за сессию)
+    if (!state._heroAnimated && !me.unlimited && me.remaining > 0) {
+      setTimeout(function () {
+        var el = document.querySelector(".hero .value");
+        if (el) { countUp(el, me.remaining, 700); state._heroAnimated = true; }
+      }, 120);
+    }
   }
 
   function renderStats() {
