@@ -10,27 +10,23 @@
     try { if (tg.setBackgroundColor) tg.setBackgroundColor("bg_color"); } catch (e) {}
   }
 
-  var STYLE_ICON = { auto: "🌐", expert: "🚀", study: "🎓", code: "💻" };
   var STYLE_ORDER = ["auto", "expert", "study", "code"];
   var LANG_FLAG = { ru: "🇷🇺", uk: "🇺🇦", be: "🇧🇾", en: "🇬🇧" };
   var LANG_NAME = { ru: "Русский", uk: "Українська", be: "Беларуская", en: "English" };
 
   var I18N = {
     ru: {
-      home: "Кабинет", stats: "Статистика", friends: "Друзья", settings: "Настройки",
+      home: "Кабинет", stats: "Статистика", friends: "Друзья", settings: "Настройки", back: "Назад",
       hello: "Привет, {name}!",
-      left: "Осталось запросов", unlimited: "Без ограничений",
-      today_used: "Сегодня использовано: {n}",
-      bonus_title: "🎁 Бонус дня",
-      bonus_claim: "Забрать бонус",
-      bonus_claimed: "Бонус получен: +{amount}",
-      bonus_already: "Бонус дня уже получен",
+      left: "Осталось запросов", unlimited: "Без ограничений", today_used: "Сегодня использовано: {n}",
+      bonus_title: "🎁 Бонус дня", bonus_claim: "Забрать бонус",
+      bonus_claimed: "Бонус получен: +{amount}", bonus_already: "Бонус дня уже получен",
       bonus_streak: "Серия: {n} дн. подряд",
       bonus_hint: "Заходи каждый день — бонус растёт до {max}.",
-      model: "Модель ИИ", style: "Стиль ответов",
-      stat_today: "Запросов сегодня", stat_total: "Всего запросов",
-      stat_left: "Осталось", stat_bonus: "Бонусных запросов",
-      stat_streak: "Серия бонусов", stat_invites: "Приглашено друзей",
+      model: "Модель ИИ", style: "Стиль ответов", model_hint: "Модель меняется в боте командой /model.",
+      tile_history: "История", tile_tools: "Инструменты", tile_buy: "Купить",
+      stat_today: "Запросов сегодня", stat_total: "Всего запросов", stat_left: "Осталось",
+      stat_bonus: "Бонусных запросов", stat_streak: "Серия бонусов", stat_invites: "Приглашено друзей",
       stat_images: "Бонусных картинок", days: "дн.",
       friends_title: "👥 Приглашай друзей",
       friends_hint: "За каждого нового друга: тебе +{reward}, другу +{friend} запросов.",
@@ -38,15 +34,28 @@
       share: "Поделиться", friends_count: "Уже приглашено: {n}",
       friends_top: "Топ приглашающих", friends_empty: "Пока никого — стань первым!",
       settings_title: "⚙️ Настройки", language: "Язык", style_title: "Стиль ответов",
-      model_hint: "Модель меняется в боте командой /model.",
       saved: "Сохранено",
-      sub_title: "🔒 Нужна подписка",
-      sub_text: "Чтобы открыть кабинет, подпишись на канал.",
+      sub_title: "🔒 Нужна подписка", sub_text: "Чтобы открыть кабинет, подпишись на канал.",
       sub_button: "📢 Подписаться", sub_check: "Я подписался",
-      error_title: "Не получилось загрузить",
-      error_text: "Открой кабинет заново из Telegram.",
-      retry: "Повторить",
-      loading: "Загрузка…",
+      error_title: "Не получилось загрузить", error_text: "Открой кабинет заново из Telegram.",
+      retry: "Повторить", loading: "Загрузка…",
+      history_title: "💬 Последние ответы", history_empty: "Пока пусто — задай первый вопрос в чате.",
+      history_note: "Показаны последние 12 ответов. Историю можно очистить командой /reset.",
+      tools_title: "🧰 Инструменты",
+      todos_title: "✅ Дела", todo_ph: "Новое дело…", todo_add: "Добавить", todo_clear: "Очистить",
+      todo_empty: "Список пуст", todo_limit: "Достигнут предел списка",
+      cards_title: "🃏 Карточки", card_q_ph: "Вопрос", card_a_ph: "Ответ", card_add: "Добавить карточку",
+      card_empty: "Карточек пока нет", card_limit: "Достигнут предел карточек",
+      card_need_both: "Нужны и вопрос, и ответ", card_show: "Показать ответ",
+      reminders_title: "⏰ Напоминания", rem_ph: "Текст напоминания…", rem_dur_ph: "10м",
+      rem_add: "Напоминание", rem_empty: "Напоминаний нет", rem_bad: "Не понял время — например 10м, 1ч30м",
+      rem_limit: "Больше 10 напоминаний нельзя", rem_hint: "Время: 30с, 10м, 2ч, 1д. Придёт в этот чат.",
+      buy_title: "⭐ Купить запросы", buy_disabled: "Пополнение сейчас отключено.",
+      buy_balance: "Твой запас: {n} запросов", buy_packages: "Готовые наборы",
+      buy_custom: "Своя сумма", buy_stars_ph: "Звёзд", buy_button: "Купить",
+      buy_models: "Модели ИИ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запросов",
+      paid: "Оплата получена, спасибо!", pay_failed: "Оплата не прошла", already_owned: "Уже куплено",
+      added: "Добавлено", limit_reached: "Достигнут предел",
       styles: {
         auto: ["🌐 Универсальный", "сильный эксперт во всех темах"],
         expert: ["🚀 Максимум", "максимальная глубина и варианты"],
@@ -56,20 +65,17 @@
       share_text: "Заходи в {bot} — ИИ-помощник по учёбе. Разбирает задачи по шагам."
     },
     uk: {
-      home: "Кабінет", stats: "Статистика", friends: "Друзі", settings: "Налаштування",
+      home: "Кабінет", stats: "Статистика", friends: "Друзі", settings: "Налаштування", back: "Назад",
       hello: "Привіт, {name}!",
-      left: "Залишилось запитів", unlimited: "Без обмежень",
-      today_used: "Сьогодні використано: {n}",
-      bonus_title: "🎁 Бонус дня",
-      bonus_claim: "Забрати бонус",
-      bonus_claimed: "Бонус отримано: +{amount}",
-      bonus_already: "Бонус дня вже отримано",
+      left: "Залишилось запитів", unlimited: "Без обмежень", today_used: "Сьогодні використано: {n}",
+      bonus_title: "🎁 Бонус дня", bonus_claim: "Забрати бонус",
+      bonus_claimed: "Бонус отримано: +{amount}", bonus_already: "Бонус дня вже отримано",
       bonus_streak: "Серія: {n} дн. підряд",
       bonus_hint: "Заходь щодня — бонус зростає до {max}.",
-      model: "Модель ШІ", style: "Стиль відповідей",
-      stat_today: "Запитів сьогодні", stat_total: "Усього запитів",
-      stat_left: "Залишилось", stat_bonus: "Бонусних запитів",
-      stat_streak: "Серія бонусів", stat_invites: "Запрошено друзів",
+      model: "Модель ШІ", style: "Стиль відповідей", model_hint: "Модель змінюється в боті командою /model.",
+      tile_history: "Історія", tile_tools: "Інструменти", tile_buy: "Купити",
+      stat_today: "Запитів сьогодні", stat_total: "Усього запитів", stat_left: "Залишилось",
+      stat_bonus: "Бонусних запитів", stat_streak: "Серія бонусів", stat_invites: "Запрошено друзів",
       stat_images: "Бонусних картинок", days: "дн.",
       friends_title: "👥 Запрошуй друзів",
       friends_hint: "За кожного нового друга: тобі +{reward}, другу +{friend} запитів.",
@@ -77,15 +83,28 @@
       share: "Поділитися", friends_count: "Уже запрошено: {n}",
       friends_top: "Топ запрошуючих", friends_empty: "Поки нікого — стань першим!",
       settings_title: "⚙️ Налаштування", language: "Мова", style_title: "Стиль відповідей",
-      model_hint: "Модель змінюється в боті командою /model.",
       saved: "Збережено",
-      sub_title: "🔒 Потрібна підписка",
-      sub_text: "Щоб відкрити кабінет, підпишись на канал.",
+      sub_title: "🔒 Потрібна підписка", sub_text: "Щоб відкрити кабінет, підпишись на канал.",
       sub_button: "📢 Підписатися", sub_check: "Я підписався",
-      error_title: "Не вдалося завантажити",
-      error_text: "Відкрий кабінет заново з Telegram.",
-      retry: "Повторити",
-      loading: "Завантаження…",
+      error_title: "Не вдалося завантажити", error_text: "Відкрий кабінет заново з Telegram.",
+      retry: "Повторити", loading: "Завантаження…",
+      history_title: "💬 Останні відповіді", history_empty: "Поки порожньо — постав перше питання в чаті.",
+      history_note: "Показано останні 12 відповідей. Історію можна очистити командою /reset.",
+      tools_title: "🧰 Інструменти",
+      todos_title: "✅ Справи", todo_ph: "Нова справа…", todo_add: "Додати", todo_clear: "Очистити",
+      todo_empty: "Список порожній", todo_limit: "Досягнуто межі списку",
+      cards_title: "🃏 Картки", card_q_ph: "Питання", card_a_ph: "Відповідь", card_add: "Додати картку",
+      card_empty: "Карток поки немає", card_limit: "Досягнуто межі карток",
+      card_need_both: "Потрібні і питання, і відповідь", card_show: "Показати відповідь",
+      reminders_title: "⏰ Нагадування", rem_ph: "Текст нагадування…", rem_dur_ph: "10х",
+      rem_add: "Нагадування", rem_empty: "Нагадувань немає", rem_bad: "Не зрозумів час — наприклад 10х, 1г30х",
+      rem_limit: "Більше 10 нагадувань не можна", rem_hint: "Час: 30с, 10х, 2г, 1д. Прийде в цей чат.",
+      buy_title: "⭐ Купити запити", buy_disabled: "Поповнення зараз вимкнене.",
+      buy_balance: "Твій запас: {n} запитів", buy_packages: "Готові набори",
+      buy_custom: "Своя сума", buy_stars_ph: "Зірок", buy_button: "Купити",
+      buy_models: "Моделі ШІ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запитів",
+      paid: "Оплату отримано, дякую!", pay_failed: "Оплата не пройшла", already_owned: "Уже куплено",
+      added: "Додано", limit_reached: "Досягнуто межі",
       styles: {
         auto: ["🌐 Універсальний", "сильний експерт у всіх темах"],
         expert: ["🚀 Максимум", "максимальна глибина й варіанти"],
@@ -95,20 +114,17 @@
       share_text: "Заходь у {bot} — ШІ-помічник з навчання. Розбирає задачі покроково."
     },
     be: {
-      home: "Кабінет", stats: "Статыстыка", friends: "Сябры", settings: "Налады",
+      home: "Кабінет", stats: "Статыстыка", friends: "Сябры", settings: "Налады", back: "Назад",
       hello: "Прывітанне, {name}!",
-      left: "Засталося запытаў", unlimited: "Без абмежаванняў",
-      today_used: "Сёння выкарыстана: {n}",
-      bonus_title: "🎁 Бонус дня",
-      bonus_claim: "Забраць бонус",
-      bonus_claimed: "Бонус атрыманы: +{amount}",
-      bonus_already: "Бонус дня ўжо атрыманы",
+      left: "Засталося запытаў", unlimited: "Без абмежаванняў", today_used: "Сёння выкарыстана: {n}",
+      bonus_title: "🎁 Бонус дня", bonus_claim: "Забраць бонус",
+      bonus_claimed: "Бонус атрыманы: +{amount}", bonus_already: "Бонус дня ўжо атрыманы",
       bonus_streak: "Серыя: {n} дз. запар",
       bonus_hint: "Заходзь штодня — бонус расце да {max}.",
-      model: "Мадэль ШІ", style: "Стыль адказаў",
-      stat_today: "Запытаў сёння", stat_total: "Усяго запытаў",
-      stat_left: "Засталося", stat_bonus: "Бонусных запытаў",
-      stat_streak: "Серыя бонусаў", stat_invites: "Запрошана сяброў",
+      model: "Мадэль ШІ", style: "Стыль адказаў", model_hint: "Мадэль змяняецца ў боце камандай /model.",
+      tile_history: "Гісторыя", tile_tools: "Інструменты", tile_buy: "Купіць",
+      stat_today: "Запытаў сёння", stat_total: "Усяго запытаў", stat_left: "Засталося",
+      stat_bonus: "Бонусных запытаў", stat_streak: "Серыя бонусаў", stat_invites: "Запрошана сяброў",
       stat_images: "Бонусных малюнкаў", days: "дз.",
       friends_title: "👥 Запрашай сяброў",
       friends_hint: "За кожнага новага сябра: табе +{reward}, сябру +{friend} запытаў.",
@@ -116,15 +132,28 @@
       share: "Падзяліцца", friends_count: "Ужо запрошана: {n}",
       friends_top: "Топ запрашальнікаў", friends_empty: "Пакуль нікога — стань першым!",
       settings_title: "⚙️ Налады", language: "Мова", style_title: "Стыль адказаў",
-      model_hint: "Мадэль змяняецца ў боце камандай /model.",
       saved: "Захавана",
-      sub_title: "🔒 Патрэбна падпіска",
-      sub_text: "Каб адкрыць кабінет, падпішыся на канал.",
+      sub_title: "🔒 Патрэбна падпіска", sub_text: "Каб адкрыць кабінет, падпішыся на канал.",
       sub_button: "📢 Падпісацца", sub_check: "Я падпісаўся",
-      error_title: "Не ўдалося загрузіць",
-      error_text: "Адкрый кабінет зноў з Telegram.",
-      retry: "Паўтарыць",
-      loading: "Загрузка…",
+      error_title: "Не ўдалося загрузіць", error_text: "Адкрый кабінет зноў з Telegram.",
+      retry: "Паўтарыць", loading: "Загрузка…",
+      history_title: "💬 Апошнія адказы", history_empty: "Пакуль пуста — задай першае пытанне ў чаце.",
+      history_note: "Паказаны апошнія 12 адказаў. Гісторыю можна ачысціць камандай /reset.",
+      tools_title: "🧰 Інструменты",
+      todos_title: "✅ Справы", todo_ph: "Новая справа…", todo_add: "Дадаць", todo_clear: "Ачысціць",
+      todo_empty: "Спіс пусты", todo_limit: "Дасягнута мяжа спісу",
+      cards_title: "🃏 Карткі", card_q_ph: "Пытанне", card_a_ph: "Адказ", card_add: "Дадаць картку",
+      card_empty: "Картак пакуль няма", card_limit: "Дасягнута мяжа картак",
+      card_need_both: "Патрэбны і пытанне, і адказ", card_show: "Паказаць адказ",
+      reminders_title: "⏰ Напаміны", rem_ph: "Тэкст напаміну…", rem_dur_ph: "10х",
+      rem_add: "Напамін", rem_empty: "Напамінаў няма", rem_bad: "Не зразумеў час — напрыклад 10х, 1г30х",
+      rem_limit: "Больш за 10 напамінаў нельга", rem_hint: "Час: 30с, 10х, 2г, 1д. Прыйдзе ў гэты чат.",
+      buy_title: "⭐ Купіць запыты", buy_disabled: "Папаўненне зараз выключана.",
+      buy_balance: "Твой запас: {n} запытаў", buy_packages: "Гатовыя наборы",
+      buy_custom: "Свая сума", buy_stars_ph: "Зорак", buy_button: "Купіць",
+      buy_models: "Мадэлі ШІ", buy_owned: "Куплена", buy_rate: "Курс: 1 ⭐ = {rate} запытаў",
+      paid: "Аплату атрымана, дзякуй!", pay_failed: "Аплата не прайшла", already_owned: "Ужо куплена",
+      added: "Дададзена", limit_reached: "Дасягнута мяжа",
       styles: {
         auto: ["🌐 Універсальны", "моцны эксперт ва ўсіх тэмах"],
         expert: ["🚀 Максімум", "максімальная глыбіня і варыянты"],
@@ -134,20 +163,17 @@
       share_text: "Заходзь у {bot} — ШІ-памочнік па вучобе. Разбірае задачы па кроках."
     },
     en: {
-      home: "Home", stats: "Stats", friends: "Friends", settings: "Settings",
+      home: "Home", stats: "Stats", friends: "Friends", settings: "Settings", back: "Back",
       hello: "Hi, {name}!",
-      left: "Requests left", unlimited: "Unlimited",
-      today_used: "Used today: {n}",
-      bonus_title: "🎁 Daily bonus",
-      bonus_claim: "Claim bonus",
-      bonus_claimed: "Bonus claimed: +{amount}",
-      bonus_already: "Today's bonus is already claimed",
+      left: "Requests left", unlimited: "Unlimited", today_used: "Used today: {n}",
+      bonus_title: "🎁 Daily bonus", bonus_claim: "Claim bonus",
+      bonus_claimed: "Bonus claimed: +{amount}", bonus_already: "Today's bonus is already claimed",
       bonus_streak: "Streak: {n} day(s)",
       bonus_hint: "Come back every day — the bonus grows up to {max}.",
-      model: "AI model", style: "Answer style",
-      stat_today: "Requests today", stat_total: "Total requests",
-      stat_left: "Left", stat_bonus: "Bonus requests",
-      stat_streak: "Bonus streak", stat_invites: "Friends invited",
+      model: "AI model", style: "Answer style", model_hint: "Change the model in the bot with /model.",
+      tile_history: "History", tile_tools: "Tools", tile_buy: "Buy",
+      stat_today: "Requests today", stat_total: "Total requests", stat_left: "Left",
+      stat_bonus: "Bonus requests", stat_streak: "Bonus streak", stat_invites: "Friends invited",
       stat_images: "Bonus images", days: "d",
       friends_title: "👥 Invite friends",
       friends_hint: "For each new friend: you get +{reward}, your friend gets +{friend} requests.",
@@ -155,15 +181,28 @@
       share: "Share", friends_count: "Invited so far: {n}",
       friends_top: "Top inviters", friends_empty: "Nobody yet — be the first!",
       settings_title: "⚙️ Settings", language: "Language", style_title: "Answer style",
-      model_hint: "Change the model in the bot with /model.",
       saved: "Saved",
-      sub_title: "🔒 Subscription required",
-      sub_text: "Subscribe to the channel to open the dashboard.",
+      sub_title: "🔒 Subscription required", sub_text: "Subscribe to the channel to open the dashboard.",
       sub_button: "📢 Subscribe", sub_check: "I subscribed",
-      error_title: "Failed to load",
-      error_text: "Open the dashboard again from Telegram.",
-      retry: "Retry",
-      loading: "Loading…",
+      error_title: "Failed to load", error_text: "Open the dashboard again from Telegram.",
+      retry: "Retry", loading: "Loading…",
+      history_title: "💬 Recent answers", history_empty: "Empty so far — ask your first question in the chat.",
+      history_note: "Showing the last 12 answers. You can clear history with /reset.",
+      tools_title: "🧰 Tools",
+      todos_title: "✅ To-dos", todo_ph: "New task…", todo_add: "Add", todo_clear: "Clear",
+      todo_empty: "The list is empty", todo_limit: "List limit reached",
+      cards_title: "🃏 Flashcards", card_q_ph: "Question", card_a_ph: "Answer", card_add: "Add card",
+      card_empty: "No flashcards yet", card_limit: "Card limit reached",
+      card_need_both: "Both question and answer are required", card_show: "Show answer",
+      reminders_title: "⏰ Reminders", rem_ph: "Reminder text…", rem_dur_ph: "10m",
+      rem_add: "Reminder", rem_empty: "No reminders", rem_bad: "Couldn't read the time — e.g. 10m, 1h30m",
+      rem_limit: "No more than 10 reminders", rem_hint: "Time: 30s, 10m, 2h, 1d. Delivered to this chat.",
+      buy_title: "⭐ Buy requests", buy_disabled: "Top-ups are disabled right now.",
+      buy_balance: "Your balance: {n} requests", buy_packages: "Ready packages",
+      buy_custom: "Custom amount", buy_stars_ph: "Stars", buy_button: "Buy",
+      buy_models: "AI models", buy_owned: "Owned", buy_rate: "Rate: 1 ⭐ = {rate} requests",
+      paid: "Payment received, thank you!", pay_failed: "Payment failed", already_owned: "Already owned",
+      added: "Added", limit_reached: "Limit reached",
       styles: {
         auto: ["🌐 Universal", "a strong expert in every topic"],
         expert: ["🚀 Maximum", "maximum depth and options"],
@@ -177,11 +216,17 @@
   var state = {
     lang: "ru",
     tab: "home",
+    screen: null,
     me: null,
     top: null,
+    history: null,
+    tools: null,
+    buy: null,
+    revealed: {},
+    paywall: null,
     busy: false,
-    sub: null,
-    fatal: null
+    fatal: null,
+    _langReady: false
   };
 
   var view = document.getElementById("view");
@@ -224,7 +269,21 @@
     toastEl.textContent = text;
     toastEl.classList.add("show");
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 1800);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 1900);
+  }
+
+  function val(id) {
+    var node = document.getElementById(id);
+    return node ? node.value : "";
+  }
+
+  function when(iso) {
+    if (!iso) return "";
+    var date = new Date(iso);
+    if (isNaN(date.getTime())) return "";
+    try {
+      return date.toLocaleString([], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    } catch (e) { return iso; }
   }
 
   function api(method, payload) {
@@ -265,11 +324,27 @@
       '</div><div class="stat-label">' + esc(label) + "</div></div>";
   }
 
+  function subHeader(title) {
+    return '<div class="head"><button class="back" data-action="back">← ' + esc(t("back")) +
+      "</button></div><h1>" + esc(title) + "</h1>";
+  }
+
   function renderHome() {
     var me = state.me;
     var name = (me.user.first_name || me.user.username || "").trim();
 
-    var bonus = "";
+    var tiles = '<div class="tiles">' +
+      '<button class="tile" data-action="open" data-value="history">' +
+      '<span class="tile-icon">💬</span><span>' + esc(t("tile_history")) + "</span></button>" +
+      '<button class="tile" data-action="open" data-value="tools">' +
+      '<span class="tile-icon">🧰</span><span>' + esc(t("tile_tools")) + "</span></button>" +
+      (me.payments_enabled
+        ? '<button class="tile" data-action="open" data-value="buy">' +
+          '<span class="tile-icon">⭐</span><span>' + esc(t("tile_buy")) + "</span></button>"
+        : "") +
+      "</div>";
+
+    var bonus;
     if (me.bonus_claimed_today) {
       bonus = '<div class="row"><div><div class="row-title">' + esc(t("bonus_already")) +
         '</div><div class="row-sub">' + esc(t("bonus_streak", { n: me.bonus_streak })) +
@@ -281,20 +356,22 @@
         esc(t("bonus_hint", { max: me.bonus_max })) + "</div>";
     }
 
+    var styleMeta = dict().styles[me.style] || [];
     view.innerHTML =
+      tiles +
       '<div class="card hero">' +
-      '<div class="muted" style="color:inherit;opacity:.9">' + esc(t("hello", { name: name })) + "</div>" +
+      '<div style="opacity:.9">' + esc(t("hello", { name: name })) + "</div>" +
       '<div class="value">' + (me.unlimited ? "∞" : esc(me.remaining)) + "</div>" +
       '<div class="sub">' + (me.unlimited ? esc(t("unlimited")) : esc(t("left"))) + "</div>" +
       "</div>" +
-      '<h2>' + esc(t("bonus_title")) + "</h2>" +
+      "<h2>" + esc(t("bonus_title")) + "</h2>" +
       '<div class="card">' + bonus + "</div>" +
-      '<h2>' + esc(t("model")) + " · " + esc(t("style")) + "</h2>" +
+      "<h2>" + esc(t("model")) + " · " + esc(t("style")) + "</h2>" +
       '<div class="card"><div class="row"><div><div class="row-title">' +
       esc(me.model.title) + '</div><div class="row-sub">' + esc(t("model")) +
       '</div></div></div><div class="row"><div><div class="row-title">' +
-      esc(STYLE_ICON[me.style] || "🌐") + " " + esc(dict().styles[me.style] ? dict().styles[me.style][0] : me.style) +
-      '</div></div></div></div>';
+      esc(styleMeta[0] || me.style) + '</div><div class="row-sub">' + esc(styleMeta[1] || "") +
+      "</div></div></div></div>";
   }
 
   function renderStats() {
@@ -368,8 +445,133 @@
       "</div></div></div></div>";
   }
 
+  function renderHistory() {
+    if (state.history === null) {
+      view.innerHTML = subHeader(t("history_title")) + '<div class="skeleton"></div>';
+      return;
+    }
+    var items = state.history;
+    var body = items.length
+      ? items.map(function (item, i) {
+          var open = !!state.revealed["h" + i];
+          return '<div class="item flip" data-action="flip-hist" data-value="' + i + '">' +
+            '<div class="body"><div><b>' + esc(item.question || "—") + "</b></div>" +
+            '<div class="when">' + esc(when(item.created_at)) + "</div>" +
+            (open ? '<div class="reveal">' + esc(item.answer || "") + "</div>" : "") +
+            "</div><div class='del'>" + (open ? "▾" : "▸") + "</div></div>";
+        }).join("")
+      : '<div class="empty">' + esc(t("history_empty")) + "</div>";
+
+    view.innerHTML =
+      subHeader(t("history_title")) +
+      '<div class="card">' + body + "</div>" +
+      '<div class="muted center">' + esc(t("history_note")) + "</div>";
+  }
+
+  function renderTools() {
+    if (state.tools === null) {
+      view.innerHTML = subHeader(t("tools_title")) + '<div class="skeleton"></div>';
+      return;
+    }
+    var data = state.tools;
+    var limits = data.limits || {};
+
+    var todos = data.todos.length
+      ? data.todos.map(function (text, i) {
+          return '<div class="item"><div class="body">' + esc(text) +
+            '</div><button class="del" data-action="todo-del" data-value="' + (i + 1) + '">✕</button></div>';
+        }).join("")
+      : '<div class="empty">' + esc(t("todo_empty")) + "</div>";
+
+    var cards = data.cards.length
+      ? data.cards.map(function (card, i) {
+          var open = !!state.revealed["c" + i];
+          return '<div class="item"><div class="body flip" data-action="flip-card" data-value="' + i + '">' +
+            "<b>" + esc(card.q) + "</b>" +
+            (open ? '<div class="reveal">' + esc(card.a) + "</div>" : "") +
+            '</div><button class="del" data-action="card-del" data-value="' + (i + 1) + '">✕</button></div>';
+        }).join("")
+      : '<div class="empty">' + esc(t("card_empty")) + "</div>";
+
+    var rems = data.reminders.length
+      ? data.reminders.map(function (item) {
+          var icon = item.kind === "timer" ? "⏳" : "🔔";
+          return '<div class="item"><div class="body">' + icon + " " + esc(item.text) +
+            '<div class="when">' + esc(when(item.due)) + "</div></div>" +
+            '<button class="del" data-action="rem-del" data-value="' + esc(item.id) + '">✕</button></div>';
+        }).join("")
+      : '<div class="empty">' + esc(t("rem_empty")) + "</div>";
+
+    view.innerHTML =
+      subHeader(t("tools_title")) +
+      "<h2>" + esc(t("todos_title")) + " · " + data.todos.length + "/" + esc(limits.todos || "?") + "</h2>" +
+      '<div class="card">' + todos +
+      '<div class="field"><input class="input" id="todo-input" placeholder="' + esc(t("todo_ph")) + '">' +
+      '<button class="btn small" data-action="todo-add">+</button></div>' +
+      (data.todos.length ? '<button class="btn secondary" data-action="todo-clear">' + esc(t("todo_clear")) + "</button>" : "") +
+      "</div>" +
+      "<h2>" + esc(t("cards_title")) + " · " + data.cards.length + "/" + esc(limits.cards || "?") + "</h2>" +
+      '<div class="card">' + cards +
+      '<div class="field"><input class="input" id="card-q" placeholder="' + esc(t("card_q_ph")) + '"></div>' +
+      '<div class="field"><input class="input" id="card-a" placeholder="' + esc(t("card_a_ph")) + '">' +
+      '<button class="btn small" data-action="card-add">+</button></div>' +
+      "</div>" +
+      "<h2>" + esc(t("reminders_title")) + " · " + data.reminders.length + "/" + esc(limits.reminders || "?") + "</h2>" +
+      '<div class="card">' + rems +
+      '<div class="field"><input class="input" id="rem-text" placeholder="' + esc(t("rem_ph")) + '"></div>' +
+      '<div class="field"><input class="input" id="rem-dur" placeholder="' + esc(t("rem_dur_ph")) + '">' +
+      '<button class="btn small" data-action="rem-add">+</button></div>' +
+      '<div class="muted" style="margin-top:8px">' + esc(t("rem_hint")) + "</div>" +
+      "</div>";
+  }
+
+  function renderBuy() {
+    if (state.buy === null) {
+      view.innerHTML = subHeader(t("buy_title")) + '<div class="skeleton"></div>';
+      return;
+    }
+    var data = state.buy;
+    if (!data.enabled) {
+      view.innerHTML = subHeader(t("buy_title")) +
+        '<div class="card center"><div style="font-size:36px">⭐</div>' +
+        '<div class="muted">' + esc(t("buy_disabled")) + "</div></div>";
+      return;
+    }
+
+    var packages = data.packages.length
+      ? data.packages.map(function (p) {
+          return '<button class="btn secondary" data-action="invoice" data-requests="' + p.requests +
+            '" data-stars="' + p.stars + '">' + esc(p.requests) + " — " + esc(p.stars) + " ⭐</button>";
+        }).join("")
+      : "";
+
+    var models = data.models.map(function (m) {
+      var owned = m.owned;
+      return '<div class="row"><div><div class="row-title">' + esc(m.title) +
+        '</div><div class="row-sub">' + esc(m.hint || "") + "</div></div>" +
+        (owned
+          ? '<span class="muted">' + esc(t("buy_owned")) + "</span>"
+          : '<button class="btn small" data-action="invoice" data-model="' + esc(m.id) + '">' +
+            esc(m.stars) + " ⭐</button>") +
+        "</div>";
+    }).join("");
+
+    view.innerHTML =
+      subHeader(t("buy_title")) +
+      '<div class="card"><div class="row"><div class="row-title">' +
+      esc(t("buy_balance", { n: data.bonus })) + '</div></div><div class="muted">' +
+      esc(t("buy_rate", { rate: data.rate })) + "</div></div>" +
+      "<h2>" + esc(t("buy_packages")) + "</h2>" +
+      '<div class="card">' + (packages || '<div class="empty">—</div>') + "</div>" +
+      "<h2>" + esc(t("buy_custom")) + "</h2>" +
+      '<div class="card"><div class="field"><input class="input" id="buy-stars" type="number" min="' +
+      esc(data.min_stars) + '" max="' + esc(data.max_stars) + '" placeholder="' + esc(t("buy_stars_ph")) +
+      '"><button class="btn small" data-action="buy-custom">' + esc(t("buy_button")) + "</button></div></div>" +
+      (models ? "<h2>" + esc(t("buy_models")) + '</h2><div class="card">' + models + "</div>" : "");
+  }
+
   function renderSubscription() {
-    var url = (state.sub && state.sub.url) || "";
+    var url = (state.paywall && state.paywall.url) || "";
     view.innerHTML =
       '<div class="card center" style="margin-top:24px">' +
       '<div style="font-size:40px">🔒</div>' +
@@ -394,13 +596,16 @@
   function render() {
     if (brandEl) brandEl.textContent = state.me ? state.me.bot_name : "gazyavaGPT";
     if (state.fatal) { renderError(); renderTabs(); return; }
-    if (state.sub) { renderSubscription(); renderTabs(); return; }
+    if (state.paywall) { renderSubscription(); renderTabs(); return; }
     if (!state.me) {
       view.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
       renderTabs();
       return;
     }
-    if (state.tab === "stats") renderStats();
+    if (state.screen === "history") renderHistory();
+    else if (state.screen === "tools") renderTools();
+    else if (state.screen === "buy") renderBuy();
+    else if (state.tab === "stats") renderStats();
     else if (state.tab === "friends") renderFriends();
     else if (state.tab === "settings") renderSettings();
     else renderHome();
@@ -413,24 +618,40 @@
     return api("me").then(function (data) {
       state.me = data;
       if (!state._langReady) { state.lang = data.lang || state.lang; state._langReady = true; }
-      state.sub = null;
+      state.paywall = null;
       if (state.tab === "friends" && state.top == null) return loadTop();
       return null;
     }).catch(function (err) {
       if (err.status === 403 && err.data && err.data.error === "subscription") {
-        state.sub = err.data;
+        state.paywall = err.data;
         state.me = null;
-      } else if (err.status === 401) {
-        state.fatal = t("error_text");
       } else {
         state.fatal = t("error_text");
       }
-    }).then(render);
+    });
   }
 
   function loadTop() {
     return api("top").then(function (data) { state.top = data.top || []; })
       .catch(function () { state.top = []; });
+  }
+
+  function openScreen(name) {
+    state.screen = name;
+    render();
+    if (name === "history" && state.history === null) {
+      api("history").then(function (data) { state.history = data.items || []; }).catch(function () {
+        state.history = [];
+      }).then(render);
+    } else if (name === "tools" && state.tools === null) {
+      api("tools", { action: "load" }).then(function (data) { state.tools = data; }).catch(function () {
+        toast(t("error_text"));
+      }).then(render);
+    } else if (name === "buy" && state.buy === null) {
+      api("buy").then(function (data) { state.buy = data; }).catch(function () {
+        toast(t("error_text"));
+      }).then(render);
+    }
   }
 
   function claimBonus() {
@@ -445,8 +666,8 @@
         state.me.bonus_claimed_today = true;
       }
       toast(data.claimed ? t("bonus_claimed", { amount: data.amount }) : t("bonus_already"));
-    }).catch(function (err) {
-      toast(err.data && err.data.error === "subscription" ? t("sub_text") : t("error_text"));
+    }).catch(function () {
+      toast(t("error_text"));
     }).then(function () { state.busy = false; render(); });
   }
 
@@ -457,6 +678,19 @@
         if (data.style) state.me.style = data.style;
       }
       toast(t("saved"));
+      render();
+    }).catch(function () { toast(t("error_text")); });
+  }
+
+  function toolsAction(payload, okMessage) {
+    return api("tools", payload).then(function (data) {
+      state.tools = data;
+      if (data.ok) { if (okMessage) toast(okMessage); }
+      else if (data.error === "rem_bad_duration") toast(t("rem_bad"));
+      else if (data.error === "rem_limit") toast(t("rem_limit"));
+      else if (data.error === "todo_limit") toast(t("todo_limit"));
+      else if (data.error === "card_limit") toast(t("card_limit"));
+      else if (data.error === "card_need_both") toast(t("card_need_both"));
       render();
     }).catch(function () { toast(t("error_text")); });
   }
@@ -486,13 +720,56 @@
   }
 
   function openSubscription() {
-    var url = state.sub && state.sub.url;
-    if (!url) { load(); return; }
+    var url = state.paywall && state.paywall.url;
+    if (!url) { load().then(render); return; }
     if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
     else window.open(url, "_blank");
   }
 
+  function pay(payload) {
+    api("invoice", payload).then(function (data) {
+      if (!data.url) throw new Error("no_url");
+      if (tg && tg.openInvoice) {
+        tg.openInvoice(data.url, function (status) {
+          if (status === "paid") {
+            toast(t("paid"));
+            load().then(function () { if (state.screen === "buy") refreshBuy(); });
+          } else if (status === "failed") {
+            toast(t("pay_failed"));
+          }
+        });
+      } else {
+        toast(t("error_text"));
+      }
+    }).catch(function (err) {
+      var code = err.data && err.data.error;
+      toast(code === "owned" ? t("already_owned") : t("pay_failed"));
+    });
+  }
+
+  function refreshBuy() {
+    state.buy = null;
+    return api("buy").then(function (data) { state.buy = data; }).catch(function () {})
+      .then(render);
+  }
+
   // ---------------------------------------------------------------- события
+  function onEnter(event) {
+    if (event.key !== "Enter") return;
+    var id = event.target && event.target.id;
+    if (id === "todo-input") { event.preventDefault(); toolsAction({ action: "todo.add", text: val("todo-input") }, t("added")); }
+    else if (id === "card-a") { event.preventDefault(); toolsAction({ action: "card.add", question: val("card-q"), answer: val("card-a") }, t("added")); }
+    else if (id === "rem-dur") { event.preventDefault(); toolsAction({ action: "rem.add", text: val("rem-text"), duration: val("rem-dur") }, t("added")); }
+    else if (id === "buy-stars") { event.preventDefault(); buyCustom(); }
+  }
+
+  function buyCustom() {
+    var stars = parseInt(val("buy-stars"), 10);
+    var buy = state.buy || {};
+    if (!stars || !buy.rate) { toast(t("pay_failed")); return; }
+    pay({ stars: stars, requests: stars * buy.rate });
+  }
+
   document.addEventListener("click", function (event) {
     var node = event.target.closest("[data-action]");
     if (!node) return;
@@ -500,9 +777,15 @@
     var value = node.getAttribute("data-value");
 
     if (action === "tab") {
+      state.screen = null;
       state.tab = value;
       if (value === "friends" && state.top == null) loadTop().then(render);
       else render();
+    } else if (action === "open") {
+      openScreen(value);
+    } else if (action === "back") {
+      state.screen = null;
+      render();
     } else if (action === "claim") {
       claimBonus();
     } else if (action === "copy") {
@@ -516,13 +799,46 @@
     } else if (action === "open-sub") {
       openSubscription();
     } else if (action === "retry") {
-      load();
+      load().then(render);
+    } else if (action === "flip-hist") {
+      var hi = "h" + value;
+      state.revealed[hi] = !state.revealed[hi];
+      renderHistory();
+    } else if (action === "flip-card") {
+      var ci = "c" + value;
+      state.revealed[ci] = !state.revealed[ci];
+      renderTools();
+    } else if (action === "todo-add") {
+      toolsAction({ action: "todo.add", text: val("todo-input") }, t("added"));
+    } else if (action === "todo-del") {
+      toolsAction({ action: "todo.del", index: parseInt(value, 10) });
+    } else if (action === "todo-clear") {
+      toolsAction({ action: "todo.clear" });
+    } else if (action === "card-add") {
+      toolsAction({ action: "card.add", question: val("card-q"), answer: val("card-a") }, t("added"));
+    } else if (action === "card-del") {
+      toolsAction({ action: "card.del", index: parseInt(value, 10) });
+    } else if (action === "rem-add") {
+      toolsAction({ action: "rem.add", text: val("rem-text"), duration: val("rem-dur") }, t("added"));
+    } else if (action === "rem-del") {
+      toolsAction({ action: "rem.del", id: parseInt(value, 10) });
+    } else if (action === "invoice") {
+      if (node.getAttribute("data-model")) pay({ model: node.getAttribute("data-model") });
+      else pay({
+        requests: parseInt(node.getAttribute("data-requests"), 10),
+        stars: parseInt(node.getAttribute("data-stars"), 10)
+      });
+    } else if (action === "buy-custom") {
+      buyCustom();
     }
   });
+
+  document.addEventListener("keydown", onEnter);
 
   var langBtn = document.getElementById("lang-btn");
   if (langBtn) {
     langBtn.addEventListener("click", function () {
+      state.screen = null;
       state.tab = "settings";
       render();
     });
@@ -530,14 +846,11 @@
 
   // ---------------------------------------------------------------- старт
   state.lang = detectLang();
-  if (tg && tg.onEvent) {
-    try { tg.onEvent("themeChanged", function () {}); } catch (e) {}
-  }
   render();
   if (!tg || !tg.initData) {
     state.fatal = t("error_text");
     render();
   } else {
-    load();
+    load().then(render);
   }
 })();

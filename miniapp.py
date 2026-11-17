@@ -23,11 +23,16 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
+from aiogram.types import LabeledPrice
 from aiogram.utils.web_app import check_webapp_signature
 from aiohttp import web
 
 import models as model_catalog
+import payments
+import reminders
 import styles as style_catalog
+import toolbox
 from config import Settings
 from i18n import LANGS, normalize_lang
 from runtime import load_runtime
@@ -106,6 +111,13 @@ async def _read_body(request: web.Request) -> dict[str, Any]:
     except Exception:  # noqa: BLE001 — пустое/битое тело равносильно отсутствию подписи
         return {}
     return body if isinstance(body, dict) else {}
+
+
+def _as_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 async def _auth(
@@ -198,6 +210,7 @@ async def api_me(request: web.Request) -> web.Response:
             "invite_link": invite_link,
             "bot_name": settings.bot_name,
             "image_credits": int(card.get("image_credits", 0) or 0),
+            "payments_enabled": settings.payments_enabled,
             "langs": list(LANGS),
             "styles": list(STYLES),
             "daily_limit": runtime.daily_limit,
@@ -280,6 +293,245 @@ async def api_top(request: web.Request) -> web.Response:
     )
 
 
+async def api_history(request: web.Request) -> web.Response:
+    """Последние ответы пользователя: вопрос, ответ, дата."""
+    store: Store = request.app["miniapp_store"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+
+    rows = await store.recent_exchanges(user_id, 12)
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        created = row.get("created_at")
+        if hasattr(created, "isoformat"):
+            created = created.isoformat()
+        items.append(
+            {
+                "id": int(row.get("id") or 0),
+                "question": str(row.get("question") or "")[:1000],
+                "answer": str(row.get("answer") or "")[:6000],
+                "kind": str(row.get("kind") or "answer"),
+                "created_at": str(created or ""),
+            }
+        )
+    return web.json_response({"items": items})
+
+
+async def _tools_state(store: Store, user_id: int) -> dict[str, Any]:
+    todos = await toolbox._todo_load(store, user_id)
+    cards = await toolbox._cards_load(store, user_id)
+    items = await reminders._load(store, user_id)
+    items.sort(key=lambda item: item["due"])
+    return {
+        "todos": [str(item) for item in todos],
+        "cards": [{"q": str(c["q"]), "a": str(c["a"])} for c in cards],
+        "reminders": [
+            {
+                "id": int(item["id"]),
+                "text": str(item["text"]),
+                "due": str(item["due"]),
+                "kind": str(item["kind"]),
+            }
+            for item in items
+        ],
+        "limits": {
+            "todos": toolbox.TODO_LIMIT,
+            "cards": toolbox.CARD_LIMIT,
+            "reminders": reminders.MAX_PER_USER,
+        },
+    }
+
+
+async def api_tools(request: web.Request) -> web.Response:
+    """Дела, карточки и напоминания: чтение и изменения одним эндпоинтом."""
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+
+    body = await _read_body(request)
+    action = str(body.get("action") or "load")
+    problem: str | None = None
+    index = _as_int(body.get("index"))
+
+    if action == "todo.add":
+        text = str(body.get("text") or "").strip()[: toolbox.TODO_ITEM_CHARS]
+        items = await toolbox._todo_load(store, user_id)
+        if not text:
+            problem = "empty"
+        elif len(items) >= toolbox.TODO_LIMIT:
+            problem = "todo_limit"
+        else:
+            items.append(text)
+            await toolbox._todo_save(store, user_id, items)
+    elif action == "todo.del":
+        items = await toolbox._todo_load(store, user_id)
+        if index is not None and 1 <= index <= len(items):
+            items.pop(index - 1)
+            await toolbox._todo_save(store, user_id, items)
+    elif action == "todo.clear":
+        await toolbox._todo_save(store, user_id, [])
+    elif action == "card.add":
+        question = str(body.get("question") or "").strip()[: toolbox.CARD_ITEM_CHARS]
+        answer = str(body.get("answer") or "").strip()[: toolbox.CARD_ITEM_CHARS]
+        cards = await toolbox._cards_load(store, user_id)
+        if not question or not answer:
+            problem = "card_need_both"
+        elif len(cards) >= toolbox.CARD_LIMIT:
+            problem = "card_limit"
+        else:
+            cards.append({"q": question, "a": answer})
+            await toolbox._cards_save(store, user_id, cards)
+    elif action == "card.del":
+        cards = await toolbox._cards_load(store, user_id)
+        if index is not None and 1 <= index <= len(cards):
+            cards.pop(index - 1)
+            await toolbox._cards_save(store, user_id, cards)
+    elif action == "rem.add":
+        text = str(body.get("text") or "").strip()[:500]
+        parsed = reminders.parse_duration(str(body.get("duration") or ""))
+        if parsed is None:
+            problem = "rem_bad_duration"
+        else:
+            seconds, leftover = parsed
+            created = await reminders.add_reminder(
+                store,
+                settings,
+                user_id=user_id,
+                chat_id=user_id,
+                text=text or leftover or "…",
+                seconds=seconds,
+            )
+            if created is None:
+                problem = "rem_limit"
+    elif action == "rem.del":
+        rid = _as_int(body.get("id"))
+        items = await reminders._load(store, user_id)
+        keep = [item for item in items if item["id"] != rid]
+        if len(keep) != len(items):
+            await reminders._save(store, user_id, keep)
+
+    state = await _tools_state(store, user_id)
+    state["ok"] = problem is None
+    state["error"] = problem
+    return web.json_response(state)
+
+
+async def api_buy(request: web.Request) -> web.Response:
+    """Тарифы, курс и доступные к покупке модели."""
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+
+    runtime = await load_runtime(store, settings)
+    owned = set(await store.list_model_access(user_id))
+    models = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "stars": item.stars,
+            "hint": item.hint,
+            "owned": item.id in owned,
+        }
+        for item in model_catalog.CATALOG
+        if item.stars > 0
+    ]
+    return web.json_response(
+        {
+            "enabled": settings.payments_enabled,
+            "rate": runtime.star_rate,
+            "min_stars": payments.MIN_STARS,
+            "max_stars": payments.MAX_STARS,
+            "packages": [
+                {"requests": int(requests), "stars": int(stars)}
+                for requests, stars in runtime.star_packages
+            ],
+            "bonus": await store.bonus_requests(user_id),
+            "models": models,
+        }
+    )
+
+
+async def api_invoice(request: web.Request) -> web.Response:
+    """Создаёт ссылку на счёт Stars для openInvoice в Mini App."""
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    bot: Bot = request.app["miniapp_bot"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+    if not settings.payments_enabled:
+        return web.json_response({"error": "payments_disabled"}, status=403)
+
+    body = await _read_body(request)
+    runtime = await load_runtime(store, settings)
+
+    model_id = body.get("model")
+    try:
+        if isinstance(model_id, str) and model_id:
+            item = model_catalog.info(model_id)
+            if item is None or item.stars <= 0:
+                return web.json_response({"error": "bad_offer"}, status=400)
+            if await store.has_model_access(user_id, model_id):
+                return web.json_response({"error": "owned"}, status=400)
+            url = await bot.create_invoice_link(
+                title=f"Модель {item.title} в {settings.bot_name}",
+                description=(
+                    f"Разовое открытие модели {item.title} за {item.stars} ⭐. "
+                    "После оплаты она сразу станет активной."
+                ),
+                payload=f"{payments.MODEL_PREFIX}:{item.id}:{item.stars}",
+                currency="XTR",
+                prices=[LabeledPrice(label=item.title, amount=item.stars)],
+                provider_token="",
+            )
+            return web.json_response({"url": url})
+
+        requests_count = _as_int(body.get("requests"))
+        stars = _as_int(body.get("stars"))
+        if (
+            requests_count is None
+            or stars is None
+            or not payments.is_valid_offer(runtime, requests_count, stars)
+        ):
+            return web.json_response({"error": "bad_offer"}, status=400)
+        url = await bot.create_invoice_link(
+            title=f"{requests_count} запросов к {settings.bot_name}",
+            description=(
+                f"{requests_count} дополнительных запросов за {stars} ⭐. "
+                "Не сгорают, тратятся после дневного лимита."
+            ),
+            payload=f"{payments.PAYLOAD_PREFIX}:{requests_count}:{stars}",
+            currency="XTR",
+            prices=[LabeledPrice(label=f"{requests_count} запросов", amount=stars)],
+            provider_token="",
+        )
+    except TelegramAPIError as exc:
+        log.warning("Mini App: не удалось создать счёт для %s: %s", user_id, exc)
+        return web.json_response({"error": "invoice_failed"}, status=502)
+    return web.json_response({"url": url})
+
+
 # --------------------------------------------------------------------------- подключение
 def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> None:
     """Вешает маршруты Mini App на уже существующее приложение."""
@@ -295,3 +547,7 @@ def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> N
     app.router.add_post("/app/api/bonus", api_bonus)
     app.router.add_post("/app/api/settings", api_settings)
     app.router.add_post("/app/api/top", api_top)
+    app.router.add_post("/app/api/history", api_history)
+    app.router.add_post("/app/api/tools", api_tools)
+    app.router.add_post("/app/api/buy", api_buy)
+    app.router.add_post("/app/api/invoice", api_invoice)

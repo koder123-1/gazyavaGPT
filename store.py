@@ -95,6 +95,7 @@ class Store(Protocol):
     async def get_exchange(self, exchange_id: int) -> dict | None: ...
     async def set_vote(self, exchange_id: int, vote: str) -> None: ...
     async def feedback_stats(self) -> dict[str, int]: ...
+    async def recent_exchanges(self, user_id: int, limit: int = 10) -> list[dict]: ...
 
     async def get_profile(self, user_id: int) -> dict | None: ...
     async def set_profile(
@@ -686,6 +687,7 @@ class MemoryStore:
             "answer": answer,
             "kind": kind,
             "vote": None,
+            "created_at": datetime.now(UTC),
         }
         return self._exchange_seq
 
@@ -701,6 +703,15 @@ class MemoryStore:
         up = sum(1 for v in votes if v == "up")
         down = sum(1 for v in votes if v == "down")
         return {"up": up, "down": down, "total": up + down}
+
+    async def recent_exchanges(self, user_id: int, limit: int = 10) -> list[dict]:
+        rows = [
+            item
+            for item in self._exchanges.values()
+            if item.get("user_id") == user_id
+        ]
+        rows.sort(key=lambda item: item.get("id", 0), reverse=True)
+        return [dict(item) for item in rows[: max(1, int(limit))]]
 
     async def get_profile(self, user_id: int) -> dict | None:
         return self._profiles.get(user_id)
@@ -1873,6 +1884,22 @@ class PostgresStore:
             """
         )
         return {k: int(row[k] or 0) for k in ("up", "down", "total")}
+
+    async def recent_exchanges(self, user_id: int, limit: int = 10) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            """
+            SELECT id, question, answer, kind, vote,
+                   created_at::text AS created_at
+            FROM exchanges
+            WHERE user_id = $1
+            ORDER BY id DESC
+            LIMIT $2
+            """,
+            user_id,
+            max(1, int(limit)),
+        )
+        return [dict(row) for row in rows]
 
     async def get_profile(self, user_id: int) -> dict | None:
         assert self._pool is not None
