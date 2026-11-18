@@ -177,7 +177,10 @@ h2::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--ac
 .model-chip.active{border-color:var(--accent);background:var(--accent-soft);color:var(--ink);box-shadow:0 0 0 1px var(--accent-glow)}
 
 /* игры */
-.game-card{cursor:pointer;transition:transform .15s var(--ease)}.game-card:active{transform:scale(.97)}
+.games-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.game-card{cursor:pointer;padding:12px 6px 10px;transition:transform .15s var(--ease)}.game-card:active{transform:scale(.96)}
+.game-label{font-size:11px;color:var(--hint);margin-top:5px;font-weight:500}
+.rps-btn{padding:4px 8px;font-size:14px;border-radius:8px}
 .dice-face,.coin,.num-slot{font-size:52px;transition:transform .2s var(--ease)}
 .num-slot{font-size:40px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);width:80px;height:80px;display:grid;place-items:center;border-radius:16px;background:var(--s2);margin:0 auto}
 

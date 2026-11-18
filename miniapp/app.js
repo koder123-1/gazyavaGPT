@@ -587,13 +587,13 @@
   function renderGames() {
     view.innerHTML =
       "<h1>🎲 " + esc(t("games")) + "</h1>" +
-      '<div class="grid">' +
-      '<div class="card game-card center" data-action="game-dice"><div id="dice-face" style="font-size:44px;transition:transform .2s">🎲</div><div class="muted" style="margin-top:6px">Кубик</div></div>' +
-      '<div class="card game-card center" data-action="game-coin"><div id="coin-flip" style="font-size:44px;transition:transform .2s">🪙</div><div class="muted" style="margin-top:6px">Монетка</div></div>' +
-      '<div class="card game-card center" data-action="game-num"><div id="num-slot" style="font-size:32px;font-weight:800;color:var(--ink);width:64px;height:64px;display:grid;place-items:center;border-radius:14px;background:var(--s2);margin:0 auto">?</div><div class="muted" style="margin-top:6px">Число</div></div>' +
-      '<div class="card game-card center" data-action="game-rps"><div id="rps-result" style="font-size:44px">✊</div><div class="muted" style="margin-top:6px">КНБ</div><div id="rps-btns" style="display:flex;gap:6px;justify-content:center;margin-top:6px"><button class="chip" data-action="rps-pick" data-value="0">✊</button><button class="chip" data-action="rps-pick" data-value="1">✋</button><button class="chip" data-action="rps-pick" data-value="2">✌️</button></div></div>' +
-      '<div class="card game-card center" data-action="game-slots"><div id="slots-reels" style="font-size:36px;letter-spacing:4px">🍒🍋🍊</div><div class="muted" style="margin-top:6px">Слоты</div></div>' +
-      '<div class="card game-card center" data-action="game-8ball"><div id="ball-answer" style="font-size:44px">🔮</div><div id="ball-text" class="muted" style="margin-top:6px">Шар судьбы</div></div>' +
+      '<div class="games-grid">' +
+      '<div class="card game-card center" data-action="game-dice"><div id="dice-face" style="font-size:36px;transition:transform .2s">🎲</div><div class="game-label">Кубик</div></div>' +
+      '<div class="card game-card center" data-action="game-coin"><div id="coin-flip" style="font-size:36px;transition:transform .2s">🪙</div><div class="game-label">Монетка</div></div>' +
+      '<div class="card game-card center" data-action="game-num"><div id="num-slot" style="font-size:26px;font-weight:800;color:var(--ink)">?</div><div class="game-label">Число</div></div>' +
+      '<div class="card game-card center" data-action="game-slots"><div id="slots-reels" style="font-size:28px;letter-spacing:2px">🍒🍋🍊</div><div class="game-label">Слоты</div></div>' +
+      '<div class="card game-card center" data-action="game-8ball"><div id="ball-answer" style="font-size:36px">🔮</div><div id="ball-text" class="game-label">Шар</div></div>' +
+      '<div class="card game-card center"><div id="rps-result" style="font-size:36px">✊</div><div class="game-label">КНБ</div><div style="display:flex;gap:4px;justify-content:center;margin-top:4px"><button class="chip rps-btn" data-action="rps-pick" data-value="0">✊</button><button class="chip rps-btn" data-action="rps-pick" data-value="1">✋</button><button class="chip rps-btn" data-action="rps-pick" data-value="2">✌️</button></div></div>' +
       "</div>";
   }
 
