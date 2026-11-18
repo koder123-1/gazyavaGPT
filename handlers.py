@@ -583,18 +583,19 @@ async def send_answer(
                     await message.answer(plain, parse_mode=None, reply_markup=markup)
 
 
-def cabinet_webapp_kb(settings: Settings, lang: str) -> InlineKeyboardMarkup | None:
-    """Кнопка «📊 Кабинет» под ответом ИИ — открывает Mini App."""
+def cabinet_webapp_kb(settings: Settings, lang: str, exchange_id: int = 0) -> InlineKeyboardMarkup | None:
+    """Кнопка «📱 Открыть в приложении» под ответом ИИ — открывает Mini App с этим ответом."""
     if not settings.use_webhook:
         return None
+    url = settings.base_url.rstrip("/") + "/app"
+    if exchange_id:
+        url += "?answer=" + str(exchange_id)
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text=t(lang, "app.after"),
-                    web_app=WebAppInfo(
-                        url=settings.base_url.rstrip("/") + "/app"
-                    ),
+                    web_app=WebAppInfo(url=url),
                 )
             ]
         ]
@@ -1125,7 +1126,7 @@ async def answer_with_ai(
         answer,
         keep=max(2, runtime.max_context * 2) if runtime.max_context else 2,
     )
-    await store.add_exchange_record(user.id, label, answer, kind)
+    exchange_id = await store.add_exchange_record(user.id, label, answer, kind)
     if out_fmt:
         await send_file(
             message,
@@ -1143,7 +1144,7 @@ async def answer_with_ai(
             answer,
             code=code_view,
             lang=lang,
-            keyboard=cabinet_webapp_kb(settings, lang),
+            keyboard=cabinet_webapp_kb(settings, lang, exchange_id),
         )
     return answer
 

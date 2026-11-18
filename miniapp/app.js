@@ -267,6 +267,8 @@
     paywall: null,
     busy: false,
     fatal: null,
+    answerData: null,
+    answerLoading: null,
     _langReady: false
   };
 
@@ -311,6 +313,16 @@
       if (progress < 1) requestAnimationFrame(step);
     }
     requestAnimationFrame(step);
+  }
+
+  function sanitizeHTML(text) {
+    // Разрешаем только безопасные теги форматирования — остальное экранируется.
+    var allowed = { b:1, i:1, u:1, s:1, code:1, pre:1, br:1, strong:1, em:1, a:1 };
+    return String(text || "").replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, function (m, tag) {
+      var lower = tag.toLowerCase();
+      if (allowed[lower]) return m;
+      return m.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }).replace(/&(?!(?:amp|lt|gt|quot|#39);)/g, "&amp;");
   }
 
   function esc(value) {
@@ -360,6 +372,37 @@
   }
 
   // ---------------------------------------------------------------- рендер
+  function renderAnswerScreen() {
+    if (!state.answerData) {
+      view.innerHTML = subHeader("📱 Ответ") + '<div class="skeleton"></div>';
+      return;
+    }
+    var a = state.answerData;
+    view.innerHTML =
+      subHeader("📱 Ответ") +
+      '<div class="card">' +
+      '<div class="row-sub" style="margin-bottom:6px">' + esc(t("model")) + " · " + esc(when(a.created_at)) + "</div>" +
+      "<b>" + esc(a.question || "") + "</b>" +
+      "</div>" +
+      '<div class="card answer-body">' + sanitizeHTML(a.answer || "") + "</div>";
+  }
+
+  function loadAnswer(id) {
+    state.answerLoading = id;
+    render();
+    api("answer", { id: id }).then(function (data) {
+      state.answerData = data;
+      state.answerLoading = null;
+      state.screen = "answer";
+      render();
+    }).catch(function () {
+      state.answerLoading = null;
+      toast(t("error_text"));
+      state.screen = null;
+      render();
+    });
+  }
+
   function tabButton(key, icon) {
     var active = state.tab === key ? " active" : "";
     return '<button class="tab' + active + '" data-action="tab" data-value="' + key +
@@ -667,7 +710,8 @@
       renderTabs();
       return;
     }
-    if (state.screen === "history") renderHistory();
+    if (state.screen === "answer") renderAnswerScreen();
+    else if (state.screen === "history") renderHistory();
     else if (state.screen === "tools") renderTools();
     else if (state.screen === "buy") renderBuy();
     else if (state.tab === "stats") renderStats();
@@ -921,6 +965,14 @@
     state.fatal = t("error_text");
     render();
   } else {
-    load().then(render);
+    load().then(function () {
+      // Если открыто с ?answer=<id> — сразу перейти к просмотру ответа
+      try {
+        var qs = window.location.search;
+        var m = qs.match(/[?&]answer=(\d+)/);
+        if (m) loadAnswer(parseInt(m[1], 10));
+        else render();
+      } catch (e) { render(); }
+    });
   }
 })();

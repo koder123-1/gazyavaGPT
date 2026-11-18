@@ -340,6 +340,34 @@ async def api_history(request: web.Request) -> web.Response:
     return web.json_response({"items": items})
 
 
+async def api_answer(request: web.Request) -> web.Response:
+    """Один ответ по exchange_id — для просмотра в Mini App."""
+    store: Store = request.app["miniapp_store"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    body = await _read_body(request)
+    exchange_id = _as_int(body.get("id"))
+    if exchange_id is None:
+        return web.json_response({"error": "missing_id"}, status=400)
+    row = await store.get_exchange(exchange_id)
+    if not row or int(row.get("user_id") or 0) != user_id:
+        return web.json_response({"error": "not_found"}, status=404)
+    created = row.get("created_at")
+    if hasattr(created, "isoformat"):
+        created = created.isoformat()
+    return web.json_response(
+        {
+            "id": int(row.get("id") or 0),
+            "question": str(row.get("question") or "")[:2000],
+            "answer": str(row.get("answer") or ""),
+            "kind": str(row.get("kind") or "answer"),
+            "created_at": str(created or ""),
+        }
+    )
+
+
 async def _tools_state(store: Store, user_id: int) -> dict[str, Any]:
     todos = await toolbox._todo_load(store, user_id)
     cards = await toolbox._cards_load(store, user_id)
@@ -573,3 +601,4 @@ def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> N
     app.router.add_post("/app/api/tools", api_tools)
     app.router.add_post("/app/api/buy", api_buy)
     app.router.add_post("/app/api/invoice", api_invoice)
+    app.router.add_post("/app/api/answer", api_answer)

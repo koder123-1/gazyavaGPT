@@ -536,6 +536,21 @@ h2::before {
   border-radius: 999px; padding: 3px 10px;
 }
 
+/* ---------------------------------------------------------------- просмотр ответа */
+.answer-body { line-height: 1.65; }
+.answer-body b, .answer-body strong { color: var(--accent-ink); }
+.answer-body i, .answer-body em { opacity: 0.9; }
+.answer-body code {
+  background: var(--surface-2); padding: 2px 6px; border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+}
+.answer-body pre {
+  background: var(--surface-2); padding: 12px; border-radius: 10px;
+  overflow-x: auto; font-size: 13px; line-height: 1.45;
+}
+.answer-body pre code { background: transparent; padding: 0; }
+
 /* ---------------------------------------------------------------- доступность */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
