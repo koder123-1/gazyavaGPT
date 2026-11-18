@@ -166,9 +166,9 @@ h2::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--ac
 .answer-body pre code{background:transparent;padding:0;border:0}
 .ans-label{font-weight:700;font-size:16px;color:var(--text);margin:18px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--stroke)}
 .ans-label:first-child{margin-top:0}
-.frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:1;margin:0 2px}
-.frac .fnum,.frac .fden{font-size:12px;line-height:1.1;font-weight:600;color:var(--text)}
-.frac .fbar{width:110%;height:0;border-top:1.5px solid var(--text);margin:1px 0}
+.frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 2px;position:relative}
+.frac .fnum,.frac .fden{font-size:11px;font-weight:700;line-height:1;color:var(--ink);padding:0 2px}
+.frac .fbar{width:18px;height:0;border-top:1.5px solid var(--hint);margin:0}
 .answer-body i,.answer-body em{color:var(--hint);font-style:italic}
 
 /* модель-чипы на главной */

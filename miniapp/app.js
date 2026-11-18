@@ -19,7 +19,8 @@
   }
 
   function applyTheme() {
-    var light = currentScheme() === "light";
+    var over = state._themeOverride;
+    var light = over === "light" || (over !== "dark" && currentScheme() === "light");
     var bg = light ? THEME_BG.light : THEME_BG.dark;
     document.documentElement.setAttribute("data-theme", light ? "light" : "dark");
     var meta = document.querySelector('meta[name="theme-color"]');
@@ -400,7 +401,8 @@
       '<div class="row-sub" style="margin-bottom:6px">' + esc(t("model")) + " · " + esc(when(a.created_at)) + "</div>" +
       "<b>" + esc(a.question || "") + "</b>" +
       "</div>" +
-      '<div class="card answer-body">' + formatAnswer(a.answer || "") + "</div>";
+      '<div class="card answer-body">' + formatAnswer(a.answer || "") + "</div>" +
+      '<button class="btn secondary" data-action="copy-answer" style="margin-top:8px">📋 ' + esc(t("copy")) + "</button>";
   }
 
   function loadAnswer(id) {
@@ -561,17 +563,28 @@
         (key === me.style ? "✓" : "→") + "</button></div>";
     }).join("");
 
-    view.innerHTML =
-      "<h1>" + esc(t("settings_title")) + "</h1>" +
-      "<h2>" + esc(t("language")) + "</h2>" +
-      '<div class="card"><div class="chips">' + langs + "</div></div>" +
-      "<h2>" + esc(t("style_title")) + "</h2>" +
-      '<div class="card">' + styles + "</div>" +
-      "<h2>" + esc(t("model")) + "</h2>" +
-      '<div class="card"><div class="row"><div><div class="row-title">' +
-      esc(me.model.title) + '</div><div class="row-sub">' + esc(t("model_hint")) +
-      "</div></div></div></div>";
-  }
+    ...
+
+      // модель ИИ — быстрая смена
+      var models = (me.models || []).map(function (m) {
+        return '<button class="chip' + (m.id === me.model.id ? " active" : "") +
+          '" data-action="set-model" data-value="' + esc(m.id) + '">' + esc(m.title) + "</button>";
+      }).join("");
+
+      // тема — переключатель
+      var themeLabel = (state._themeOverride === "light" ? "☀️" : state._themeOverride === "dark" ? "🌙" : "🔄");
+      var themeBtn = '<button class="btn secondary" data-action="toggle-theme" style="margin-top:8px">' +
+        themeLabel + " " + esc(t("theme_switch") || "Theme: auto") + "</button>";
+
+      view.innerHTML =
+        "<h1>" + esc(t("settings_title")) + "</h1>" +
+        "<h2>" + esc(t("language")) + "</h2>" +
+        '<div class="card"><div class="chips">' + langs + "</div></div>" +
+        "<h2>" + esc(t("style_title")) + "</h2>" +
+        '<div class="card">' + styles + "</div>" +
+        "<h2>" + esc(t("model")) + "</h2>" +
+        '<div class="card"><div class="chips">' + models + "</div>" + themeBtn + "</div>";
+    }
 
   function renderHistory() {
     if (state.history === null) {
@@ -970,6 +983,19 @@
       buyCustom();
     } else if (action === "set-model") {
       saveSettings({ model: value });
+    } else if (action === "toggle-theme") {
+      if (!state._themeOverride) state._themeOverride = "light";
+      else if (state._themeOverride === "light") state._themeOverride = "dark";
+      else state._themeOverride = null;
+      applyTheme();
+      render();
+    } else if (action === "copy-answer") {
+      var el = document.querySelector(".answer-body");
+      if (el && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.innerText).then(function () {
+          toast(t("copied")); haptic("success");
+        });
+      }
     }
   });
 
