@@ -594,7 +594,13 @@
       '<div class="card game-card center" data-action="game-slots"><div id="slots-reels" style="font-size:28px;letter-spacing:2px">🍒🍋🍊</div><div class="game-label">Слоты</div></div>' +
       '<div class="card game-card center" data-action="game-8ball"><div id="ball-answer" style="font-size:36px">🔮</div><div id="ball-text" class="game-label">Шар</div></div>' +
       '<div class="card game-card center"><div id="rps-result" style="font-size:36px">✊</div><div class="game-label">КНБ</div><div style="display:flex;gap:4px;justify-content:center;margin-top:4px"><button class="chip rps-btn" data-action="rps-pick" data-value="0">✊</button><button class="chip rps-btn" data-action="rps-pick" data-value="1">✋</button><button class="chip rps-btn" data-action="rps-pick" data-value="2">✌️</button></div></div>' +
+      '<div class="card game-card center" data-action="game-react"><div id="react-box" style="font-size:28px;font-weight:800;color:var(--hint)">⚡</div><div id="react-label" class="game-label">Реакция</div></div>' +
+      '<div class="card game-card center" data-action="game-wheel"><div id="wheel-icon" style="font-size:36px;transition:transform .3s">🎡</div><div id="wheel-text" class="game-label">Колесо</div></div>' +
+      '<div class="card game-card center"><div id="guess-hint" style="font-size:22px;font-weight:700;color:var(--ink)">🔢</div><div class="game-label">Угадай</div><div style="display:flex;gap:4px;margin-top:4px"><input id="guess-input" class="input" type="number" min="1" max="100" placeholder="1–100" style="padding:6px 8px;font-size:13px;width:60px"><button class="chip rps-btn" data-action="guess-submit">→</button></div></div>' +
       "</div>";
+    state._guessTarget = Math.floor(Math.random()*100)+1;
+    state._guessAttempts = 0;
+    state._reactState = "idle";
   }
 
   function rollDice() {
@@ -702,6 +708,85 @@
       }
     }
     shake();
+  }
+
+  function playReact() {
+    var box = document.getElementById("react-box");
+    var label = document.getElementById("react-label");
+    if (!box) return;
+    if (state._reactState === "waiting") {
+      state._reactState = "idle";
+      box.textContent = "⚡"; box.style.color = "var(--hint)";
+      label.textContent = "Рано! Ещё раз";
+      haptic("error");
+      return;
+    }
+    if (state._reactState === "ready") {
+      var ms = Date.now() - state._reactStart;
+      state._reactState = "idle";
+      box.textContent = ms + "мс"; box.style.color = ms < 250 ? "#00c9a7" : ms < 400 ? "var(--ink)" : "#ff8c42";
+      label.textContent = ms < 200 ? "Молния! ⚡" : ms < 300 ? "Быстро! 🔥" : ms < 450 ? "Нормально 👍" : "Медленно 🐢";
+      haptic(ms < 300 ? "success" : "light");
+      return;
+    }
+    state._reactState = "waiting";
+    box.textContent = "⏳"; box.style.color = "#ff8c42";
+    label.textContent = "Жди зелёный…";
+    var delay = 1000 + Math.floor(Math.random()*3000);
+    state._reactTimer = setTimeout(function () {
+      if (state._reactState !== "waiting") return;
+      state._reactState = "ready";
+      state._reactStart = Date.now();
+      box.textContent = "ЖМИ!"; box.style.color = "#00c9a7";
+      label.textContent = "Сейчас!";
+      haptic("warning");
+    }, delay);
+  }
+
+  function playWheel() {
+    var icon = document.getElementById("wheel-icon");
+    var txt = document.getElementById("wheel-text");
+    if (!icon) return;
+    var prizes = ["🎁 +5 запросов","⭐ Удача!","🍀 Клевер","💎 Бриллиант","🔥 Огонь!","🌈 Радуга","🎯 В точку!","🍕 Пицца","🚀 Ракета","👑 Корона"];
+    var i = 0, steps = 20;
+    function spin() {
+      icon.style.transform = "rotate(" + (i * 36) + "deg)";
+      i++; if (i < steps) setTimeout(spin, 50 + i*6);
+      else {
+        icon.style.transform = "rotate(0deg)";
+        icon.textContent = "🎡";
+        txt.textContent = prizes[Math.floor(Math.random()*prizes.length)];
+        txt.style.color = "var(--ink)"; txt.style.fontWeight = "700";
+        haptic("success");
+      }
+    }
+    spin();
+  }
+
+  function submitGuess() {
+    var input = document.getElementById("guess-input");
+    var hint = document.getElementById("guess-hint");
+    if (!input || !hint) return;
+    var val = parseInt(input.value, 10);
+    if (!val || val < 1 || val > 100) { toast("Введи число 1–100"); return; }
+    state._guessAttempts = (state._guessAttempts || 0) + 1;
+    if (val === state._guessTarget) {
+      hint.textContent = "🎉"; hint.style.color = "#00c9a7";
+      toast("Угадал за " + state._guessAttempts + " попыток! 🎉");
+      haptic("success");
+      state._guessTarget = Math.floor(Math.random()*100)+1;
+      state._guessAttempts = 0;
+      input.value = "";
+    } else if (val < state._guessTarget) {
+      hint.textContent = "⬆️"; hint.style.color = "var(--ink)";
+      toast("Больше! Попытка " + state._guessAttempts);
+      haptic("light");
+    } else {
+      hint.textContent = "⬇️"; hint.style.color = "var(--ink)";
+      toast("Меньше! Попытка " + state._guessAttempts);
+      haptic("light");
+    }
+    input.value = "";
   }
 
   function renderHistory() {
@@ -1114,6 +1199,12 @@
       playSlots();
     } else if (action === "game-8ball") {
       play8Ball();
+    } else if (action === "game-react") {
+      playReact();
+    } else if (action === "game-wheel") {
+      playWheel();
+    } else if (action === "guess-submit") {
+      submitGuess();
     } else if (action === "set-model") {
       saveSettings({ model: value });
     } else if (action === "toggle-theme") {
