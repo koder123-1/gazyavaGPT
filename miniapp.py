@@ -213,6 +213,11 @@ async def api_me(request: web.Request) -> web.Response:
             "lang": lang,
             "style": style,
             "model": {"id": model, "title": model_catalog.title(model)},
+            "models": [
+                {"id": item.id, "title": item.title}
+                for item in model_catalog.CATALOG
+                if not item.stars or await store.has_model_access(user_id, item.id)
+            ],
             "unlimited": unlimited,
             "remaining": None if unlimited else int(left),
             "used_today": int(card.get("used_today", 0) or 0),
@@ -287,6 +292,13 @@ async def api_settings(request: web.Request) -> web.Response:
         key = style_catalog.normalize_style(style)
         await store.set_style(user_id, key)
         changed["style"] = key
+
+    new_model = body.get("model")
+    if isinstance(new_model, str) and new_model:
+        info = model_catalog.info(new_model)
+        if info is not None and (not info.stars or await store.has_model_access(user_id, new_model)):
+            await store.set_model(user_id, new_model)
+            changed["model"] = {"id": info.id, "title": info.title}
 
     return web.json_response({"ok": True, **changed})
 

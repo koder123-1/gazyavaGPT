@@ -188,7 +188,7 @@ async def on_startup(
         with contextlib.suppress(TelegramAPIError):
             await bot.set_chat_menu_button(
                 menu_button=MenuButtonWebApp(
-                    text="🚀 Кабинет", web_app=WebAppInfo(url=app_url)
+                    text="🚀 Кабинет", web_app=WebAppInfo(url=app_url + "?v=7")
                 )
             )
 
