@@ -584,6 +584,57 @@
         '<div class="card"><div class="chips">' + models + "</div>" + themeBtn + "</div>";
     }
 
+  }
+
+  function renderGames() {
+    view.innerHTML =
+      "<h1>🎲 " + esc(t("games")) + "</h1>" +
+      '<div class="grid">' +
+      '<div class="card game-card center" data-action="game-dice"><div id="dice-face" style="font-size:52px;transition:transform .2s">🎲</div><div class="muted" style="margin-top:8px">Бросить кубик</div></div>' +
+      '<div class="card game-card center" data-action="game-coin"><div id="coin-flip" style="font-size:52px;transition:transform .2s">🪙</div><div class="muted" style="margin-top:8px">Монетка</div></div>' +
+      '<div class="card game-card center" data-action="game-num"><div id="num-slot" style="font-size:40px;font-weight:800;color:var(--ink);width:80px;height:80px;display:grid;place-items:center;border-radius:16px;background:var(--s2);margin:0 auto">?</div><div class="muted" style="margin-top:8px">Число 1–100</div></div>' +
+      "</div>";
+  }
+
+  function rollDice() {
+    var el = document.getElementById("dice-face"); if (!el) return;
+    var faces = ["⚀","⚁","⚂","⚃","⚄","⚅"];
+    var i = 0, steps = 12;
+    function step() {
+      el.textContent = faces[Math.floor(Math.random()*6)];
+      el.style.transform = "rotate(" + (Math.random()*360) + "deg) scale(1.3)";
+      i++; if (i < steps) setTimeout(step, 60 + i*8);
+      else { el.textContent = faces[Math.floor(Math.random()*6)]; el.style.transform = "rotate(0deg) scale(1)"; haptic("success"); }
+    }
+    step();
+  }
+
+  function flipCoin() {
+    var el = document.getElementById("coin-flip"); if (!el) return;
+    var result = Math.random() < 0.5 ? "🦅" : "🪙";
+    var i = 0, spins = 8;
+    function spin() {
+      el.textContent = i % 2 ? "🪙" : "🦅";
+      el.style.transform = "rotateY(" + (i * 45) + "deg)";
+      i++; if (i < spins) setTimeout(spin, 70 + i * 5);
+      else { el.textContent = result; el.style.transform = "rotateY(0deg)"; haptic("success"); }
+    }
+    spin();
+  }
+
+  function randNum() {
+    var el = document.getElementById("num-slot"); if (!el) return;
+    var target = Math.floor(Math.random() * 100) + 1;
+    var i = 0, steps = 15;
+    function tick() {
+      el.textContent = Math.floor(Math.random() * 100) + 1;
+      el.style.transform = "scale(1.2)";
+      i++; if (i < steps) setTimeout(tick, 50 + i * 6);
+      else { el.textContent = target; el.style.transform = "scale(1)"; haptic("success"); }
+    }
+    tick();
+  }
+
   function renderHistory() {
     if (state.history === null) {
       view.innerHTML = subHeader(t("history_title")) + '<div class="skeleton"></div>';
