@@ -584,8 +584,6 @@
         '<div class="card"><div class="chips">' + models + "</div>" + themeBtn + "</div>";
     }
 
-  }
-
   function renderGames() {
     view.innerHTML =
       "<h1>🎲 " + esc(t("games")) + "</h1>" +
