@@ -316,13 +316,29 @@
   }
 
   function sanitizeHTML(text) {
-    // Разрешаем только безопасные теги форматирования — остальное экранируется.
-    var allowed = { b:1, i:1, u:1, s:1, code:1, pre:1, br:1, strong:1, em:1, a:1 };
+    var allowed = { b:1, i:1, u:1, s:1, code:1, pre:1, br:1, strong:1, em:1, a:1, span:1, div:1, sup:1, sub:1 };
     return String(text || "").replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, function (m, tag) {
-      var lower = tag.toLowerCase();
-      if (allowed[lower]) return m;
-      return m.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return allowed[tag.toLowerCase()] ? m : m.replace(/</g, "&lt;");
     }).replace(/&(?!(?:amp|lt|gt|quot|#39);)/g, "&amp;");
+  }
+
+  function formatAnswer(html) {
+    var safe = String(html || "");
+    // конвертируем базовый markdown в HTML
+    safe = safe.replace(/```(\w*)\n([\s\S]*?)```/g, function (_, lang, code) {
+      return "<pre><code>" + code.replace(/</g, "&lt;") + "</code></pre>";
+    });
+    safe = safe.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+    safe = safe.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    safe = safe.replace(/\b__([^_]+)__\b/g, "<b>$1</b>");
+    safe = safe.replace(/\*(.+?)\*/g, "<i>$1</i>");
+    // эмодзи-заголовки секций (📌 Задание, 🧮 Решение, ✅ Ответ)
+    safe = safe.replace(/(^|\n)([📌🧮✅⚠️💡📝➕➖✖️➗🔹🔸▪️▫️🔷🔶🔺🔻1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣🔟]\s*[^\n<]+)/g,
+      '$1<div class="ans-label">$2</div>');
+    // дроби: 3/8 → надстрочный вид
+    safe = safe.replace(/(\d+)\s*\/\s*(\d+)/g,
+      '<span class="frac"><span class="fnum">$1</span><span class="fbar"></span><span class="fden">$2</span></span>');
+    return sanitizeHTML(safe);
   }
 
   function esc(value) {
@@ -384,7 +400,7 @@
       '<div class="row-sub" style="margin-bottom:6px">' + esc(t("model")) + " · " + esc(when(a.created_at)) + "</div>" +
       "<b>" + esc(a.question || "") + "</b>" +
       "</div>" +
-      '<div class="card answer-body">' + sanitizeHTML(a.answer || "") + "</div>";
+      '<div class="card answer-body">' + formatAnswer(a.answer || "") + "</div>";
   }
 
   function loadAnswer(id) {

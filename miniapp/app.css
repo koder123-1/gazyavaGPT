@@ -159,10 +159,17 @@ h2::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--ac
 .pkg .pkg-star{margin-top:7px;font-size:12px;font-weight:600;color:var(--ink);background:var(--accent-soft);border-radius:999px;padding:3px 10px}
 
 /* ответ */
-.answer-body{line-height:1.65}.answer-body b,.answer-body strong{color:var(--ink)}
-.answer-body code{background:var(--s2);padding:2px 6px;border-radius:6px;font-family:ui-monospace,monospace;font-size:13.5px}
-.answer-body pre{background:var(--s2);padding:12px;border-radius:10px;overflow-x:auto;font-size:13px;line-height:1.45}
-.answer-body pre code{background:transparent;padding:0}
+.answer-body{line-height:1.75;font-size:15px;color:var(--tdim)}
+.answer-body b,.answer-body strong{color:var(--ink);font-weight:700}
+.answer-body code{background:var(--s3);padding:2px 7px;border-radius:5px;font:13.5px ui-monospace,monospace;color:var(--text)}
+.answer-body pre{background:var(--s3);padding:14px;border-radius:10px;overflow-x:auto;font:13px/1.5 ui-monospace,monospace;border:1px solid var(--stroke);margin:10px 0}
+.answer-body pre code{background:transparent;padding:0;border:0}
+.ans-label{font-weight:700;font-size:16px;color:var(--text);margin:18px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--stroke)}
+.ans-label:first-child{margin-top:0}
+.frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:1;margin:0 2px}
+.frac .fnum,.frac .fden{font-size:12px;line-height:1.1;font-weight:600;color:var(--text)}
+.frac .fbar{width:110%;height:0;border-top:1.5px solid var(--text);margin:1px 0}
+.answer-body i,.answer-body em{color:var(--hint);font-style:italic}
 
 /* модель-чипы на главной */
 .model-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
