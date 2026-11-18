@@ -588,9 +588,12 @@
     view.innerHTML =
       "<h1>🎲 " + esc(t("games")) + "</h1>" +
       '<div class="grid">' +
-      '<div class="card game-card center" data-action="game-dice"><div id="dice-face" style="font-size:52px;transition:transform .2s">🎲</div><div class="muted" style="margin-top:8px">Бросить кубик</div></div>' +
-      '<div class="card game-card center" data-action="game-coin"><div id="coin-flip" style="font-size:52px;transition:transform .2s">🪙</div><div class="muted" style="margin-top:8px">Монетка</div></div>' +
-      '<div class="card game-card center" data-action="game-num"><div id="num-slot" style="font-size:40px;font-weight:800;color:var(--ink);width:80px;height:80px;display:grid;place-items:center;border-radius:16px;background:var(--s2);margin:0 auto">?</div><div class="muted" style="margin-top:8px">Число 1–100</div></div>' +
+      '<div class="card game-card center" data-action="game-dice"><div id="dice-face" style="font-size:44px;transition:transform .2s">🎲</div><div class="muted" style="margin-top:6px">Кубик</div></div>' +
+      '<div class="card game-card center" data-action="game-coin"><div id="coin-flip" style="font-size:44px;transition:transform .2s">🪙</div><div class="muted" style="margin-top:6px">Монетка</div></div>' +
+      '<div class="card game-card center" data-action="game-num"><div id="num-slot" style="font-size:32px;font-weight:800;color:var(--ink);width:64px;height:64px;display:grid;place-items:center;border-radius:14px;background:var(--s2);margin:0 auto">?</div><div class="muted" style="margin-top:6px">Число</div></div>' +
+      '<div class="card game-card center" data-action="game-rps"><div id="rps-result" style="font-size:44px">✊</div><div class="muted" style="margin-top:6px">КНБ</div><div id="rps-btns" style="display:flex;gap:6px;justify-content:center;margin-top:6px"><button class="chip" data-action="rps-pick" data-value="0">✊</button><button class="chip" data-action="rps-pick" data-value="1">✋</button><button class="chip" data-action="rps-pick" data-value="2">✌️</button></div></div>' +
+      '<div class="card game-card center" data-action="game-slots"><div id="slots-reels" style="font-size:36px;letter-spacing:4px">🍒🍋🍊</div><div class="muted" style="margin-top:6px">Слоты</div></div>' +
+      '<div class="card game-card center" data-action="game-8ball"><div id="ball-answer" style="font-size:44px">🔮</div><div id="ball-text" class="muted" style="margin-top:6px">Шар судьбы</div></div>' +
       "</div>";
   }
 
@@ -631,6 +634,74 @@
       else { el.textContent = target; el.style.transform = "scale(1)"; haptic("success"); }
     }
     tick();
+  }
+
+  function playRPS(choice) {
+    var el = document.getElementById("rps-result"); if (!el) return;
+    var hands = ["✊","✋","✌️"];
+    var cpu = Math.floor(Math.random()*3);
+    var i = 0, steps = 8;
+    function shake() {
+      el.textContent = hands[i % 3];
+      el.style.transform = "scale(1.2) rotate(" + (i*15-60) + "deg)";
+      i++; if (i < steps) setTimeout(shake, 80);
+      else {
+        el.textContent = hands[choice] + " vs " + hands[cpu];
+        el.style.transform = "scale(1)";
+        var win = (choice === 0 && cpu === 2) || (choice === 1 && cpu === 0) || (choice === 2 && cpu === 1);
+        var draw = choice === cpu;
+        haptic(draw ? "warning" : win ? "success" : "error");
+        toast(draw ? "Ничья!" : win ? "Ты победил! 🎉" : "Компьютер выиграл 🤖");
+      }
+    }
+    shake();
+  }
+
+  function playSlots() {
+    var el = document.getElementById("slots-reels"); if (!el) return;
+    var symbols = ["🍒","🍋","🍊","🍇","⭐","💎","7️⃣"];
+    var reels = [0,0,0], stopped = [false,false,false];
+    var i = 0;
+    function spin() {
+      for (var r = 0; r < 3; r++) {
+        if (!stopped[r]) reels[r] = Math.floor(Math.random()*symbols.length);
+      }
+      el.textContent = symbols[reels[0]] + symbols[reels[1]] + symbols[reels[2]];
+      el.style.transform = "scale(1.05)";
+      i++;
+      if (i === 10) stopped[0] = true;
+      if (i === 16) stopped[1] = true;
+      if (i === 22) { stopped[2] = true; el.style.transform = "scale(1)";
+        var jackpot = reels[0] === reels[1] && reels[1] === reels[2];
+        haptic(jackpot ? "success" : "light");
+        if (jackpot) toast("ДЖЕКПОТ! " + symbols[reels[0]] + symbols[reels[0]] + symbols[reels[0]] + " 🎉");
+        return;
+      }
+      setTimeout(spin, 60 + i*4);
+    }
+    spin();
+  }
+
+  function play8Ball() {
+    var el = document.getElementById("ball-answer");
+    var txt = document.getElementById("ball-text");
+    if (!el) return;
+    var answers = ["Да!","Нет.","Возможно…","Определённо да","Спроси позже","Не рассчитывай","Знаки говорят да","Мой ответ — нет","Без сомнений","Перспективы хороши","Сконцентрируйся и спроси снова","Даже не думай","Звёзды говорят да","Туманно, попробуй ещё"];
+    var i = 0, steps = 10;
+    function shake() {
+      el.textContent = "🔮";
+      el.style.transform = "translateX(" + (Math.random()*16-8) + "px) rotate(" + (Math.random()*20-10) + "deg)";
+      i++; if (i < steps) setTimeout(shake, 70);
+      else {
+        el.textContent = "🎱";
+        el.style.transform = "none";
+        txt.textContent = answers[Math.floor(Math.random()*answers.length)];
+        txt.style.color = "var(--ink)";
+        txt.style.fontWeight = "700";
+        haptic("success");
+      }
+    }
+    shake();
   }
 
   function renderHistory() {
@@ -1035,6 +1106,14 @@
       flipCoin();
     } else if (action === "game-num") {
       randNum();
+    } else if (action === "game-rps") {
+      // КНБ: кнопки внутри карточки handled by rps-pick
+    } else if (action === "rps-pick") {
+      playRPS(parseInt(value, 10));
+    } else if (action === "game-slots") {
+      playSlots();
+    } else if (action === "game-8ball") {
+      play8Ball();
     } else if (action === "set-model") {
       saveSettings({ model: value });
     } else if (action === "toggle-theme") {
