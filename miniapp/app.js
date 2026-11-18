@@ -56,7 +56,7 @@
 
   var I18N = {
     ru: {
-      home: "Кабинет", stats: "Статистика", tasks: "Задачи", friends: "Друзья", settings: "Настройки", back: "Назад",
+      home: "Кабинет", stats: "Статистика", tasks: "Задачи", games: "Игры", friends: "Друзья", settings: "Настройки", back: "Назад",
       hello: "Привет, {name}!",
       left: "Осталось запросов", unlimited: "Без ограничений", today_used: "Сегодня использовано: {n}",
       bonus_title: "🎁 Бонус дня", bonus_claim: "Забрать бонус",
@@ -105,7 +105,7 @@
       share_text: "Заходи в {bot} — ИИ-помощник по учёбе. Разбирает задачи по шагам."
     },
     uk: {
-      home: "Кабінет", stats: "Статистика", tasks: "Задачі", friends: "Друзі", settings: "Налаштування", back: "Назад",
+      home: "Кабінет", stats: "Статистика", tasks: "Задачі", games: "Ігри", friends: "Друзі", settings: "Налаштування", back: "Назад",
       hello: "Привіт, {name}!",
       left: "Залишилось запитів", unlimited: "Без обмежень", today_used: "Сьогодні використано: {n}",
       bonus_title: "🎁 Бонус дня", bonus_claim: "Забрати бонус",
@@ -154,7 +154,7 @@
       share_text: "Заходь у {bot} — ШІ-помічник з навчання. Розбирає задачі покроково."
     },
     be: {
-      home: "Кабінет", stats: "Статыстыка", tasks: "Задачы", friends: "Сябры", settings: "Налады", back: "Назад",
+      home: "Кабінет", stats: "Статыстыка", tasks: "Задачы", tasks: "Задачы", games: "Гульні", friends: "Сябры", settings: "Налады", back: "Назад",
       hello: "Прывітанне, {name}!",
       left: "Засталося запытаў", unlimited: "Без абмежаванняў", today_used: "Сёння выкарыстана: {n}",
       bonus_title: "🎁 Бонус дня", bonus_claim: "Забраць бонус",
@@ -203,7 +203,7 @@
       share_text: "Заходзь у {bot} — ШІ-памочнік па вучобе. Разбірае задачы па кроках."
     },
     en: {
-      home: "Home", stats: "Stats", tasks: "Tasks", friends: "Friends", settings: "Settings", back: "Back",
+      home: "Home", stats: "Stats", tasks: "Tasks", tasks: "Tasks", games: "Games", friends: "Friends", settings: "Settings", back: "Back",
       hello: "Hi, {name}!",
       left: "Requests left", unlimited: "Unlimited", today_used: "Used today: {n}",
       bonus_title: "🎁 Daily bonus", bonus_claim: "Claim bonus",
@@ -432,7 +432,7 @@
     tabsEl.innerHTML =
       tabButton("home", "🏠") + tabButton("stats", "📈") +
       tabButton("tasks", "🎯") +
-      tabButton("friends", "👥") + tabButton("settings", "⚙️");
+      tabButton("friends", "👥") + tabButton("games", "🎲") + tabButton("settings", "⚙️");
   }
 
   function statCard(value, label) {
@@ -750,6 +750,7 @@
     else if (state.screen === "buy") renderBuy();
     else if (state.tab === "stats") renderStats();
     else if (state.tab === "tasks") renderTools();
+    else if (state.tab === "games") renderGames();
     else if (state.tab === "friends") renderFriends();
     else if (state.tab === "settings") renderSettings();
     else renderHome();
@@ -979,6 +980,12 @@
       });
     } else if (action === "buy-custom") {
       buyCustom();
+    } else if (action === "game-dice") {
+      rollDice();
+    } else if (action === "game-coin") {
+      flipCoin();
+    } else if (action === "game-num") {
+      randNum();
     } else if (action === "set-model") {
       saveSettings({ model: value });
     } else if (action === "toggle-theme") {
