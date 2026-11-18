@@ -50,6 +50,34 @@
     } catch (e) {}
   }
 
+  function confetti(x, y) {
+    var colors = ["#6366f1","#8b5cf6","#06b6d4","#f59e0b","#ec4899","#10b981","#fbbf24"];
+    for (var i = 0; i < 24; i++) {
+      var p = document.createElement("div");
+      p.className = "confetti-piece";
+      p.style.left = (x + (Math.random()-0.5)*80) + "px";
+      p.style.top = (y + (Math.random()-0.5)*40) + "px";
+      p.style.background = colors[Math.floor(Math.random()*colors.length)];
+      p.style.animationDelay = (Math.random()*0.3) + "s";
+      p.style.width = (5+Math.random()*6) + "px";
+      p.style.height = (5+Math.random()*6) + "px";
+      document.body.appendChild(p);
+      setTimeout(function(el){return function(){el.remove()}}(p), 1600);
+    }
+  }
+
+  function ripple(e, el) {
+    var rect = el.getBoundingClientRect();
+    var r = document.createElement("span");
+    r.className = "ripple";
+    var size = Math.max(rect.width, rect.height);
+    r.style.width = r.style.height = size + "px";
+    r.style.left = (e.clientX - rect.left - size/2) + "px";
+    r.style.top = (e.clientY - rect.top - size/2) + "px";
+    el.appendChild(r);
+    setTimeout(function(){r.remove()}, 600);
+  }
+
   var STYLE_ORDER = ["auto", "expert", "study", "code"];
   var LANG_FLAG = { ru: "🇷🇺", uk: "🇺🇦", be: "🇧🇾", en: "🇬🇧" };
   var LANG_NAME = { ru: "Русский", uk: "Українська", be: "Беларуская", en: "English" };
@@ -657,6 +685,7 @@
         var win = (choice === 0 && cpu === 2) || (choice === 1 && cpu === 0) || (choice === 2 && cpu === 1);
         var draw = choice === cpu;
         haptic(draw ? "warning" : win ? "success" : "error");
+        if (win) confetti(window.innerWidth/2, window.innerHeight/2);
         toast(draw ? "Ничья!" : win ? "Ты победил! 🎉" : "Компьютер выиграл 🤖");
       }
     }
@@ -680,7 +709,7 @@
       if (i === 22) { stopped[2] = true; el.style.transform = "scale(1)";
         var jackpot = reels[0] === reels[1] && reels[1] === reels[2];
         haptic(jackpot ? "success" : "light");
-        if (jackpot) toast("ДЖЕКПОТ! " + symbols[reels[0]] + symbols[reels[0]] + symbols[reels[0]] + " 🎉");
+        if (jackpot) { toast("ДЖЕКПОТ! " + symbols[reels[0]] + symbols[reels[0]] + symbols[reels[0]] + " 🎉"); confetti(window.innerWidth/2, window.innerHeight/3); }
         return;
       }
       setTimeout(spin, 60 + i*4);
@@ -774,6 +803,7 @@
       hint.textContent = "🎉"; hint.style.color = "#00c9a7";
       toast("Угадал за " + state._guessAttempts + " попыток! 🎉");
       haptic("success");
+      confetti(window.innerWidth/2, window.innerHeight/2);
       state._guessTarget = Math.floor(Math.random()*100)+1;
       state._guessAttempts = 0;
       input.value = "";
@@ -1017,6 +1047,7 @@
       }
       toast(data.claimed ? t("bonus_claimed", { amount: data.amount }) : t("bonus_already"));
       haptic(data.claimed ? "success" : "warning");
+      if (data.claimed) confetti(window.innerWidth/2, window.innerHeight/3);
     }).catch(function () {
       toast(t("error_text"));
     }).then(function () { state.busy = false; render(); });
@@ -1129,6 +1160,7 @@
     var action = node.getAttribute("data-action");
     var value = node.getAttribute("data-value");
 
+    ripple(event, node);
     haptic(action === "tab" || action === "set-lang" || action === "set-style" ? "select" : "light");
 
     if (action === "tab") {
