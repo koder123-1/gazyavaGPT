@@ -31,8 +31,6 @@
     try { if (tg.setBottomBarColor) tg.setBottomBarColor(bg); } catch (e) {}
   }
 
-  applyTheme();
-
   if (tg) {
     try { tg.ready(); } catch (e) {}
     try { tg.expand(); } catch (e) {}
@@ -278,6 +276,8 @@
   var brandEl = document.getElementById("brand-name");
   var toastEl = document.getElementById("toast");
   var toastTimer = null;
+
+  applyTheme();
 
   function detectLang() {
     var code = "";
