@@ -563,8 +563,6 @@
         (key === me.style ? "✓" : "→") + "</button></div>";
     }).join("");
 
-    ...
-
       // модель ИИ — быстрая смена
       var models = (me.models || []).map(function (m) {
         return '<button class="chip' + (m.id === me.model.id ? " active" : "") +
