@@ -19,7 +19,7 @@
   }
 
   function applyTheme() {
-    var over = state._themeOverride;
+    var over = state && state._themeOverride;
     var light = over === "light" || (over !== "dark" && currentScheme() === "light");
     var bg = light ? THEME_BG.light : THEME_BG.dark;
     document.documentElement.setAttribute("data-theme", light ? "light" : "dark");
