@@ -515,7 +515,6 @@ async def api_buy(request: web.Request) -> web.Response:
     support = {
         "enabled": settings.support_ready,
         "wallet": settings.support_wallet,
-        "comment": settings.support_comment or f"support-{user_id}",
     }
     return web.json_response(
         {

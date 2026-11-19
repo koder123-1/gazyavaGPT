@@ -198,7 +198,6 @@ html[data-theme="light"] .tabs{box-shadow:0 20px 50px -24px rgba(15,23,42,.25),0
 .support-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--st)}
 .support-k{flex:0 0 84px;font-size:11px;font-weight:700;color:var(--hint);text-transform:uppercase;letter-spacing:.04em}
 .support-v{flex:1;min-width:0;font:11.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tx);word-break:break-all}
-.support-memo{color:#7dd3fc;font-weight:700;letter-spacing:.02em}
 .support-copy{flex:none;font-size:11px;padding:5px 9px}
 .support-note{margin-top:8px;font-size:11.5px;line-height:1.45;color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.28);border-radius:12px;padding:8px 10px}
 

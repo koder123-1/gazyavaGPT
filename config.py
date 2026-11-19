@@ -180,7 +180,6 @@ class Settings:
     star_rate: int = DEFAULT_STAR_RATE
     # Поддержка автора: адрес кошелька для GRAM. Пусто — карточка скрыта.
     support_wallet: str = DEFAULT_SUPPORT_WALLET
-    support_comment: str = ""
     required_channel: str = DEFAULT_REQUIRED_CHANNEL
     required_channel_url: str = DEFAULT_REQUIRED_CHANNEL_URL
     group_gate_enabled: bool = True
@@ -428,7 +427,6 @@ def load_settings() -> Settings:
         star_packages=_packages_env("STAR_PACKAGES", DEFAULT_STAR_PACKAGES),
         star_rate=_int_env("STAR_RATE", DEFAULT_STAR_RATE, minimum=1),
         support_wallet=os.getenv("SUPPORT_WALLET", DEFAULT_SUPPORT_WALLET).strip(),
-        support_comment=os.getenv("SUPPORT_COMMENT", "").strip(),
         required_channel=os.getenv("REQUIRED_CHANNEL", "").strip()
         or DEFAULT_REQUIRED_CHANNEL,
         required_channel_url=os.getenv("REQUIRED_CHANNEL_URL", "").strip()

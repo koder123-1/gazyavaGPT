@@ -124,9 +124,9 @@
       buy_models: "Модели ИИ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запросов",
       support_title: "💎 Поддержать автора", support_short: "Поддержать",
       support_hint: "Отправь любую сумму GRAM на кошелёк ниже — это благодарность автору. Запросы за донат не начисляются.",
-      support_address: "Кошелёк", support_comment: "Комментарий к переводу",
+      support_address: "Кошелёк",
       support_copy: "Копировать", support_copied: "Скопировано",
-      support_note: "В кошельке выбери токен GRAM, вставь адрес и комментарий — так автор увидит, от кого поддержка.",
+      support_note: "В кошельке выбери токен GRAM и отправь любую сумму на этот адрес.",
       paid: "Оплата получена, спасибо!", pay_failed: "Оплата не прошла", already_owned: "Уже куплено",
       added: "Добавлено", limit_reached: "Достигнут предел",
       tab_profile: "Профиль", profile_title: "Профиль",
@@ -198,9 +198,9 @@
       buy_models: "Моделі ШІ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запитів",
       support_title: "💎 Підтримати автора", support_short: "Підтримати",
       support_hint: "Надішли будь-яку суму GRAM на гаманець нижче — це подяка автору. Запити за донат не нараховуються.",
-      support_address: "Гаманець", support_comment: "Коментар до переказу",
+      support_address: "Гаманець",
       support_copy: "Копіювати", support_copied: "Скопійовано",
-      support_note: "У гаманці вибери токен GRAM, встав адресу й коментар — так автор побачить, від кого підтримка.",
+      support_note: "У гаманці вибери токен GRAM і надішли будь-яку суму на цю адресу.",
       paid: "Оплату отримано, дякую!", pay_failed: "Оплата не пройшла", already_owned: "Уже куплено",
       added: "Додано", limit_reached: "Досягнуто межі",
       tab_profile: "Профіль", profile_title: "Профіль",
@@ -272,9 +272,9 @@
       buy_models: "Мадэлі ШІ", buy_owned: "Куплена", buy_rate: "Курс: 1 ⭐ = {rate} запытаў",
       support_title: "💎 Падтрымаць аўтара", support_short: "Падтрымаць",
       support_hint: "Адпраў любую суму GRAM на кашалёк ніжэй — гэта падзяка аўтару. Запыты за донат не налічваюцца.",
-      support_address: "Кашалёк", support_comment: "Каментар да пераказу",
+      support_address: "Кашалёк",
       support_copy: "Капіяваць", support_copied: "Скапіявана",
-      support_note: "У кашальку выбірай токен GRAM, уставіўшы адрас і каментар — так аўтар убачыць, ад каго падтрымка.",
+      support_note: "У кашальку выберы токен GRAM і адпраў любую суму на гэты адрас.",
       paid: "Аплату атрымана, дзякуй!", pay_failed: "Аплата не прайшла", already_owned: "Ужо куплена",
       added: "Дададзена", limit_reached: "Дасягнута мяжа",
       tab_profile: "Профіль", profile_title: "Профіль",
@@ -346,9 +346,9 @@
       buy_models: "AI models", buy_owned: "Owned", buy_rate: "Rate: 1 ⭐ = {rate} requests",
       support_title: "💎 Support the author", support_short: "Support",
       support_hint: "Send any amount of GRAM to the wallet below — it is a thank-you to the author. Donations do not add requests.",
-      support_address: "Wallet", support_comment: "Transfer comment",
+      support_address: "Wallet",
       support_copy: "Copy", support_copied: "Copied",
-      support_note: "In your wallet pick the GRAM token, paste the address and the comment — that way the author sees who supported.",
+      support_note: "In your wallet pick the GRAM token and send any amount to this address.",
       paid: "Payment received, thank you!", pay_failed: "Payment failed", already_owned: "Already owned",
       added: "Added", limit_reached: "Limit reached",
       tab_profile: "Profile", profile_title: "Profile",
@@ -1509,10 +1509,6 @@
         '<code class="support-v" id="support-address">' + esc(support.wallet) + "</code>" +
         '<button class="chip support-copy" data-action="support-copy" data-copy="' +
         esc(support.wallet) + '">' + esc(t("support_copy")) + "</button></div>" +
-        '<div class="support-row"><span class="support-k">' + esc(t("support_comment")) + "</span>" +
-        '<code class="support-v support-memo" id="support-memo">' + esc(support.comment) + "</code>" +
-        '<button class="chip support-copy" data-action="support-copy" data-copy="' +
-        esc(support.comment) + '">' + esc(t("support_copy")) + "</button></div>" +
         '<div class="support-note">💛 ' + esc(t("support_note")) + "</div>" +
         "</div>";
     }
