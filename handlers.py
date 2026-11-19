@@ -230,6 +230,7 @@ MENU_KEYS = (
     "menu.check",
     "menu.imagine",
     "menu.buy",
+    "menu.donate",
     "menu.support",
     "menu.tickets",
     "menu.files",
@@ -328,7 +329,7 @@ def _button_row(lang: str, *keys: str) -> list[KeyboardButton]:
 
 
 def main_menu_kb(
-    lang: str, *, staff: bool = False, payments: bool = True
+    lang: str, *, staff: bool = False, payments: bool = True, support: bool = False
 ) -> ReplyKeyboardMarkup:
     """Постоянная клавиатура: почти всё меню под рукой, команды помнить не надо."""
     rows = [
@@ -339,6 +340,8 @@ def main_menu_kb(
         rows.append(_button_row(lang, "menu.buy", "menu.support"))
     else:
         rows.append(_button_row(lang, "menu.support"))
+    if support:
+        rows.append(_button_row(lang, "menu.donate"))
     rows.append(_button_row(lang, "menu.tickets", "menu.files"))
     rows.append(_button_row(lang, "menu.bonus", "menu.invite"))
     rows.append(_button_row(lang, "menu.lang", "menu.help"))
@@ -354,7 +357,7 @@ def main_menu_kb(
 
 
 def menu_inline(
-    lang: str, *, staff: bool = False, payments: bool = True
+    lang: str, *, staff: bool = False, payments: bool = True, support: bool = False
 ) -> InlineKeyboardMarkup:
     """Меню кнопками — компактная копия постоянной клавиатуры."""
     rows = [
@@ -377,6 +380,14 @@ def menu_inline(
     else:
         rows.append(
             [InlineKeyboardButton(text=t(lang, "menu.support"), callback_data="tick:menu")]
+        )
+    if support:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=t(lang, "menu.donate"), callback_data="menu:donate"
+                )
+            ]
         )
     rows.append(
         [
@@ -422,6 +433,29 @@ def menu_inline(
             [InlineKeyboardButton(text=t(lang, "menu.admin"), callback_data="menu:act:admin")]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def donate_view(settings: Settings, lang: str) -> tuple[str, InlineKeyboardMarkup | None]:
+    """Текст с адресом для доната GRAM и кнопка запуска Mini App."""
+    text = t(lang, "donate.text", wallet=escape(settings.support_wallet))
+    url = ""
+    if settings.use_webhook:
+        with contextlib.suppress(Exception):
+            from miniapp import webapp_url
+
+            url = webapp_url(settings)
+    keyboard = None
+    if url:
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=t(lang, "donate.open"), web_app=WebAppInfo(url=url)
+                    )
+                ]
+            ]
+        )
+    return text, keyboard
 
 
 def language_kb(current: str | None = None) -> InlineKeyboardMarkup:
@@ -1182,6 +1216,7 @@ async def send_welcome(
             lang,
             staff=has_admin_access(role),
             payments=settings.payments_enabled,
+            support=settings.support_ready,
         ),
     )
 
@@ -1544,6 +1579,7 @@ async def cmd_help(message: Message, store: Store, settings: Settings) -> None:
                 lang,
                 staff=has_admin_access(role),
                 payments=settings.payments_enabled,
+                support=settings.support_ready,
             )
             if message.chat.type == "private"
             else None
@@ -1642,6 +1678,14 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
     rows = []
     if settings.payments_enabled:
         rows.append([InlineKeyboardButton(text=t(lang, "btn.buy"), callback_data="pay:menu")])
+    if settings.support_ready:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=t(lang, "menu.donate"), callback_data="menu:donate"
+                )
+            ]
+        )
     if is_staff(role):
         rows.append([InlineKeyboardButton(text=t(lang, "btn.tickets"), callback_data="tick:list:0")])
     rows.append([InlineKeyboardButton(text=t(lang, "btn.support"), callback_data="tick:menu")])
@@ -2525,6 +2569,9 @@ async def on_menu_button(
 
         text, kb = await render_buy(store, settings, user.id)
         await message.answer(text, reply_markup=kb)
+    elif action == "menu.donate":
+        text, kb = donate_view(settings, lang)
+        await message.answer(text, reply_markup=kb, disable_web_page_preview=True)
     elif action == "menu.support":
         from tickets import support_menu
 
@@ -2578,6 +2625,7 @@ async def on_menu_button(
                 lang,
                 staff=has_admin_access(role),
                 payments=settings.payments_enabled,
+                support=settings.support_ready,
             ),
         )
 
@@ -2596,10 +2644,28 @@ async def cb_menu_home(call: CallbackQuery, store: Store, settings: Settings) ->
                     lang,
                     staff=has_admin_access(role),
                     payments=settings.payments_enabled,
+                    support=settings.support_ready,
                 ),
             )
         except TelegramAPIError:
             pass
+    await call.answer()
+
+
+@router.callback_query(F.data == "menu:donate")
+async def cb_menu_donate(
+    call: CallbackQuery, store: Store, settings: Settings
+) -> None:
+    """Кнопка «Поддержать автора» в inline-меню."""
+    if call.from_user is None:
+        return
+    lang = await user_lang(store, settings, call.from_user.id)
+    text, kb = donate_view(settings, lang)
+    if isinstance(call.message, Message):
+        with contextlib.suppress(TelegramAPIError):
+            await call.message.answer(
+                text, reply_markup=kb, disable_web_page_preview=True
+            )
     await call.answer()
 
 
@@ -2672,6 +2738,7 @@ async def cb_menu_action(
                 lang,
                 staff=has_admin_access(role),
                 payments=settings.payments_enabled,
+                support=settings.support_ready,
             ),
         )
     elif action == "reset":

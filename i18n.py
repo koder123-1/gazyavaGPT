@@ -345,6 +345,52 @@ TR: dict[str, dict[str, str]] = {
         "be": "🆘 Падтрымка",
         "en": "🆘 Support",
     },
+    "menu.donate": {
+        "ru": "💎 Поддержать автора",
+        "uk": "💎 Підтримати автора",
+        "be": "💎 Падтрымаць аўтара",
+        "en": "💎 Support the author",
+    },
+    "donate.text": {
+        "ru": (
+            "💎 <b>Поддержать автора</b>\n\n"
+            "Спасибо, что пользуешься ботом! Можно отправить любую сумму "
+            "в токене <b>GRAM</b> (сеть TON) на кошелёк:\n\n"
+            "<code>{wallet}</code>\n\n"
+            "Важно: в кошельке выбери именно токен GRAM, а не TON. "
+            "Донат не начисляет запросы — это просто благодарность."
+        ),
+        "uk": (
+            "💎 <b>Підтримати автора</b>\n\n"
+            "Дякую, що користуєшся ботом! Можна надіслати будь-яку суму "
+            "в токені <b>GRAM</b> (мережа TON) на гаманець:\n\n"
+            "<code>{wallet}</code>\n\n"
+            "Важливо: у гаманці вибери саме токен GRAM, а не TON. "
+            "Донат не нараховує запити — це просто подяка."
+        ),
+        "be": (
+            "💎 <b>Падтрымаць аўтара</b>\n\n"
+            "Дзякуй, што карыстаешся ботам! Можна адправіць любую суму "
+            "ў токене <b>GRAM</b> (сетка TON) на кашалёк:\n\n"
+            "<code>{wallet}</code>\n\n"
+            "Важна: у кашальку выберы менавіта токен GRAM, а не TON. "
+            "Донат не налічвае запыты — гэта проста падзяка."
+        ),
+        "en": (
+            "💎 <b>Support the author</b>\n\n"
+            "Thanks for using the bot! You can send any amount "
+            "in the <b>GRAM</b> token (TON network) to the wallet:\n\n"
+            "<code>{wallet}</code>\n\n"
+            "Important: in your wallet pick the GRAM token, not TON. "
+            "Donations do not add requests — it is just a thank-you."
+        ),
+    },
+    "donate.open": {
+        "ru": "💎 Открыть в приложении",
+        "uk": "💎 Відкрити в застосунку",
+        "be": "💎 Адкрыць у праграме",
+        "en": "💎 Open in the app",
+    },
     "menu.files": {
         "ru": "📎 Файлы",
         "uk": "📎 Файли",
