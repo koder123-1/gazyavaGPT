@@ -4,7 +4,7 @@
 
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 
-  var THEME_BG = { dark: "#070a13", light: "#f3f5fd" };
+  var THEME_BG = { dark: "#05060b", light: "#eef1ff" };
 
   function currentScheme() {
     var scheme = "";
@@ -102,7 +102,7 @@
       share: "Поделиться", friends_count: "Уже приглашено: {n}",
       friends_top: "Топ приглашающих", friends_empty: "Пока никого — стань первым!",
       settings_title: "⚙️ Настройки", language: "Язык", style_title: "Стиль ответов",
-      saved: "Сохранено",
+      saved: "Сохранено", theme_switch: "Тема",
       sub_title: "🔒 Нужна подписка", sub_text: "Чтобы открыть кабинет, подпишись на канал.",
       sub_button: "📢 Подписаться", sub_check: "Я подписался",
       error_title: "Не получилось загрузить", error_text: "Открой кабинет заново из Telegram.",
@@ -124,6 +124,26 @@
       buy_models: "Модели ИИ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запросов",
       paid: "Оплата получена, спасибо!", pay_failed: "Оплата не прошла", already_owned: "Уже куплено",
       added: "Добавлено", limit_reached: "Достигнут предел",
+      tab_profile: "Профиль", profile_title: "Профиль",
+      level: "Уровень {n}", rank: "Ранг", xp: "Опыт", total_xp: "Всего XP",
+      xp_left: "До уровня {n} осталось {x} XP", xp_max: "Максимальный уровень",
+      achievements: "Достижения", ach_progress: "{a} из {b}", ach_locked: "Закрыто",
+      quick_access: "Быстрый доступ", streak_title: "Серия входов", streak_days: "{n} дн.",
+      challenge_title: "Челлендж дня", challenge_text: "Задай {n} вопросов сегодня",
+      challenge_progress: "{a} / {b}", challenge_done: "Челлендж выполнен!",
+      challenge_reward: "+{x} XP за выполнение", challenges_done: "Выполнено сегодня",
+      ach_unlocked: "Новое достижение: {name}", level_up: "Новый уровень: {n}!",
+      ranks: ["Новичок", "Ученик", "Знаток", "Мастер", "Эксперт", "Гуру", "Легенда"],
+      ach: {
+        first: "Первый шаг", first_d: "Задать первый вопрос",
+        ten: "Разогрев", ten_d: "10 вопросов",
+        fifty: "Полсотни", fifty_d: "50 вопросов",
+        hundred: "Сотка", hundred_d: "100 вопросов",
+        streak3: "Три дня подряд", streak3_d: "Серия 3 дня",
+        streak7: "Неделя силы", streak7_d: "Серия 7 дней",
+        invite1: "Друг пришёл", invite1_d: "Пригласить друга",
+        bonus: "Ранняя птица", bonus_d: "Забрать бонус дня"
+      },
       styles: {
         auto: ["🌐 Универсальный", "сильный эксперт во всех темах"],
         expert: ["🚀 Максимум", "максимальная глубина и варианты"],
@@ -151,7 +171,7 @@
       share: "Поділитися", friends_count: "Уже запрошено: {n}",
       friends_top: "Топ запрошуючих", friends_empty: "Поки нікого — стань першим!",
       settings_title: "⚙️ Налаштування", language: "Мова", style_title: "Стиль відповідей",
-      saved: "Збережено",
+      saved: "Збережено", theme_switch: "Тема",
       sub_title: "🔒 Потрібна підписка", sub_text: "Щоб відкрити кабінет, підпишись на канал.",
       sub_button: "📢 Підписатися", sub_check: "Я підписався",
       error_title: "Не вдалося завантажити", error_text: "Відкрий кабінет заново з Telegram.",
@@ -173,6 +193,26 @@
       buy_models: "Моделі ШІ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запитів",
       paid: "Оплату отримано, дякую!", pay_failed: "Оплата не пройшла", already_owned: "Уже куплено",
       added: "Додано", limit_reached: "Досягнуто межі",
+      tab_profile: "Профіль", profile_title: "Профіль",
+      level: "Рівень {n}", rank: "Ранг", xp: "Досвід", total_xp: "Усього XP",
+      xp_left: "До рівня {n} залишилось {x} XP", xp_max: "Максимальний рівень",
+      achievements: "Досягнення", ach_progress: "{a} з {b}", ach_locked: "Закрито",
+      quick_access: "Швидкий доступ", streak_title: "Серія входів", streak_days: "{n} дн.",
+      challenge_title: "Челендж дня", challenge_text: "Постав {n} питань сьогодні",
+      challenge_progress: "{a} / {b}", challenge_done: "Челендж виконано!",
+      challenge_reward: "+{x} XP за виконання", challenges_done: "Виконано сьогодні",
+      ach_unlocked: "Нове досягнення: {name}", level_up: "Новий рівень: {n}!",
+      ranks: ["Новачок", "Учень", "Знавець", "Майстер", "Експерт", "Гуру", "Легенда"],
+      ach: {
+        first: "Перший крок", first_d: "Поставити перше питання",
+        ten: "Розігрів", ten_d: "10 питань",
+        fifty: "Півсотні", fifty_d: "50 питань",
+        hundred: "Сотня", hundred_d: "100 питань",
+        streak3: "Три дні поспіль", streak3_d: "Серія 3 дні",
+        streak7: "Тиждень сили", streak7_d: "Серія 7 днів",
+        invite1: "Друг прийшов", invite1_d: "Запросити друга",
+        bonus: "Ранній птах", bonus_d: "Забрати бонус дня"
+      },
       styles: {
         auto: ["🌐 Універсальний", "сильний експерт у всіх темах"],
         expert: ["🚀 Максимум", "максимальна глибина й варіанти"],
@@ -200,7 +240,7 @@
       share: "Падзяліцца", friends_count: "Ужо запрошана: {n}",
       friends_top: "Топ запрашальнікаў", friends_empty: "Пакуль нікога — стань першым!",
       settings_title: "⚙️ Налады", language: "Мова", style_title: "Стыль адказаў",
-      saved: "Захавана",
+      saved: "Захавана", theme_switch: "Тэма",
       sub_title: "🔒 Патрэбна падпіска", sub_text: "Каб адкрыць кабінет, падпішыся на канал.",
       sub_button: "📢 Падпісацца", sub_check: "Я падпісаўся",
       error_title: "Не ўдалося загрузіць", error_text: "Адкрый кабінет зноў з Telegram.",
@@ -222,6 +262,26 @@
       buy_models: "Мадэлі ШІ", buy_owned: "Куплена", buy_rate: "Курс: 1 ⭐ = {rate} запытаў",
       paid: "Аплату атрымана, дзякуй!", pay_failed: "Аплата не прайшла", already_owned: "Ужо куплена",
       added: "Дададзена", limit_reached: "Дасягнута мяжа",
+      tab_profile: "Профіль", profile_title: "Профіль",
+      level: "Узровень {n}", rank: "Ранг", xp: "Вопыт", total_xp: "Усяго XP",
+      xp_left: "Да ўзроўню {n} засталося {x} XP", xp_max: "Максімальны ўзровень",
+      achievements: "Дасягненні", ach_progress: "{a} з {b}", ach_locked: "Закрыта",
+      quick_access: "Хуткі доступ", streak_title: "Серыя ўваходаў", streak_days: "{n} дз.",
+      challenge_title: "Чэлендж дня", challenge_text: "Задай {n} пытанняў сёння",
+      challenge_progress: "{a} / {b}", challenge_done: "Чэлендж выкананы!",
+      challenge_reward: "+{x} XP за выкананне", challenges_done: "Выканана сёння",
+      ach_unlocked: "Новае дасягненне: {name}", level_up: "Новы ўзровень: {n}!",
+      ranks: ["Навічок", "Вучань", "Знаўца", "Майстар", "Эксперт", "Гуру", "Легенда"],
+      ach: {
+        first: "Першы крок", first_d: "Задаць першае пытанне",
+        ten: "Размінка", ten_d: "10 пытанняў",
+        fifty: "Паўсотні", fifty_d: "50 пытанняў",
+        hundred: "Сотка", hundred_d: "100 пытанняў",
+        streak3: "Тры дні запар", streak3_d: "Серыя 3 дні",
+        streak7: "Тыдзень сілы", streak7_d: "Серыя 7 дзён",
+        invite1: "Сябар прыйшоў", invite1_d: "Запрасіць сябра",
+        bonus: "Ранняя птушка", bonus_d: "Забраць бонус дня"
+      },
       styles: {
         auto: ["🌐 Універсальны", "моцны эксперт ва ўсіх тэмах"],
         expert: ["🚀 Максімум", "максімальная глыбіня і варыянты"],
@@ -249,7 +309,7 @@
       share: "Share", friends_count: "Invited so far: {n}",
       friends_top: "Top inviters", friends_empty: "Nobody yet — be the first!",
       settings_title: "⚙️ Settings", language: "Language", style_title: "Answer style",
-      saved: "Saved",
+      saved: "Saved", theme_switch: "Theme",
       sub_title: "🔒 Subscription required", sub_text: "Subscribe to the channel to open the dashboard.",
       sub_button: "📢 Subscribe", sub_check: "I subscribed",
       error_title: "Failed to load", error_text: "Open the dashboard again from Telegram.",
@@ -271,6 +331,26 @@
       buy_models: "AI models", buy_owned: "Owned", buy_rate: "Rate: 1 ⭐ = {rate} requests",
       paid: "Payment received, thank you!", pay_failed: "Payment failed", already_owned: "Already owned",
       added: "Added", limit_reached: "Limit reached",
+      tab_profile: "Profile", profile_title: "Profile",
+      level: "Level {n}", rank: "Rank", xp: "XP", total_xp: "Total XP",
+      xp_left: "{x} XP to level {n}", xp_max: "Max level",
+      achievements: "Achievements", ach_progress: "{a} of {b}", ach_locked: "Locked",
+      quick_access: "Quick access", streak_title: "Login streak", streak_days: "{n} d",
+      challenge_title: "Daily challenge", challenge_text: "Ask {n} questions today",
+      challenge_progress: "{a} / {b}", challenge_done: "Challenge complete!",
+      challenge_reward: "+{x} XP for completing", challenges_done: "Completed today",
+      ach_unlocked: "Achievement unlocked: {name}", level_up: "Level up: {n}!",
+      ranks: ["Rookie", "Learner", "Adept", "Master", "Expert", "Guru", "Legend"],
+      ach: {
+        first: "First step", first_d: "Ask your first question",
+        ten: "Warm-up", ten_d: "10 questions",
+        fifty: "Half a hundred", fifty_d: "50 questions",
+        hundred: "Century", hundred_d: "100 questions",
+        streak3: "Three in a row", streak3_d: "3-day streak",
+        streak7: "Week of power", streak7_d: "7-day streak",
+        invite1: "A friend joined", invite1_d: "Invite a friend",
+        bonus: "Early bird", bonus_d: "Claim the daily bonus"
+      },
       styles: {
         auto: ["🌐 Universal", "a strong expert in every topic"],
         expert: ["🚀 Maximum", "maximum depth and options"],
@@ -449,23 +529,126 @@
     });
   }
 
-  function tabButton(key, icon) {
-    var active = state.tab === key ? " active" : "";
-    return '<button class="tab' + active + '" data-action="tab" data-value="' + key +
-      '" role="tab" aria-selected="' + (state.tab === key) + '">' +
-      '<span class="tab-icon">' + icon + '</span><span>' + esc(t(key)) + "</span></button>";
+  function renderTabs() {
+    // friends/settings живут как подэкраны профиля, поэтому подсвечиваем «Профиль»
+    var activeKey = state.tab;
+    if (state.screen === "friends" || state.screen === "settings") activeKey = "profile";
+    var keys = ["home", "stats", "tasks", "games", "profile"];
+    if (keys.indexOf(activeKey) === -1) activeKey = "home";
+    var icons = { home: "🏠", stats: "📈", tasks: "🎯", games: "🎲", profile: "👤" };
+
+    // Пересобираем док только при смене языка — иначе сохраняем «пилюлю» живой,
+    // чтобы её позиция плавно перетекала между вкладками.
+    var hadTabs = !!tabsEl.querySelector(".tab");
+    if (!hadTabs || state._dockLang !== state.lang) {
+      tabsEl.innerHTML = keys.map(function (key) {
+        var label = key === "profile" ? t("tab_profile") : t(key);
+        return '<button class="tab" data-action="tab" data-value="' + key +
+          '" role="tab" aria-selected="false">' +
+          '<span class="tab-icon">' + icons[key] + '</span>' +
+          '<span class="tab-label">' + esc(label) + "</span></button>";
+      }).join("") + '<span class="dock-pill" aria-hidden="true"></span>';
+      state._dockLang = state.lang;
+      hadTabs = false;
+    }
+
+    var buttons = tabsEl.querySelectorAll(".tab");
+    for (var i = 0; i < buttons.length; i++) {
+      var on = buttons[i].getAttribute("data-value") === activeKey;
+      if (on) buttons[i].classList.add("active");
+      else buttons[i].classList.remove("active");
+      buttons[i].setAttribute("aria-selected", on ? "true" : "false");
+    }
+
+    if (!hadTabs) {
+      positionPill(true);
+      requestAnimationFrame(function () { positionPill(true); });
+      setTimeout(function () { positionPill(false); }, 60);
+    } else {
+      positionPill(false);
+    }
   }
 
-  function renderTabs() {
-    tabsEl.innerHTML =
-      tabButton("home", "🏠") + tabButton("stats", "📈") +
-      tabButton("tasks", "🎯") +
-      tabButton("friends", "👥") + tabButton("games", "🎲") + tabButton("settings", "⚙️");
+  function positionPill(instant) {
+    var pill = tabsEl.querySelector(".dock-pill");
+    if (!pill) return;
+    var active = tabsEl.querySelector(".tab.active");
+    if (!active) { pill.style.opacity = "0"; return; }
+    if (instant) {
+      pill.style.transition = "none";
+      clearTimeout(pill._restore);
+      pill._restore = setTimeout(function () {
+        if (pill.isConnected) pill.style.transition = "";
+      }, 90);
+    }
+    pill.style.opacity = "1";
+    pill.style.width = active.offsetWidth + "px";
+    pill.style.transform = "translate3d(" + active.offsetLeft + "px,0,0)";
   }
 
   function statCard(value, label) {
     return '<div class="stat"><div class="stat-value">' + esc(value) +
       '</div><div class="stat-label">' + esc(label) + "</div></div>";
+  }
+
+  // ---------------------------------------------------------------- профиль / XP
+  function xpOf(me) {
+    if (!me) return 0;
+    var xp = (me.total_requests || 0) * 10;
+    xp += (me.bonus_requests || 0) * 5;
+    xp += (me.invites || 0) * 40;
+    xp += (me.bonus_streak || 0) * 20;
+    return Math.max(0, xp);
+  }
+
+  function levelInfo(xp) {
+    var level = 1, need = 300, base = 0;
+    while (xp >= base + need && level < 50) {
+      base += need; level++; need = Math.round(need * 1.16);
+    }
+    var into = Math.max(0, xp - base);
+    return {
+      level: level, into: into, need: need, base: base,
+      pct: Math.min(1, into / need), maxed: level >= 50
+    };
+  }
+
+  function rankOf(level) {
+    var ranks = dict().ranks || I18N.ru.ranks;
+    var idx = Math.min(ranks.length - 1, Math.floor((level - 1) / 4));
+    return ranks[idx];
+  }
+
+  function achievementsOf(me) {
+    var a = dict().ach || I18N.ru.ach;
+    function mk(id, icon, done) {
+      return { id: id, icon: icon, done: !!done, title: a[id] || id, desc: a[id + "_d"] || "" };
+    }
+    return [
+      mk("first", "🌱", me.total_requests >= 1),
+      mk("ten", "🔥", me.total_requests >= 10),
+      mk("fifty", "⚡", me.total_requests >= 50),
+      mk("hundred", "🏆", me.total_requests >= 100),
+      mk("streak3", "📅", me.bonus_streak >= 3),
+      mk("streak7", "🗓️", me.bonus_streak >= 7),
+      mk("invite1", "🤝", me.invites >= 1),
+      mk("bonus", "🎁", me.bonus_claimed_today)
+    ];
+  }
+
+  // Челлендж дня: детерминирован по дате, чтобы не «прыгал» при перерисовке
+  function challengeOf(me) {
+    var now = new Date();
+    var seed = now.getFullYear() * 372 + now.getMonth() * 31 + now.getDate();
+    var goals = [3, 5, 7, 10];
+    var goal = goals[seed % goals.length];
+    var used = Math.max(0, me.used_today || 0);
+    return {
+      goal: goal,
+      done: Math.min(used, goal),
+      complete: used >= goal,
+      xp: goal * 10
+    };
   }
 
   function subHeader(title) {
@@ -476,6 +659,10 @@
   function renderHome() {
     var me = state.me;
     var name = (me.user.first_name || me.user.username || "").trim();
+    var lvl = levelInfo(xpOf(me));
+    var ch = challengeOf(me);
+    var usedPct = (me.unlimited || !me.daily_limit) ? 100
+      : Math.max(4, Math.min(100, Math.round((me.used_today / (me.used_today + Math.max(1, me.remaining))) * 100)));
 
     var tiles = '<div class="tiles">' +
       '<button class="tile" data-action="open" data-value="history">' +
@@ -492,7 +679,7 @@
     if (me.bonus_claimed_today) {
       bonus = '<div class="row"><div><div class="row-title">' + esc(t("bonus_already")) +
         '</div><div class="row-sub">' + esc(t("bonus_streak", { n: me.bonus_streak })) +
-        "</div></div></div>";
+        "</div></div><div class='ok-badge'>✓</div></div>";
     } else {
       bonus = '<button class="btn" data-action="claim"' + (state.busy ? " disabled" : "") +
         ">" + esc(t("bonus_claim")) + "</button>" +
@@ -500,14 +687,34 @@
         esc(t("bonus_hint", { max: me.bonus_max })) + "</div>";
     }
 
+    var challenge =
+      "<h2>⚡ " + esc(t("challenge_title")) + "</h2>" +
+      '<div class="card challenge' + (ch.complete ? " done" : "") + '">' +
+      '<div class="row"><div><div class="row-title">' +
+      esc(ch.complete ? t("challenge_done") : t("challenge_text", { n: ch.goal })) +
+      '</div><div class="row-sub">' + esc(t("challenge_reward", { x: ch.xp })) + "</div></div>" +
+      '<div class="ch-badge">' + (ch.complete ? "✓" : ch.done + "/" + ch.goal) + "</div></div>" +
+      '<div class="ch-bar"><span style="width:' + Math.round(ch.done / ch.goal * 100) + '%"></span></div>' +
+      "</div>";
+
     var styleMeta = dict().styles[me.style] || [];
     view.innerHTML =
-      tiles +
       '<div class="card hero">' +
-      '<div style="opacity:.9">' + esc(t("hello", { name: name })) + "</div>" +
+      '<div class="hero-glow" aria-hidden="true"></div>' +
+      '<div class="hero-top">' +
+      '<div class="hero-label">' + esc(t("hello", { name: name })) + "</div>" +
+      '<span class="hero-chip" data-action="tab" data-value="profile" role="button" tabindex="0">⚡ ' + esc(t("level", { n: lvl.level })) + "</span>" +
+      "</div>" +
       '<div class="value">' + (me.unlimited ? "∞" : esc(me.remaining)) + "</div>" +
       '<div class="sub">' + (me.unlimited ? esc(t("unlimited")) : esc(t("left"))) + "</div>" +
+      '<div class="hero-bar"><span style="width:' + usedPct + '%"></span></div>' +
+      '<div class="hero-foot">' +
+      '<span>🔥 ' + esc(t("streak_days", { n: me.bonus_streak })) + "</span>" +
+      '<span>🏅 ' + esc(rankOf(lvl.level)) + "</span>" +
       "</div>" +
+      "</div>" +
+      tiles +
+      challenge +
       "<h2>" + esc(t("bonus_title")) + "</h2>" +
       '<div class="card">' + bonus + "</div>" +
       "<h2>" + esc(t("model")) + " · " + esc(t("style")) + "</h2>" +
@@ -527,9 +734,88 @@
     if (!state._heroAnimated && !me.unlimited && me.remaining > 0) {
       setTimeout(function () {
         var el = document.querySelector(".hero .value");
-        if (el) { countUp(el, me.remaining, 700); state._heroAnimated = true; }
+        if (el) { countUp(el, me.remaining, 900); state._heroAnimated = true; }
       }, 120);
     }
+  }
+
+  function renderProfile() {
+    var me = state.me;
+    var xp = xpOf(me);
+    var lvl = levelInfo(xp);
+    var ach = achievementsOf(me);
+    var unlocked = ach.filter(function (a) { return a.done; }).length;
+    var name = (me.user.first_name || me.user.username || "—").trim();
+    var handle = me.user.username ? "@" + me.user.username : "";
+    var initials = (name || "?").slice(0, 1).toUpperCase();
+    var deg = Math.round(lvl.pct * 360);
+    var photo = "";
+    try {
+      photo = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url) || "";
+    } catch (e) { photo = ""; }
+
+    var ring =
+      '<div class="lv-ring" style="background:conic-gradient(var(--acc) ' + deg + 'deg, rgba(var(--acc-rgb),.16) ' + deg + 'deg)">' +
+      '<div class="lv-avatar">' +
+      (photo
+        ? '<img src="' + esc(photo) + '" alt="" referrerpolicy="no-referrer">'
+        : '<span class="lv-initial">' + esc(initials) + "</span>") +
+      "</div>" +
+      '<span class="lv-num">' + lvl.level + "</span>" +
+      "</div>";
+
+    var achHtml = ach.map(function (a) {
+      return '<div class="ach' + (a.done ? " on" : "") + '" title="' + esc(a.desc) + '">' +
+        '<span class="ach-ico">' + (a.done ? a.icon : "🔒") + "</span>" +
+        '<span class="ach-name">' + esc(a.title) + "</span></div>";
+    }).join("");
+
+    var quick =
+      '<div class="quick-grid">' +
+      '<button class="quick" data-action="open" data-value="friends"><span>👥</span>' + esc(t("friends")) + "</button>" +
+      '<button class="quick" data-action="open" data-value="settings"><span>⚙️</span>' + esc(t("settings")) + "</button>" +
+      '<button class="quick" data-action="open" data-value="history"><span>💬</span>' + esc(t("history_title")) + "</button>" +
+      (me.payments_enabled
+        ? '<button class="quick" data-action="open" data-value="buy"><span>⭐</span>' + esc(t("tile_buy")) + "</button>"
+        : "") +
+      "</div>";
+
+    view.innerHTML =
+      "<h1>" + esc(t("profile_title")) + "</h1>" +
+      '<div class="card profile-card">' +
+      '<div class="profile-top">' + ring +
+      '<div class="profile-id"><div class="profile-name">' + esc(name) + "</div>" +
+      (handle ? '<div class="profile-handle">' + esc(handle) + "</div>" : "") +
+      '<div class="rank-chip">🏅 ' + esc(rankOf(lvl.level)) + "</div></div></div>" +
+      '<div class="xp-line"><span>' + esc(t("xp")) + "</span><span>" +
+      esc(lvl.into) + " / " + esc(lvl.need) + " XP</span></div>" +
+      '<div class="xp-bar"><span style="width:0"></span></div>' +
+      '<div class="profile-meta">' +
+      '<div class="pmeta"><b>' + esc(xp) + "</b><span>" + esc(t("total_xp")) + "</span></div>" +
+      '<div class="pmeta"><b>' + esc(me.total_requests) + "</b><span>" + esc(t("stat_total")) + "</span></div>" +
+      '<div class="pmeta"><b>' + esc(me.invites) + "</b><span>" + esc(t("stat_invites")) + "</span></div>" +
+      "</div></div>" +
+
+      '<div class="streak-card">' +
+      '<div class="streak-ico">🔥</div>' +
+      '<div class="streak-body"><div class="row-title">' + esc(t("streak_title")) + "</div>" +
+      '<div class="row-sub">' + esc(t("streak_days", { n: me.bonus_streak })) + "</div></div>" +
+      '<div class="streak-days">' +
+      Array.apply(null, Array(7)).map(function (_, i) {
+        return '<span class="sd' + (i < Math.min(7, me.bonus_streak) ? " on" : "") + '"></span>';
+      }).join("") +
+      "</div></div>" +
+
+      "<h2>🏆 " + esc(t("achievements")) + " · " + esc(t("ach_progress", { a: unlocked, b: ach.length })) + "</h2>" +
+      '<div class="ach-grid">' + achHtml + "</div>" +
+
+      "<h2>🚀 " + esc(t("quick_access")) + "</h2>" +
+      quick;
+
+    setTimeout(function () {
+      var bar = document.querySelector(".xp-bar > span");
+      if (bar) bar.style.width = Math.round(lvl.pct * 100) + "%";
+    }, 60);
   }
 
   function renderStats() {
@@ -548,7 +834,7 @@
       "</div>";
   }
 
-  function renderFriends() {
+  function renderFriends(withBack) {
     var me = state.me;
     var top = state.top || [];
     var rows = top.length
@@ -560,7 +846,7 @@
       : '<div class="empty">' + esc(t("friends_empty")) + "</div>";
 
     view.innerHTML =
-      "<h1>" + esc(t("friends_title")) + "</h1>" +
+      (withBack ? subHeader(t("friends_title")) : "<h1>" + esc(t("friends_title")) + "</h1>") +
       '<div class="card">' +
       '<div class="muted">' + esc(t("friends_hint", { reward: me.invite_reward, friend: me.invited_reward })) + "</div>" +
       '<div class="muted" style="margin:12px 0 6px">' + esc(t("friends_link")) + "</div>" +
@@ -574,7 +860,7 @@
       '<div class="card">' + rows + "</div>";
   }
 
-  function renderSettings() {
+  function renderSettings(withBack) {
     var me = state.me;
     var langs = (me.langs || ["ru", "uk", "be", "en"]).map(function (code) {
       return '<button class="chip' + (code === state.lang ? " active" : "") +
@@ -603,7 +889,7 @@
         themeLabel + " " + esc(t("theme_switch") || "Theme: auto") + "</button>";
 
       view.innerHTML =
-        "<h1>" + esc(t("settings_title")) + "</h1>" +
+        (withBack ? subHeader(t("settings_title")) : "<h1>" + esc(t("settings_title")) + "</h1>") +
         "<h2>" + esc(t("language")) + "</h2>" +
         '<div class="card"><div class="chips">' + langs + "</div></div>" +
         "<h2>" + esc(t("style_title")) + "</h2>" +
@@ -843,8 +1129,11 @@
   }
 
   function renderTools() {
+    var head = state.screen === "tools"
+      ? subHeader(t("tools_title"))
+      : "<h1>" + esc(t("tools_title")) + "</h1>";
     if (state.tools === null) {
-      view.innerHTML = subHeader(t("tools_title")) + '<div class="skeleton"></div>';
+      view.innerHTML = head + '<div class="skeleton"></div>';
       return;
     }
     var data = state.tools;
@@ -877,7 +1166,7 @@
       : '<div class="empty">' + esc(t("rem_empty")) + "</div>";
 
     view.innerHTML =
-      subHeader(t("tools_title")) +
+      head +
       "<h2>" + esc(t("todos_title")) + " · " + data.todos.length + "/" + esc(limits.todos || "?") + "</h2>" +
       '<div class="card">' + todos +
       '<div class="field"><input class="input" id="todo-input" placeholder="' + esc(t("todo_ph")) + '">' +
@@ -983,13 +1272,25 @@
     else if (state.screen === "history") renderHistory();
     else if (state.screen === "tools") renderTools();
     else if (state.screen === "buy") renderBuy();
+    else if (state.screen === "friends") renderFriends(true);
+    else if (state.screen === "settings") renderSettings(true);
     else if (state.tab === "stats") renderStats();
     else if (state.tab === "tasks") renderTools();
     else if (state.tab === "games") renderGames();
-    else if (state.tab === "friends") renderFriends();
-    else if (state.tab === "settings") renderSettings();
+    else if (state.tab === "profile") renderProfile();
     else renderHome();
     renderTabs();
+  }
+
+  // Направление анимации перехода между экранами
+  var TAB_ORDER = ["home", "stats", "tasks", "games", "profile"];
+  function setDir(dir) {
+    view.setAttribute("data-dir", dir || "fwd");
+  }
+  function tabDir(from, to) {
+    var a = TAB_ORDER.indexOf(from), b = TAB_ORDER.indexOf(to);
+    if (a === -1 || b === -1) return "fwd";
+    return b >= a ? "fwd" : "back";
   }
 
   // ---------------------------------------------------------------- данные
@@ -1018,25 +1319,43 @@
 
   function openScreen(name) {
     state.screen = name;
+    setDir("fwd");
     render();
     if (name === "history" && state.history === null) {
       api("history").then(function (data) { state.history = data.items || []; }).catch(function () {
         state.history = [];
       }).then(render);
     } else if (name === "tools" && state.tools === null) {
-      api("tools", { action: "load" }).then(function (data) { state.tools = data; }).catch(function () {
-        toast(t("error_text"));
-      }).then(render);
+      ensureTools();
     } else if (name === "buy" && state.buy === null) {
       api("buy").then(function (data) { state.buy = data; }).catch(function () {
         toast(t("error_text"));
       }).then(render);
+    } else if (name === "friends" && state.top == null) {
+      loadTop().then(render);
     }
+  }
+
+  function ensureTools() {
+    if (state.tools !== null || state._toolsLoading) return;
+    state._toolsLoading = true;
+    api("tools", { action: "load" }).then(function (data) {
+      state.tools = data;
+    }).catch(function () {
+      state.tools = { todos: [], cards: [], reminders: [], limits: {} };
+      toast(t("error_text"));
+    }).then(function () {
+      state._toolsLoading = false;
+      render();
+    });
   }
 
   function claimBonus() {
     if (state.busy) return;
     state.busy = true;
+    var beforeXp = xpOf(state.me);
+    var beforeLvl = levelInfo(beforeXp).level;
+    var hadBonusAch = !!(state.me && state.me.bonus_claimed_today);
     render();
     api("bonus").then(function (data) {
       if (state.me) {
@@ -1048,6 +1367,15 @@
       toast(data.claimed ? t("bonus_claimed", { amount: data.amount }) : t("bonus_already"));
       haptic(data.claimed ? "success" : "warning");
       if (data.claimed) confetti(window.innerWidth/2, window.innerHeight/3);
+
+      // «Второй тост»: достижение / новый уровень
+      if (data.claimed) {
+        var afterLvl = levelInfo(xpOf(state.me)).level;
+        var notice = "";
+        if (afterLvl > beforeLvl) notice = t("level_up", { n: afterLvl });
+        else if (!hadBonusAch) notice = t("ach_unlocked", { name: (dict().ach || {}).bonus || "" });
+        if (notice) setTimeout(function () { toast(notice); haptic("success"); }, 2100);
+      }
     }).catch(function () {
       toast(t("error_text"));
     }).then(function () { state.busy = false; render(); });
@@ -1164,14 +1492,18 @@
     haptic(action === "tab" || action === "set-lang" || action === "set-style" ? "select" : "light");
 
     if (action === "tab") {
+      var fromTab = state.tab;
+      setDir(tabDir(fromTab, value));
       state.screen = null;
       state.tab = value;
       if (value === "friends" && state.top == null) loadTop().then(render);
+      else if (value === "tasks" && state.tools === null) { render(); ensureTools(); }
       else render();
     } else if (action === "open") {
       openScreen(value);
     } else if (action === "back") {
       state.screen = null;
+      setDir("back");
       render();
     } else if (action === "claim") {
       claimBonus();
@@ -1257,11 +1589,46 @@
 
   document.addEventListener("keydown", onEnter);
 
+  // ---------------------------------------------------------------- эффекты
+  (function initFx() {
+    var raf = 0, last = null;
+    document.addEventListener("pointermove", function (event) {
+      var target = event.target;
+      var card = target && target.closest ? target.closest(".card") : null;
+      if (!card) return;
+      last = { card: card, x: event.clientX, y: event.clientY };
+      if (raf) return;
+      raf = requestAnimationFrame(function () {
+        raf = 0;
+        if (!last) return;
+        var rect = last.card.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        last.card.style.setProperty("--mx", ((last.x - rect.left) / rect.width * 100).toFixed(1) + "%");
+        last.card.style.setProperty("--my", ((last.y - rect.top) / rect.height * 100).toFixed(1) + "%");
+      });
+    }, { passive: true });
+
+    var ticking = false;
+    window.addEventListener("scroll", function () {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(function () {
+        ticking = false;
+        document.body.classList.toggle("scrolled", window.scrollY > 6);
+      });
+    }, { passive: true });
+
+    window.addEventListener("resize", function () { positionPill(); });
+    window.addEventListener("load", function () { positionPill(); });
+    setTimeout(positionPill, 120);
+  })();
+
   var langBtn = document.getElementById("lang-btn");
   if (langBtn) {
     langBtn.addEventListener("click", function () {
-      state.screen = null;
-      state.tab = "settings";
+      state.screen = "settings";
+      state.tab = "profile";
+      setDir("fwd");
       render();
     });
   }
