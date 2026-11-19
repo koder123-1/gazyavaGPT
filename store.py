@@ -62,7 +62,6 @@ class Store(Protocol):
         charge_id: str,
         kind: str = "requests",
         model: str | None = None,
-        gram: float = 0,
     ) -> bool: ...
     async def get_payment(self, payment_id: int) -> dict | None: ...
     async def mark_payment_refunded(self, payment_id: int) -> dict | None: ...
@@ -468,7 +467,6 @@ class MemoryStore:
         charge_id: str,
         kind: str = "requests",
         model: str | None = None,
-        gram: float = 0,
     ) -> bool:
         if charge_id in self._payments:
             return False
@@ -478,14 +476,13 @@ class MemoryStore:
             "user_id": user_id,
             "requests": requests,
             "stars": stars,
-            "gram": gram,
             "charge_id": charge_id,
             "kind": kind,
             "model": model,
             "created_at": datetime.now(UTC),
             "refunded_at": None,
         }
-        if kind in ("requests", "gram") and requests:
+        if kind == "requests":
             await self.add_bonus(user_id, requests)
         return True
 
@@ -546,7 +543,7 @@ class MemoryStore:
     async def payments_stats(self) -> dict[str, int]:
         rows = list(self._payments.values())
         paid = [r for r in rows if r.get("refunded_at") is None]
-        bought = [r for r in paid if r.get("kind", "requests") in ("requests", "gram")]
+        bought = [r for r in paid if r.get("kind", "requests") == "requests"]
         return {
             "count": len(rows),
             "stars": sum(int(r["stars"]) for r in paid),
@@ -554,7 +551,6 @@ class MemoryStore:
             "refunded": len(rows) - len(paid),
             "subs": sum(1 for r in paid if r.get("kind") == "sub"),
             "models": sum(1 for r in paid if r.get("kind") == "model"),
-            "grams": round(sum(float(r.get("gram") or 0) for r in paid), 4),
         }
 
     async def recent_payments(self, limit: int) -> list[dict]:
@@ -1546,15 +1542,14 @@ class PostgresStore:
         charge_id: str,
         kind: str = "requests",
         model: str | None = None,
-        gram: float = 0,
     ) -> bool:
         assert self._pool is not None
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 payment_id = await conn.fetchval(
                     """
-                    INSERT INTO payments (user_id, requests, stars, charge_id, kind, model, gram)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    INSERT INTO payments (user_id, requests, stars, charge_id, kind, model)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (charge_id) DO NOTHING
                     RETURNING id
                     """,
@@ -1564,12 +1559,11 @@ class PostgresStore:
                     charge_id,
                     kind,
                     model,
-                    gram,
                 )
                 if payment_id is None:
                     # Telegram может повторить апдейт — второй раз не начисляем.
                     return False
-                if kind in ("requests", "gram") and requests:
+                if kind == "requests" and requests:
                     await conn.execute(
                         "UPDATE users SET bonus_requests = bonus_requests + $2 WHERE user_id = $1",
                         user_id,
@@ -1630,26 +1624,23 @@ class PostgresStore:
             """
             SELECT count(*) AS count,
                    coalesce(sum(stars) FILTER (WHERE refunded_at IS NULL), 0) AS stars,
-                   coalesce(sum(requests) FILTER (WHERE refunded_at IS NULL AND kind IN ('requests', 'gram')), 0) AS requests,
+                   coalesce(sum(requests) FILTER (WHERE refunded_at IS NULL AND kind = 'requests'), 0) AS requests,
                    count(*) FILTER (WHERE refunded_at IS NOT NULL) AS refunded,
                    count(*) FILTER (WHERE refunded_at IS NULL AND kind = 'sub') AS subs,
-                   count(*) FILTER (WHERE refunded_at IS NULL AND kind = 'model') AS models,
-                   coalesce(sum(gram) FILTER (WHERE refunded_at IS NULL), 0) AS grams
+                   count(*) FILTER (WHERE refunded_at IS NULL AND kind = 'model') AS models
             FROM payments
             """
         )
-        result = {
+        return {
             key: int(row[key] or 0)
             for key in ("count", "stars", "requests", "refunded", "subs", "models")
         }
-        result["grams"] = float(row["grams"] or 0)
-        return result
 
     async def get_payment(self, payment_id: int) -> dict | None:
         assert self._pool is not None
         row = await self._pool.fetchrow(
             """
-            SELECT id, user_id, requests, stars, gram, charge_id, kind, model, created_at, refunded_at
+            SELECT id, user_id, requests, stars, charge_id, kind, model, created_at, refunded_at
             FROM payments WHERE id = $1
             """,
             payment_id,
@@ -1662,7 +1653,7 @@ class PostgresStore:
             """
             UPDATE payments SET refunded_at = now()
             WHERE id = $1 AND refunded_at IS NULL
-            RETURNING id, user_id, requests, stars, gram, charge_id, kind, model, created_at, refunded_at
+            RETURNING id, user_id, requests, stars, charge_id, kind, model, created_at, refunded_at
             """,
             payment_id,
         )
@@ -1672,7 +1663,7 @@ class PostgresStore:
         assert self._pool is not None
         rows = await self._pool.fetch(
             """
-            SELECT p.id, p.user_id, p.requests, p.stars, p.gram, p.charge_id, p.kind, p.model, p.created_at,
+            SELECT p.id, p.user_id, p.requests, p.stars, p.charge_id, p.kind, p.model, p.created_at,
                    p.refunded_at, u.username
             FROM payments p
             LEFT JOIN users u ON u.user_id = p.user_id
@@ -2418,7 +2409,6 @@ CREATE INDEX IF NOT EXISTS payments_user_id_id_idx ON payments (user_id, id DESC
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'requests';
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS model TEXT;
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS gram NUMERIC(20,9) NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS model_access (
     user_id    BIGINT NOT NULL,

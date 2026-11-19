@@ -6,7 +6,6 @@ import os
 import re
 import secrets
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -85,14 +84,9 @@ DEFAULT_RULES = (
 DEFAULT_STAR_PACKAGES = ((50, 3), (150, 8), (300, 14))
 # Курс для любой суммы: сколько запросов даём за 1 звезду.
 DEFAULT_STAR_RATE = 10
-# Оплата токеном GRAM (jetton в сети TON). Пустые адреса — способ выключен.
-# Наборы: «запросы : GRAM». Курс для своих сумм: сколько запросов за 1 GRAM.
-DEFAULT_GRAM_PACKAGES = (
-    (50, Decimal("0.5")),
-    (150, Decimal("1.5")),
-    (300, Decimal("2.5")),
-)
-DEFAULT_GRAM_RATE = 100
+# Поддержка автора токеном GRAM (jetton в сети TON). Это донат: запросы
+# за него не начисляются, проверка платежа не нужна — только адрес кошелька.
+DEFAULT_SUPPORT_WALLET = "UQCgQE6jXUmdJh_AtN5CNQH9eBIwIeQG370ylpYymQ9vDjLF"
 # Канал, подписка на который обязательна. Пусто — проверка выключена.
 DEFAULT_REQUIRED_CHANNEL = "gazyavaGPT"
 DEFAULT_REQUIRED_CHANNEL_URL = "https://t.me/gazyavaGPT"
@@ -184,14 +178,9 @@ class Settings:
     payments_enabled: bool = True
     star_packages: tuple[tuple[int, int], ...] = DEFAULT_STAR_PACKAGES
     star_rate: int = DEFAULT_STAR_RATE
-    # GRAM (TON): адрес получателя и master-адрес jetton включают способ оплаты.
-    gram_wallet: str = ""
-    gram_jetton: str = ""
-    gram_decimals: int = 9
-    gram_rate: int = DEFAULT_GRAM_RATE
-    gram_packages: tuple[tuple[int, Decimal], ...] = DEFAULT_GRAM_PACKAGES
-    tonapi_key: str = ""
-    tonapi_base: str = "https://tonapi.io"
+    # Поддержка автора: адрес кошелька для GRAM. Пусто — карточка скрыта.
+    support_wallet: str = DEFAULT_SUPPORT_WALLET
+    support_comment: str = ""
     required_channel: str = DEFAULT_REQUIRED_CHANNEL
     required_channel_url: str = DEFAULT_REQUIRED_CHANNEL_URL
     group_gate_enabled: bool = True
@@ -243,9 +232,9 @@ class Settings:
         return self.daily_limit <= 0
 
     @property
-    def gram_ready(self) -> bool:
-        """Оплата GRAM включена, только если заданы оба адреса."""
-        return bool(self.payments_enabled and self.gram_wallet and self.gram_jetton)
+    def support_ready(self) -> bool:
+        """Карточка «Поддержать автора» видна, только если задан адрес."""
+        return bool(self.support_wallet)
 
 
 def _int_env(
@@ -291,41 +280,6 @@ def _packages_env(name: str, default: tuple[tuple[int, int], ...]) -> tuple[tupl
         return parse_packages(os.getenv(name, ""), default)
     except ValueError as exc:
         raise SystemExit(f"{name}: {exc}. Пример: 50:3,150:8,300:14") from exc
-
-
-def parse_gram_packages(
-    raw: str, default: tuple[tuple[int, Decimal], ...]
-) -> tuple[tuple[int, Decimal], ...]:
-    """Разбирает строку вида «50:0.5,150:1.5» — запросы : GRAM."""
-    if not raw or not raw.strip():
-        return default
-    result: list[tuple[int, Decimal]] = []
-    for chunk in raw.replace(";", ",").split(","):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        parts = chunk.replace("=", ":").split(":")
-        if len(parts) != 2:
-            raise ValueError(f"ожидалось «запросы:GRAM», а получено {chunk!r}")
-        try:
-            requests, grams = int(parts[0].strip()), Decimal(parts[1].strip())
-        except (ValueError, InvalidOperation) as exc:
-            raise ValueError(f"не число: {chunk!r}") from exc
-        if requests <= 0 or grams <= 0:
-            raise ValueError(f"значения должны быть больше нуля: {chunk!r}")
-        result.append((requests, grams.quantize(Decimal("0.01"))))
-    if not result:
-        raise ValueError("пустой список наборов")
-    return tuple(sorted(result))
-
-
-def _gram_packages_env(
-    name: str, default: tuple[tuple[int, Decimal], ...]
-) -> tuple[tuple[int, Decimal], ...]:
-    try:
-        return parse_gram_packages(os.getenv(name, ""), default)
-    except ValueError as exc:
-        raise SystemExit(f"{name}: {exc}. Пример: 50:0.5,150:1.5,300:2.5") from exc
 
 
 def _parse_admin_ids(raw: str) -> frozenset[int]:
@@ -473,13 +427,8 @@ def load_settings() -> Settings:
         payments_enabled=_bool_env("PAYMENTS_ENABLED", True),
         star_packages=_packages_env("STAR_PACKAGES", DEFAULT_STAR_PACKAGES),
         star_rate=_int_env("STAR_RATE", DEFAULT_STAR_RATE, minimum=1),
-        gram_wallet=os.getenv("GRAM_WALLET", "").strip(),
-        gram_jetton=os.getenv("GRAM_JETTON", "").strip(),
-        gram_decimals=_int_env("GRAM_DECIMALS", 9, minimum=0, maximum=18),
-        gram_rate=_int_env("GRAM_RATE", DEFAULT_GRAM_RATE, minimum=1),
-        gram_packages=_gram_packages_env("GRAM_PACKAGES", DEFAULT_GRAM_PACKAGES),
-        tonapi_key=os.getenv("TONAPI_KEY", "").strip(),
-        tonapi_base=(os.getenv("TONAPI_BASE", "").strip().rstrip("/") or "https://tonapi.io"),
+        support_wallet=os.getenv("SUPPORT_WALLET", DEFAULT_SUPPORT_WALLET).strip(),
+        support_comment=os.getenv("SUPPORT_COMMENT", "").strip(),
         required_channel=os.getenv("REQUIRED_CHANNEL", "").strip()
         or DEFAULT_REQUIRED_CHANNEL,
         required_channel_url=os.getenv("REQUIRED_CHANNEL_URL", "").strip()

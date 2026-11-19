@@ -122,12 +122,11 @@
       buy_balance: "Твой запас: {n} запросов", buy_packages: "Готовые наборы", pkg_requests: "запросов",
       buy_custom: "Своя сумма", buy_stars_ph: "Звёзд", buy_button: "Купить",
       buy_models: "Модели ИИ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запросов",
-      gram_title: "💎 Gram (TON)", gram_hint: "Оплата токеном GRAM с кошелька TON — зачисление автоматически после подтверждения в сети.",
-      gram_rate: "Курс: 1 GRAM = {rate} запросов", gram_custom_ph: "GRAM", gram_buy: "Оплатить",
-      gram_connect: "Подключить кошелёк", gram_disconnect: "Отключить", gram_connected: "Кошелёк: {addr}",
-      gram_check: "Проверить оплату", gram_sent: "Отправлено! Проверяю оплату…", gram_paid: "Оплачено: +{n} запросов",
-      gram_pending: "Платёж ещё не виден в сети — проверь через минуту", gram_cancel: "Оплата отменена",
-      gram_off: "Оплата GRAM не настроена", gram_soon: "Приём GRAM временно недоступен — попробуй позже",
+      support_title: "💎 Поддержать автора", support_short: "Поддержать",
+      support_hint: "Отправь любую сумму GRAM на кошелёк ниже — это благодарность автору. Запросы за донат не начисляются.",
+      support_address: "Кошелёк", support_comment: "Комментарий к переводу",
+      support_copy: "Копировать", support_copied: "Скопировано",
+      support_note: "В кошельке выбери токен GRAM, вставь адрес и комментарий — так автор увидит, от кого поддержка.",
       paid: "Оплата получена, спасибо!", pay_failed: "Оплата не прошла", already_owned: "Уже куплено",
       added: "Добавлено", limit_reached: "Достигнут предел",
       tab_profile: "Профиль", profile_title: "Профиль",
@@ -197,12 +196,11 @@
       buy_balance: "Твій запас: {n} запитів", buy_packages: "Готові набори", pkg_requests: "запитів",
       buy_custom: "Своя сума", buy_stars_ph: "Зірок", buy_button: "Купити",
       buy_models: "Моделі ШІ", buy_owned: "Куплено", buy_rate: "Курс: 1 ⭐ = {rate} запитів",
-      gram_title: "💎 Gram (TON)", gram_hint: "Оплата токеном GRAM з гаманця TON — нарахування автоматично після підтвердження в мережі.",
-      gram_rate: "Курс: 1 GRAM = {rate} запитів", gram_custom_ph: "GRAM", gram_buy: "Сплатити",
-      gram_connect: "Підключити гаманець", gram_disconnect: "Відключити", gram_connected: "Гаманець: {addr}",
-      gram_check: "Перевірити оплату", gram_sent: "Надіслано! Перевіряю оплату…", gram_paid: "Сплачено: +{n} запитів",
-      gram_pending: "Платіж ще не видно в мережі — перевір за хвилину", gram_cancel: "Оплату скасовано",
-      gram_off: "Оплата GRAM не налаштована", gram_soon: "Прийом GRAM тимчасово недоступний — спробуй пізніше",
+      support_title: "💎 Підтримати автора", support_short: "Підтримати",
+      support_hint: "Надішли будь-яку суму GRAM на гаманець нижче — це подяка автору. Запити за донат не нараховуються.",
+      support_address: "Гаманець", support_comment: "Коментар до переказу",
+      support_copy: "Копіювати", support_copied: "Скопійовано",
+      support_note: "У гаманці вибери токен GRAM, встав адресу й коментар — так автор побачить, від кого підтримка.",
       paid: "Оплату отримано, дякую!", pay_failed: "Оплата не пройшла", already_owned: "Уже куплено",
       added: "Додано", limit_reached: "Досягнуто межі",
       tab_profile: "Профіль", profile_title: "Профіль",
@@ -272,12 +270,11 @@
       buy_balance: "Твой запас: {n} запытаў", buy_packages: "Гатовыя наборы", pkg_requests: "запытаў",
       buy_custom: "Свая сума", buy_stars_ph: "Зорак", buy_button: "Купіць",
       buy_models: "Мадэлі ШІ", buy_owned: "Куплена", buy_rate: "Курс: 1 ⭐ = {rate} запытаў",
-      gram_title: "💎 Gram (TON)", gram_hint: "Аплата токенам GRAM з кашалька TON — налічэнне аўтаматычна пасля пацверджання ў сетцы.",
-      gram_rate: "Курс: 1 GRAM = {rate} запытаў", gram_custom_ph: "GRAM", gram_buy: "Аплаціць",
-      gram_connect: "Падключыць кашалёк", gram_disconnect: "Адключыць", gram_connected: "Кашалёк: {addr}",
-      gram_check: "Праверыць аплату", gram_sent: "Адпраўлена! Правяраю аплату…", gram_paid: "Аплачана: +{n} запытаў",
-      gram_pending: "Платёж яшчэ не бачны ў сетцы — правер праз хвіліну", gram_cancel: "Аплата скасавана",
-      gram_off: "Аплата GRAM не наладжана", gram_soon: "Прыём GRAM часова недаступны — паспрабуй пазней",
+      support_title: "💎 Падтрымаць аўтара", support_short: "Падтрымаць",
+      support_hint: "Адпраў любую суму GRAM на кашалёк ніжэй — гэта падзяка аўтару. Запыты за донат не налічваюцца.",
+      support_address: "Кашалёк", support_comment: "Каментар да пераказу",
+      support_copy: "Капіяваць", support_copied: "Скапіявана",
+      support_note: "У кашальку выбірай токен GRAM, уставіўшы адрас і каментар — так аўтар убачыць, ад каго падтрымка.",
       paid: "Аплату атрымана, дзякуй!", pay_failed: "Аплата не прайшла", already_owned: "Ужо куплена",
       added: "Дададзена", limit_reached: "Дасягнута мяжа",
       tab_profile: "Профіль", profile_title: "Профіль",
@@ -347,12 +344,11 @@
       buy_balance: "Your balance: {n} requests", buy_packages: "Ready packages", pkg_requests: "requests",
       buy_custom: "Custom amount", buy_stars_ph: "Stars", buy_button: "Buy",
       buy_models: "AI models", buy_owned: "Owned", buy_rate: "Rate: 1 ⭐ = {rate} requests",
-      gram_title: "💎 Gram (TON)", gram_hint: "Pay with GRAM from a TON wallet — credited automatically once confirmed on-chain.",
-      gram_rate: "Rate: 1 GRAM = {rate} requests", gram_custom_ph: "GRAM", gram_buy: "Pay",
-      gram_connect: "Connect wallet", gram_disconnect: "Disconnect", gram_connected: "Wallet: {addr}",
-      gram_check: "Check payment", gram_sent: "Sent! Checking payment…", gram_paid: "Paid: +{n} requests",
-      gram_pending: "Payment is not visible on-chain yet — check in a minute", gram_cancel: "Payment cancelled",
-      gram_off: "GRAM payments are not configured", gram_soon: "GRAM payments are temporarily unavailable — try later",
+      support_title: "💎 Support the author", support_short: "Support",
+      support_hint: "Send any amount of GRAM to the wallet below — it is a thank-you to the author. Donations do not add requests.",
+      support_address: "Wallet", support_comment: "Transfer comment",
+      support_copy: "Copy", support_copied: "Copied",
+      support_note: "In your wallet pick the GRAM token, paste the address and the comment — that way the author sees who supported.",
       paid: "Payment received, thank you!", pay_failed: "Payment failed", already_owned: "Already owned",
       added: "Added", limit_reached: "Limit reached",
       tab_profile: "Profile", profile_title: "Profile",
@@ -400,7 +396,6 @@
     fatal: null,
     answerData: null,
     answerLoading: null,
-    tonWallet: null,
     _langReady: false
   };
 
@@ -802,6 +797,9 @@
       '<button class="quick" data-action="open" data-value="history"><span>💬</span>' + esc(t("history_title")) + "</button>" +
       (me.payments_enabled
         ? '<button class="quick" data-action="open" data-value="buy"><span>⭐</span>' + esc(t("tile_buy")) + "</button>"
+        : "") +
+      (me.support_enabled
+        ? '<button class="quick" data-action="open" data-value="buy" data-anchor="support-card"><span>💎</span>' + esc(t("support_short")) + "</button>"
         : "") +
       "</div>";
 
@@ -1498,36 +1496,25 @@
         }).join("") + "</div>"
       : "";
 
-    var gram = data.gram || {};
-    var gramBlock = "";
-    if (gram.enabled) {
-      var gpkgs = (gram.packages || []).map(function (p) {
-        return '<button class="pkg gram-pkg" data-action="gram-buy" data-requests="' + p.requests + '">' +
-          '<span class="pkg-num">' + esc(p.requests) + "</span>" +
-          '<span class="pkg-sub">' + esc(t("pkg_requests")) + "</span>" +
-          '<span class="pkg-star">' + esc(p.grams) + " GRAM</span></button>";
-      }).join("");
-      gramBlock =
-        "<h2>" + esc(t("gram_title")) + "</h2>" +
-        '<div class="card gram-card">' +
-        '<div class="gram-head"><span class="gram-chip">GRAM</span><span class="gram-net">TON</span>' +
-        '<span class="gram-state">' +
-        (state.tonWallet ? esc(t("gram_connected", { addr: shortAddress(state.tonWallet) })) : "") +
-        "</span></div>" +
-        '<div class="muted">' + esc(t("gram_hint")) + "</div>" +
-        '<div class="muted gram-rate">' + esc(t("gram_rate", { rate: gram.rate })) + "</div>" +
-        '<div class="pkgs gram-pkgs">' + gpkgs + "</div>" +
-        '<div class="field"><input class="input" id="buy-gram" type="number" step="0.01" min="' +
-        esc(gram.min) + '" max="' + esc(gram.max) + '" placeholder="' + esc(t("gram_custom_ph")) +
-        '"><button class="btn small" data-action="gram-custom">' + esc(t("gram_buy")) + "</button></div>" +
-        '<div class="gram-actions">' +
-        (state.tonWallet
-          ? '<button class="chip" data-action="gram-disconnect">' + esc(t("gram_disconnect")) + "</button>"
-          : '<button class="chip" data-action="gram-connect">' + esc(t("gram_connect")) + "</button>") +
-        (savedGramToken()
-          ? '<button class="chip" data-action="gram-check">' + esc(t("gram_check")) + "</button>"
-          : "") +
-        "</div></div>";
+    var support = data.support || {};
+    var supportBlock = "";
+    if (support.enabled) {
+      supportBlock =
+        "<h2>" + esc(t("support_title")) + "</h2>" +
+        '<div class="card support-card">' +
+        '<div class="support-head"><span class="support-chip">GRAM</span>' +
+        '<span class="support-net">TON</span></div>' +
+        '<div class="muted">' + esc(t("support_hint")) + "</div>" +
+        '<div class="support-row"><span class="support-k">' + esc(t("support_address")) + "</span>" +
+        '<code class="support-v" id="support-address">' + esc(support.wallet) + "</code>" +
+        '<button class="chip support-copy" data-action="support-copy" data-copy="' +
+        esc(support.wallet) + '">' + esc(t("support_copy")) + "</button></div>" +
+        '<div class="support-row"><span class="support-k">' + esc(t("support_comment")) + "</span>" +
+        '<code class="support-v support-memo" id="support-memo">' + esc(support.comment) + "</code>" +
+        '<button class="chip support-copy" data-action="support-copy" data-copy="' +
+        esc(support.comment) + '">' + esc(t("support_copy")) + "</button></div>" +
+        '<div class="support-note">💛 ' + esc(t("support_note")) + "</div>" +
+        "</div>";
     }
 
     var models = data.models.map(function (m) {
@@ -1552,11 +1539,16 @@
       '<div class="card"><div class="field"><input class="input" id="buy-stars" type="number" min="' +
       esc(data.min_stars) + '" max="' + esc(data.max_stars) + '" placeholder="' + esc(t("buy_stars_ph")) +
       '"><button class="btn small" data-action="buy-custom">' + esc(t("buy_button")) + "</button></div></div>" +
-      gramBlock +
+      supportBlock +
       (models ? "<h2>" + esc(t("buy_models")) + '</h2><div class="card">' + models + "</div>" : "");
 
-    // TON Connect сам восстановит прошлое подключение и дёрнет onStatusChange.
-    if (gram.enabled) tonConnectUI();
+    if (state.anchor) {
+      var target = view.querySelector("." + state.anchor);
+      state.anchor = null;
+      if (target) {
+        setTimeout(function () { target.scrollIntoView({ block: "center" }); }, 60);
+      }
+    }
   }
 
   function renderSubscription() {
@@ -1788,137 +1780,26 @@
       .then(render);
   }
 
-  // ---------------------------------------------------------------- оплата GRAM (TON)
-  function shortAddress(addr) {
-    var value = String(addr || "");
-    return value.length > 10 ? value.slice(0, 4) + "…" + value.slice(-4) : value;
-  }
-
-  function savedGramToken() {
-    try {
-      var raw = localStorage.getItem("gram_intent");
-      if (!raw) return "";
-      var saved = JSON.parse(raw);
-      if (!saved || !saved.token) return "";
-      if (saved.until && Date.now() > saved.until) {
-        localStorage.removeItem("gram_intent");
-        return "";
-      }
-      return saved.token;
-    } catch (e) { return ""; }
-  }
-
-  function saveGramToken(intent) {
-    try {
-      localStorage.setItem("gram_intent", JSON.stringify({
-        token: intent.token,
-        until: (intent.valid_until + 3600) * 1000
-      }));
-    } catch (e) {}
-  }
-
-  function clearGramToken() {
-    try { localStorage.removeItem("gram_intent"); } catch (e) {}
-  }
-
-  var tonUI = null;
-  var tonUIUrl = "";
-
-  function tonConnectUI() {
-    if (!window.TONConnectUI) return null;
-    var manifest = "tonconnect-manifest.json";
-    if (state.buy && state.buy.gram && state.buy.gram.manifest) manifest = state.buy.gram.manifest;
-    else if (location.protocol !== "file:") manifest = location.origin + "/app/tonconnect-manifest.json";
-    if (!tonUI || tonUIUrl !== manifest) {
+  // ---------------------------------------------------------------- поддержка автора
+  function copyText(text) {
+    function done() { toast(t("support_copied")); haptic("success"); }
+    function fallback() {
       try {
-        tonUI = new window.TONConnectUI({ manifestUrl: manifest });
-        tonUIUrl = manifest;
-        tonUI.onStatusChange(function (wallet) {
-          state.tonWallet = wallet ? wallet.address : null;
-          if (state.screen === "buy" && state.buy) renderBuy();
-        });
-      } catch (e) {
-        tonUI = null;
-        return null;
-      }
+        var area = document.createElement("textarea");
+        area.value = text;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.focus();
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+        done();
+      } catch (e) { toast(text); }
     }
-    return tonUI;
-  }
-
-  function connectGram() {
-    var ui = tonConnectUI();
-    if (!ui) { toast(t("gram_off")); return; }
-    haptic("light");
-    try { ui.openModal(); } catch (e) { toast(t("gram_off")); }
-  }
-
-  function disconnectGram() {
-    var ui = tonConnectUI();
-    if (ui) {
-      try { ui.disconnect(); } catch (e) {}
-    }
-    state.tonWallet = null;
-    renderBuy();
-  }
-
-  function buyGram(payload) {
-    var ui = tonConnectUI();
-    if (!ui) { toast(t("gram_off")); return; }
-    if (state._gramBusy) return;
-    state._gramBusy = true;
-    api("ton/intent", payload).then(function (intent) {
-      saveGramToken(intent);
-      haptic("light");
-      ui.sendTransaction({ validUntil: intent.valid_until, messages: intent.messages })
-        .then(function () {
-          state._gramBusy = false;
-          toast(t("gram_sent"));
-          haptic("success");
-          pollGram(intent.token, 0);
-        })
-        .catch(function (err) {
-          state._gramBusy = false;
-          var text = String((err && err.message) || err || "");
-          toast(/reject|cancel|declin|отмен/i.test(text) ? t("gram_cancel") : t("pay_failed"));
-          haptic("error");
-        });
-    }).catch(function (err) {
-      state._gramBusy = false;
-      var code = err.data && err.data.error;
-      toast(code === "ton_unavailable" ? t("gram_soon") : t("pay_failed"));
-      haptic("error");
-    });
-  }
-
-  function buyGramCustom() {
-    var grams = parseFloat(String(val("buy-gram")).replace(",", "."));
-    if (!grams || grams <= 0) { toast(t("pay_failed")); return; }
-    buyGram({ grams: grams });
-  }
-
-  function pollGram(token, tries) {
-    api("ton/check", { intent: token }).then(function (res) {
-      if (res.status === "paid") {
-        clearGramToken();
-        toast(t("gram_paid", { n: res.requests }));
-        haptic("success");
-        celebrate(document.querySelector(".gram-card"), true);
-        refreshBuy();
-        return;
-      }
-      if (tries >= 40) { toast(t("gram_pending")); return; }
-      setTimeout(function () { pollGram(token, tries + 1); }, 3000);
-    }).catch(function () {
-      if (tries >= 40) { toast(t("gram_pending")); return; }
-      setTimeout(function () { pollGram(token, tries + 1); }, 4000);
-    });
-  }
-
-  function checkGram() {
-    var token = savedGramToken();
-    if (!token) { toast(t("gram_pending")); return; }
-    toast(t("gram_sent"));
-    pollGram(token, 0);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else fallback();
   }
 
   // ---------------------------------------------------------------- события
@@ -1929,7 +1810,6 @@
     else if (id === "card-a") { event.preventDefault(); toolsAction({ action: "card.add", question: val("card-q"), answer: val("card-a") }, t("added")); }
     else if (id === "rem-dur") { event.preventDefault(); toolsAction({ action: "rem.add", text: val("rem-text"), duration: val("rem-dur") }, t("added")); }
     else if (id === "buy-stars") { event.preventDefault(); buyCustom(); }
-    else if (id === "buy-gram") { event.preventDefault(); buyGramCustom(); }
   }
 
   function buyCustom() {
@@ -1957,6 +1837,7 @@
       else if (value === "tasks" && state.tools === null) { render(); ensureTools(); }
       else render();
     } else if (action === "open") {
+      state.anchor = node.getAttribute("data-anchor") || null;
       openScreen(value);
     } else if (action === "back") {
       state.screen = null;
@@ -2006,16 +1887,8 @@
       });
     } else if (action === "buy-custom") {
       buyCustom();
-    } else if (action === "gram-buy") {
-      buyGram({ requests: parseInt(node.getAttribute("data-requests"), 10) });
-    } else if (action === "gram-custom") {
-      buyGramCustom();
-    } else if (action === "gram-connect") {
-      connectGram();
-    } else if (action === "gram-disconnect") {
-      disconnectGram();
-    } else if (action === "gram-check") {
-      checkGram();
+    } else if (action === "support-copy") {
+      copyText(node.getAttribute("data-copy") || "");
     } else if (action === "game-dice") {
       rollDice();
     } else if (action === "game-coin") {

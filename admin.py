@@ -173,8 +173,6 @@ async def render_payments(store: Store) -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"💎 Куплено подписок: <b>{stats['subs']}</b>")
     if stats.get("models"):
         lines.append(f"🧠 Открыто моделей: <b>{stats['models']}</b>")
-    if stats.get("grams"):
-        lines.append(f"🪙 Получено GRAM: <b>{float(stats['grams']):.2f}</b>")
     if stats.get("refunded"):
         lines.append(f"↩️ Возвращено платежей: {stats['refunded']}")
     if rows:
@@ -188,8 +186,6 @@ async def render_payments(store: Store) -> tuple[str, InlineKeyboardMarkup]:
                 what = f"💎 подписка за {row['stars']} ⭐"
             elif row.get("kind") == "model":
                 what = f"🧠 {escape(model_catalog.title(row.get('model')))} за {row['stars']} ⭐"
-            elif row.get("kind") == "gram":
-                what = f"🪙 +{row['requests']} за {float(row.get('gram') or 0):.2f} GRAM"
             else:
                 what = f"+{row['requests']} за {row['stars']} ⭐"
             lines.append(f"{what} — {escape(name)} {stamp}{refunded}".rstrip())
@@ -205,11 +201,7 @@ async def render_payments(store: Store) -> tuple[str, InlineKeyboardMarkup]:
                     else (
                         f"↩️ #{row['id']} · 🧠 {model_catalog.title(row.get('model'))} · {row['stars']} ⭐"
                         if row.get("kind") == "model"
-                        else (
-                            f"↩️ #{row['id']} · 🪙 {row['requests']} зап. · {float(row.get('gram') or 0):.2f} GRAM"
-                            if row.get("kind") == "gram"
-                            else f"↩️ #{row['id']} · {row['requests']} зап. · {row['stars']} ⭐"
-                        )
+                        else f"↩️ #{row['id']} · {row['requests']} зап. · {row['stars']} ⭐"
                     )
                 ),
                 callback_data=f"adm:refund:ask:{row['id']}",
@@ -866,7 +858,6 @@ async def cb_refund_ask(call: CallbackQuery, store: Store) -> None:
     name = f"@{card['username']}" if card.get("username") else str(user_id)
     is_sub = payment.get("kind") == "sub"
     is_model = payment.get("kind") == "model"
-    is_gram = payment.get("kind") == "gram"
     if is_sub:
         product = (
             f"💎 подписка на ИИ за <b>{payment['stars']}</b> ⭐ "
@@ -881,15 +872,6 @@ async def cb_refund_ask(call: CallbackQuery, store: Store) -> None:
         effect = (
             "Telegram вернёт звёзды пользователю, а доступ к модели закроется. "
             "Если она была выбрана, бот вернётся к общей модели."
-        )
-    elif is_gram:
-        product = (
-            f"🪙 <b>{payment['requests']}</b> запросов за "
-            f"<b>{float(payment.get('gram') or 0):.2f}</b> GRAM"
-        )
-        effect = (
-            "Автоматического возврата в блокчейне нет: GRAM придётся отправить вручную. "
-            "Бот спишет начисленные запросы."
         )
     else:
         product = f"<b>{payment['requests']}</b> запросов за <b>{payment['stars']}</b> ⭐"
@@ -907,7 +889,7 @@ async def cb_refund_ask(call: CallbackQuery, store: Store) -> None:
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="✅ Списать запросы" if is_gram else "✅ Вернуть звёзды",
+                        text="✅ Вернуть звёзды",
                         callback_data=f"adm:refund:do:{payment_id}",
                     )
                 ],
@@ -927,29 +909,6 @@ async def cb_refund_do(call: CallbackQuery, bot: Bot, store: Store) -> None:
         return
     if payment.get("refunded_at"):
         await call.answer("Этот платёж уже возвращён", show_alert=True)
-        return
-
-    is_gram = payment.get("kind") == "gram"
-    if is_gram:
-        # On-chain возврат бот сделать не может: админ отправляет GRAM вручную,
-        # а здесь только помечаем платёж и снимаем начисленные запросы.
-        refunded = await store.mark_payment_refunded(payment_id)
-        if not refunded:
-            await call.answer("Платёж уже был возвращён", show_alert=True)
-            return
-        balance = await store.add_bonus(payment["user_id"], -int(payment["requests"]))
-        with contextlib.suppress(TelegramAPIError):
-            await bot.send_message(
-                payment["user_id"],
-                f"↩️ <b>Возврат GRAM</b>\n\n"
-                f"Списано запросов: <b>{payment['requests']}</b>\n"
-                f"Остаток бонусных запросов: <b>{balance}</b>.\n"
-                "GRAM отправим на кошелёк, с которого была оплата.",
-            )
-        await call.answer("Запросы списаны, GRAM верните вручную ↩️")
-        text, kb = await render_payments(store)
-        with contextlib.suppress(TelegramAPIError):
-            await call.message.edit_text(text, reply_markup=kb)
         return
 
     try:

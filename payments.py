@@ -108,8 +108,8 @@ def buy_kb(runtime: Runtime, settings: Settings) -> InlineKeyboardMarkup:
         ]
         for requests, stars in runtime.star_packages
     ]
-    # GRAM принимаем только в мини-приложении: кошелёк открывается там.
-    if settings.gram_ready:
+    # Поддержка автора токеном GRAM — только в мини-приложении, там адрес и комментарий.
+    if settings.support_ready:
         try:
             from miniapp import webapp_url
 
@@ -121,7 +121,7 @@ def buy_kb(runtime: Runtime, settings: Settings) -> InlineKeyboardMarkup:
                 0,
                 [
                     InlineKeyboardButton(
-                        text="💎 Оплатить GRAM (TON)", web_app=WebAppInfo(url=url)
+                        text="💎 Поддержать автора", web_app=WebAppInfo(url=url)
                     )
                 ],
             )
@@ -147,9 +147,9 @@ async def render_buy(
         f"• <b>{requests}</b> запросов — <b>{stars}</b> ⭐"
         for requests, stars in runtime.star_packages
     )
-    gram_note = (
-        "\n💎 Ещё можно оплатить токеном <b>GRAM</b> в сети TON — кнопка ниже.\n"
-        if settings.gram_ready
+    support_note = (
+        "\n💎 Можно поддержать автора токеном <b>GRAM</b> — кнопка ниже.\n"
+        if settings.support_ready
         else ""
     )
     text = (
@@ -159,7 +159,7 @@ async def render_buy(
         f"{packages}\n\n"
         f"Или своя сумма: <b>1 ⭐ = {runtime.star_rate} запросов</b> "
         f"(от {MIN_STARS} до {MAX_STARS} ⭐).\n"
-        f"{gram_note}\n"
+        f"{support_note}\n"
         "Купленные запросы не сгорают и тратятся только после дневного лимита. "
         "Оплата проходит внутри Telegram — карта не нужна.\n\n"
         "<i>Оплачивая, ты принимаешь условия покупки.</i>"
