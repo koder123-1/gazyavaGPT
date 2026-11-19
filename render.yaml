@@ -61,6 +61,20 @@ services:
         value: "50:3,150:8,300:14"
       - key: STAR_RATE
         value: "10"
+
+      # --- оплата GRAM (TON): адреса задаются в дашборде Render ---
+      - key: GRAM_WALLET
+        sync: false
+      - key: GRAM_JETTON
+        sync: false
+      - key: GRAM_DECIMALS
+        value: "9"
+      - key: GRAM_RATE
+        value: "100"
+      - key: GRAM_PACKAGES
+        value: "50:0.5,150:1.5,300:2.5"
+      - key: TONAPI_KEY
+        sync: false
       - key: REQUIRED_CHANNEL
         value: gazyavaGPT
       - key: REQUIRED_CHANNEL_URL

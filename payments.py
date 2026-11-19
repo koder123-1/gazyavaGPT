@@ -18,6 +18,7 @@ from aiogram.types import (
     LabeledPrice,
     Message,
     PreCheckoutQuery,
+    WebAppInfo,
 )
 
 from config import Settings
@@ -107,6 +108,23 @@ def buy_kb(runtime: Runtime, settings: Settings) -> InlineKeyboardMarkup:
         ]
         for requests, stars in runtime.star_packages
     ]
+    # GRAM принимаем только в мини-приложении: кошелёк открывается там.
+    if settings.gram_ready:
+        try:
+            from miniapp import webapp_url
+
+            url = webapp_url(settings)
+        except Exception:  # noqa: BLE001 — без webhook кнопку некуда вести
+            url = ""
+        if url:
+            rows.insert(
+                0,
+                [
+                    InlineKeyboardButton(
+                        text="💎 Оплатить GRAM (TON)", web_app=WebAppInfo(url=url)
+                    )
+                ],
+            )
     rows.append(
         [InlineKeyboardButton(text="✏️ Своё количество звёзд", callback_data="pay:custom")]
     )
@@ -129,13 +147,19 @@ async def render_buy(
         f"• <b>{requests}</b> запросов — <b>{stars}</b> ⭐"
         for requests, stars in runtime.star_packages
     )
+    gram_note = (
+        "\n💎 Ещё можно оплатить токеном <b>GRAM</b> в сети TON — кнопка ниже.\n"
+        if settings.gram_ready
+        else ""
+    )
     text = (
         "⭐ <b>Пополнение запросов</b>\n\n"
         f"Твой запас: <b>{bonus}</b> дополнительных запросов.\n\n"
         "Готовые наборы (выгоднее курса):\n"
         f"{packages}\n\n"
         f"Или своя сумма: <b>1 ⭐ = {runtime.star_rate} запросов</b> "
-        f"(от {MIN_STARS} до {MAX_STARS} ⭐).\n\n"
+        f"(от {MIN_STARS} до {MAX_STARS} ⭐).\n"
+        f"{gram_note}\n"
         "Купленные запросы не сгорают и тратятся только после дневного лимита. "
         "Оплата проходит внутри Telegram — карта не нужна.\n\n"
         "<i>Оплачивая, ты принимаешь условия покупки.</i>"

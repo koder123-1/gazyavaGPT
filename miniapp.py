@@ -15,13 +15,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
+from decimal import Decimal
+from html import escape
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl
 
+import aiohttp
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import LabeledPrice
@@ -32,6 +36,7 @@ import models as model_catalog
 import payments
 import reminders
 import styles as style_catalog
+import tonpay
 import toolbox
 from config import Settings
 from i18n import LANGS, normalize_lang
@@ -152,6 +157,14 @@ async def _gate(request: web.Request, user_id: int) -> web.Response | None:
 
 def _lang_of(value: str | None, settings: Settings) -> str:
     return normalize_lang(value, settings.default_lang)
+
+
+def _manifest_url(request: web.Request, settings: Settings) -> str:
+    """Публичный URL манифеста TON Connect (нужен для кошельков)."""
+    base = (settings.base_url or "").rstrip("/")
+    if not base:
+        base = f"{request.scheme}://{request.host}"
+    return f"{base}/app/tonconnect-manifest.json"
 
 
 # --------------------------------------------------------------------------- обработчики
@@ -510,6 +523,17 @@ async def api_buy(request: web.Request) -> web.Response:
         for item in model_catalog.CATALOG
         if item.stars > 0
     ]
+    gram = {
+        "enabled": settings.gram_ready,
+        "rate": settings.gram_rate,
+        "min": str(tonpay.MIN_GRAMS),
+        "max": str(tonpay.MAX_GRAMS),
+        "packages": [
+            {"requests": int(requests), "grams": f"{Decimal(grams):.2f}"}
+            for requests, grams in settings.gram_packages
+        ],
+        "manifest": _manifest_url(request, settings),
+    }
     return web.json_response(
         {
             "enabled": settings.payments_enabled,
@@ -522,6 +546,7 @@ async def api_buy(request: web.Request) -> web.Response:
             ],
             "bonus": await store.bonus_requests(user_id),
             "models": models,
+            "gram": gram,
         }
     )
 
@@ -590,6 +615,140 @@ async def api_invoice(request: web.Request) -> web.Response:
     return web.json_response({"url": url})
 
 
+# --------------------------------------------------------------------------- GRAM (TON)
+_TON_CHECK_AT: dict[str, float] = {}
+
+
+async def api_ton_manifest(request: web.Request) -> web.Response:
+    """Манифест TON Connect: имя приложения и иконка для окна кошелька."""
+    settings: Settings = request.app["miniapp_settings"]
+    base = (settings.base_url or "").rstrip("/") or f"{request.scheme}://{request.host}"
+    return web.json_response(
+        {
+            "url": f"{base}/app",
+            "name": settings.bot_name,
+            "iconUrl": f"{base}/app/assets/icon-192.png",
+        },
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
+async def api_ton_intent(request: web.Request) -> web.Response:
+    """Готовит jetton-перевод GRAM: адрес, тело и подписанное намерение."""
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+    if not settings.gram_ready:
+        return web.json_response({"error": "gram_disabled"}, status=403)
+
+    body = await _read_body(request)
+    offer = tonpay.parse_offer(settings, requests=body.get("requests"), grams=body.get("grams"))
+    if offer is None:
+        return web.json_response({"error": "bad_offer"}, status=400)
+    requests_count, grams = offer
+    try:
+        async with aiohttp.ClientSession() as session:
+            intent = await tonpay.create_intent(
+                session,
+                settings,
+                user_id=user_id,
+                requests=requests_count,
+                grams=grams,
+            )
+    except tonpay.TonApiError as exc:
+        log.warning("Mini App: GRAM-счёт недоступен для %s: %s", user_id, exc)
+        return web.json_response({"error": "ton_unavailable"}, status=502)
+    return web.json_response(intent)
+
+
+async def api_ton_check(request: web.Request) -> web.Response:
+    """Проверяет оплату GRAM по комментарию и начисляет запросы один раз."""
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    bot: Bot = request.app["miniapp_bot"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+
+    body = await _read_body(request)
+    token = str(body.get("intent") or "")
+    payload = tonpay.verify_intent(settings.bot_token, token, user_id)
+    if payload is None:
+        return web.json_response({"error": "bad_intent"}, status=400)
+
+    memo = str(payload.get("m") or "")
+    expected = int(payload.get("n") or 0)
+    requests_count = int(payload.get("r") or 0)
+    grams = Decimal(str(payload.get("g") or "0"))
+    issued = int(payload.get("iat") or 0)
+
+    # Не дёргаем TonAPI чаще, чем раз в 3 секунды на одно намерение.
+    now = time.time()
+    if now - _TON_CHECK_AT.get(token, 0) < 3:
+        return web.json_response({"status": "pending"})
+    _TON_CHECK_AT[token] = now
+    if len(_TON_CHECK_AT) > 500:
+        _TON_CHECK_AT.clear()
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            found = await tonpay.find_incoming_transfer(
+                session,
+                settings,
+                memo=memo,
+                expected_nano=expected,
+                since=issued,
+            )
+    except tonpay.TonApiError as exc:
+        log.warning("Mini App: TonAPI не ответил для %s: %s", user_id, exc)
+        return web.json_response({"error": "ton_unavailable"}, status=502)
+
+    if found is None:
+        return web.json_response({"status": "pending"})
+
+    charge_id = f"ton:{found['event_id']}"
+    credited = await store.record_payment(
+        user_id,
+        requests_count,
+        0,
+        charge_id,
+        kind="gram",
+        gram=float(grams),
+    )
+    bonus = await store.bonus_requests(user_id)
+    if credited:
+        log.info("GRAM: %s купил %s запросов за %s GRAM", user_id, requests_count, grams)
+        with contextlib.suppress(Exception):
+            await payments.notify_admins(
+                bot,
+                f"💎 <b>Оплата GRAM</b>\n"
+                f"Пользователь: <code>{user_id}</code>\n"
+                f"Пакет: {requests_count} запросов за {grams:.2f} GRAM\n"
+                f"Tx: <code>{escape(found['event_id'])}</code>",
+                store,
+                settings,
+            )
+    return web.json_response(
+        {
+            "status": "paid",
+            "requests": requests_count,
+            "grams": f"{grams:.2f}",
+            "bonus": bonus,
+            "credited": credited,
+        }
+    )
+
+
 # --------------------------------------------------------------------------- подключение
 def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> None:
     """Вешает маршруты Mini App на уже существующее приложение."""
@@ -613,4 +772,7 @@ def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> N
     app.router.add_post("/app/api/tools", api_tools)
     app.router.add_post("/app/api/buy", api_buy)
     app.router.add_post("/app/api/invoice", api_invoice)
+    app.router.add_post("/app/api/ton/intent", api_ton_intent)
+    app.router.add_post("/app/api/ton/check", api_ton_check)
+    app.router.add_get("/app/tonconnect-manifest.json", api_ton_manifest)
     app.router.add_post("/app/api/answer", api_answer)
