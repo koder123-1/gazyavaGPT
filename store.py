@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections import defaultdict, deque
 from datetime import UTC, date, datetime, timedelta
 from typing import Protocol
@@ -11,6 +12,18 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from config import Settings
 
 log = logging.getLogger("store")
+
+
+PROMO_CODE_RE = re.compile(r"^[A-Z0-9_-]{3,32}$")
+
+
+def normalize_promo(code: str | None) -> str:
+    """Промокоды нечувствительны к регистру и пробелам по краям."""
+    return (code or "").strip().upper()
+
+
+def valid_promo(code: str | None) -> bool:
+    return bool(PROMO_CODE_RE.match(normalize_promo(code)))
 
 
 class Store(Protocol):
@@ -152,6 +165,22 @@ class Store(Protocol):
     async def cancel_giveaway(self, giveaway_id: int) -> bool: ...
     async def giveaways_stats(self) -> dict[str, int]: ...
 
+    # ------------------------------------------------------------- промокоды
+    async def create_promo(
+        self,
+        code: str,
+        requests: int,
+        image_credits: int,
+        max_uses: int,
+        expires_at: datetime | None,
+        created_by: int = 0,
+    ) -> bool: ...
+    async def get_promo(self, code: str) -> dict | None: ...
+    async def list_promos(self, limit: int = 20) -> list[dict]: ...
+    async def delete_promo(self, code: str) -> bool: ...
+    async def promo_stats(self) -> dict[str, int]: ...
+    async def redeem_promo(self, code: str, user_id: int) -> dict: ...
+
 
 # --------------------------------------------------------------------------- память
 class MemoryStore:
@@ -176,6 +205,8 @@ class MemoryStore:
         self._ticket_msgs: dict[int, list[dict]] = {}
         self._giveaways: dict[int, dict] = {}
         self._giveaway_entries: dict[int, dict[int, dict]] = {}
+        self._promos: dict[str, dict] = {}
+        self._promo_uses: dict[str, set[int]] = {}
         self._referrals: dict[int, dict] = {}
         self._seq = 0
         self._exchange_seq = 0
@@ -988,6 +1019,84 @@ class MemoryStore:
             "cancelled": len(rows) - active - finished,
             "total": len(rows),
         }
+
+    # ------------------------------------------------------------- промокоды
+    async def create_promo(
+        self,
+        code: str,
+        requests: int,
+        image_credits: int,
+        max_uses: int,
+        expires_at: datetime | None,
+        created_by: int = 0,
+    ) -> bool:
+        key = normalize_promo(code)
+        if not key or key in self._promos:
+            return False
+        self._promos[key] = {
+            "code": key,
+            "requests": max(0, int(requests)),
+            "image_credits": max(0, int(image_credits)),
+            "max_uses": max(0, int(max_uses)),
+            "uses": 0,
+            "expires_at": expires_at,
+            "active": True,
+            "created_by": created_by,
+            "created_at": datetime.now(UTC),
+        }
+        self._promo_uses[key] = set()
+        return True
+
+    async def get_promo(self, code: str) -> dict | None:
+        promo = self._promos.get(normalize_promo(code))
+        return dict(promo) if promo is not None else None
+
+    async def list_promos(self, limit: int = 20) -> list[dict]:
+        rows = sorted(
+            self._promos.values(), key=lambda p: p["created_at"], reverse=True
+        )
+        return [dict(p) for p in rows[: max(1, limit)]]
+
+    async def delete_promo(self, code: str) -> bool:
+        key = normalize_promo(code)
+        self._promo_uses.pop(key, None)
+        return self._promos.pop(key, None) is not None
+
+    async def promo_stats(self) -> dict[str, int]:
+        now = datetime.now(UTC)
+        rows = list(self._promos.values())
+        active = sum(
+            1
+            for p in rows
+            if p["active"] and (p["expires_at"] is None or p["expires_at"] > now)
+        )
+        return {
+            "total": len(rows),
+            "active": active,
+            "uses": sum(int(p["uses"]) for p in rows),
+        }
+
+    async def redeem_promo(self, code: str, user_id: int) -> dict:
+        key = normalize_promo(code)
+        promo = self._promos.get(key)
+        if promo is None:
+            return {"status": "not_found"}
+        if not promo["active"]:
+            return {"status": "inactive"}
+        if promo["expires_at"] is not None and promo["expires_at"] <= datetime.now(UTC):
+            return {"status": "expired"}
+        if promo["max_uses"] > 0 and promo["uses"] >= promo["max_uses"]:
+            return {"status": "exhausted"}
+        used = self._promo_uses.setdefault(key, set())
+        if user_id in used:
+            return {"status": "used"}
+        used.add(user_id)
+        promo["uses"] = int(promo["uses"]) + 1
+        if promo["requests"]:
+            await self.add_bonus(user_id, int(promo["requests"]))
+        if promo["image_credits"]:
+            await self.add_image_credits(user_id, int(promo["image_credits"]))
+        return {"status": "ok", "promo": dict(promo)}
 
 
 # --------------------------------------------------------------------------- postgres
@@ -2315,6 +2424,131 @@ class PostgresStore:
         )
         return {k: int(row[k] or 0) for k in ("active", "finished", "cancelled", "total")}
 
+    # ------------------------------------------------------------- промокоды
+    async def create_promo(
+        self,
+        code: str,
+        requests: int,
+        image_credits: int,
+        max_uses: int,
+        expires_at: datetime | None,
+        created_by: int = 0,
+    ) -> bool:
+        assert self._pool is not None
+        row = await self._pool.fetchval(
+            """
+            INSERT INTO promo_codes
+                (code, requests, image_credits, max_uses, expires_at, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (code) DO NOTHING
+            RETURNING code
+            """,
+            normalize_promo(code),
+            max(0, int(requests)),
+            max(0, int(image_credits)),
+            max(0, int(max_uses)),
+            expires_at,
+            created_by,
+        )
+        return row is not None
+
+    async def get_promo(self, code: str) -> dict | None:
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            "SELECT * FROM promo_codes WHERE code = $1", normalize_promo(code)
+        )
+        return dict(row) if row else None
+
+    async def list_promos(self, limit: int = 20) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            "SELECT * FROM promo_codes ORDER BY created_at DESC LIMIT $1",
+            max(1, limit),
+        )
+        return [dict(r) for r in rows]
+
+    async def delete_promo(self, code: str) -> bool:
+        assert self._pool is not None
+        row = await self._pool.fetchval(
+            "DELETE FROM promo_codes WHERE code = $1 RETURNING code",
+            normalize_promo(code),
+        )
+        return row is not None
+
+    async def promo_stats(self) -> dict[str, int]:
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            """
+            SELECT count(*) AS total,
+                   count(*) FILTER (
+                       WHERE active AND (expires_at IS NULL OR expires_at > now())
+                   ) AS active,
+                   COALESCE(sum(uses), 0) AS uses
+            FROM promo_codes
+            """
+        )
+        return {k: int(row[k] or 0) for k in ("total", "active", "uses")}
+
+    async def redeem_promo(self, code: str, user_id: int) -> dict:
+        assert self._pool is not None
+        key = normalize_promo(code)
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    "SELECT * FROM promo_codes WHERE code = $1 FOR UPDATE", key
+                )
+                if row is None:
+                    return {"status": "not_found"}
+                if not row["active"]:
+                    return {"status": "inactive"}
+                if row["expires_at"] is not None and row["expires_at"] <= datetime.now(UTC):
+                    return {"status": "expired"}
+                if row["max_uses"] > 0 and row["uses"] >= row["max_uses"]:
+                    return {"status": "exhausted"}
+                inserted = await conn.fetchval(
+                    """
+                    INSERT INTO promo_uses (code, user_id) VALUES ($1, $2)
+                    ON CONFLICT (code, user_id) DO NOTHING
+                    RETURNING user_id
+                    """,
+                    key,
+                    user_id,
+                )
+                if inserted is None:
+                    return {"status": "used"}
+                await conn.execute(
+                    "UPDATE promo_codes SET uses = uses + 1 WHERE code = $1", key
+                )
+                if row["requests"]:
+                    await conn.execute(
+                        """
+                        INSERT INTO users (user_id, bonus_requests)
+                        VALUES ($1, GREATEST(0, $2))
+                        ON CONFLICT (user_id) DO UPDATE
+                           SET bonus_requests = GREATEST(
+                               0, users.bonus_requests + $2
+                           )
+                        """,
+                        user_id,
+                        int(row["requests"]),
+                    )
+                if row["image_credits"]:
+                    await conn.execute(
+                        """
+                        INSERT INTO users (user_id, image_credits)
+                        VALUES ($1, GREATEST(0, $2))
+                        ON CONFLICT (user_id) DO UPDATE
+                           SET image_credits = GREATEST(
+                               0, users.image_credits + $2
+                           )
+                        """,
+                        user_id,
+                        int(row["image_credits"]),
+                    )
+                promo = dict(row)
+                promo["uses"] = int(row["uses"]) + 1
+                return {"status": "ok", "promo": promo}
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -2479,6 +2713,27 @@ CREATE TABLE IF NOT EXISTS giveaway_entries (
 );
 
 CREATE INDEX IF NOT EXISTS giveaway_entries_user_idx ON giveaway_entries (user_id);
+
+CREATE TABLE IF NOT EXISTS promo_codes (
+    code          TEXT PRIMARY KEY,
+    requests      INTEGER NOT NULL DEFAULT 0,
+    image_credits INTEGER NOT NULL DEFAULT 0,
+    max_uses      INTEGER NOT NULL DEFAULT 0,
+    uses          INTEGER NOT NULL DEFAULT 0,
+    expires_at    TIMESTAMPTZ,
+    active        BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by    BIGINT NOT NULL DEFAULT 0,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS promo_uses (
+    code    TEXT NOT NULL REFERENCES promo_codes(code) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL,
+    used_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (code, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS promo_uses_user_idx ON promo_uses (user_id);
 """
 
 

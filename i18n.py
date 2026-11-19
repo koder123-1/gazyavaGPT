@@ -441,6 +441,12 @@ TR: dict[str, dict[str, str]] = {
         "be": "🎁 Бонус дня",
         "en": "🎁 Daily bonus",
     },
+    "menu.promo": {
+        "ru": "🎟 Промокод",
+        "uk": "🎟 Промокод",
+        "be": "🎟 Промокод",
+        "en": "🎟 Promo code",
+    },
     "menu.invite": {
         "ru": "👥 Пригласить друга",
         "uk": "👥 Запросити друга",
@@ -512,6 +518,114 @@ TR: dict[str, dict[str, str]] = {
         "uk": "🎁 Бонус дня видається в особистих. Напиши мені: @{username}",
         "be": "🎁 Бонус дня выдаецца ў асабістых. Напішы мне: @{username}",
         "en": "🎁 The daily bonus is given in private. Message me: @{username}",
+    },
+    "promo.ask": {
+        "ru": "🎟 Пришли промокод одним сообщением — активирую.\n/cancel — отмена.",
+        "uk": "🎟 Надішли промокод одним повідомленням — активую.\n/cancel — скасування.",
+        "be": "🎟 Дашлі промокод адным паведамленнем — актывую.\n/cancel — адмена.",
+        "en": "🎟 Send the promo code in one message — I'll activate it.\n/cancel — cancel.",
+    },
+    "promo.private": {
+        "ru": "🎟 Промокод активируется в личке. Напиши мне: @{username}",
+        "uk": "🎟 Промокод активується в особистих. Напиши мені: @{username}",
+        "be": "🎟 Промокод актывуецца ў асабістых. Напішы мне: @{username}",
+        "en": "🎟 Promo codes are activated in private. Message me: @{username}",
+    },
+    "promo.ok_requests": {
+        "ru": (
+            "🎉 Промокод <code>{code}</code> активирован!\n"
+            "Начислено запросов: <b>+{requests}</b>.\n"
+            "Твой запас бонусных запросов: <b>{balance}</b>."
+        ),
+        "uk": (
+            "🎉 Промокод <code>{code}</code> активовано!\n"
+            "Нараховано запитів: <b>+{requests}</b>.\n"
+            "Твій запас бонусних запитів: <b>{balance}</b>."
+        ),
+        "be": (
+            "🎉 Промокод <code>{code}</code> актываваны!\n"
+            "Налічана запытаў: <b>+{requests}</b>.\n"
+            "Твой запас бонусных запытаў: <b>{balance}</b>."
+        ),
+        "en": (
+            "🎉 Promo code <code>{code}</code> activated!\n"
+            "Requests added: <b>+{requests}</b>.\n"
+            "Your bonus requests: <b>{balance}</b>."
+        ),
+    },
+    "promo.ok_images": {
+        "ru": (
+            "🎉 Промокод <code>{code}</code> активирован!\n"
+            "Начислено генераций картинок: <b>+{images}</b>.\n"
+            "Твой запас генераций: <b>{image_balance}</b>."
+        ),
+        "uk": (
+            "🎉 Промокод <code>{code}</code> активовано!\n"
+            "Нараховано генерацій зображень: <b>+{images}</b>.\n"
+            "Твій запас генерацій: <b>{image_balance}</b>."
+        ),
+        "be": (
+            "🎉 Промокод <code>{code}</code> актываваны!\n"
+            "Налічана генерацый малюнкаў: <b>+{images}</b>.\n"
+            "Твой запас генерацый: <b>{image_balance}</b>."
+        ),
+        "en": (
+            "🎉 Promo code <code>{code}</code> activated!\n"
+            "Image generations added: <b>+{images}</b>.\n"
+            "Your image credits: <b>{image_balance}</b>."
+        ),
+    },
+    "promo.ok_both": {
+        "ru": (
+            "🎉 Промокод <code>{code}</code> активирован!\n"
+            "Начислено: <b>+{requests}</b> запросов и <b>+{images}</b> генераций картинок.\n"
+            "Твой запас: <b>{balance}</b> запросов · <b>{image_balance}</b> генераций."
+        ),
+        "uk": (
+            "🎉 Промокод <code>{code}</code> активовано!\n"
+            "Нараховано: <b>+{requests}</b> запитів і <b>+{images}</b> генерацій зображень.\n"
+            "Твій запас: <b>{balance}</b> запитів · <b>{image_balance}</b> генерацій."
+        ),
+        "be": (
+            "🎉 Промокод <code>{code}</code> актываваны!\n"
+            "Налічана: <b>+{requests}</b> запытаў і <b>+{images}</b> генерацый малюнкаў.\n"
+            "Твой запас: <b>{balance}</b> запытаў · <b>{image_balance}</b> генерацый."
+        ),
+        "en": (
+            "🎉 Promo code <code>{code}</code> activated!\n"
+            "Added: <b>+{requests}</b> requests and <b>+{images}</b> image generations.\n"
+            "Your balance: <b>{balance}</b> requests · <b>{image_balance}</b> generations."
+        ),
+    },
+    "promo.not_found": {
+        "ru": "❌ Такого промокода нет. Проверь написание и попробуй снова.",
+        "uk": "❌ Такого промокоду немає. Перевір написання і спробуй ще раз.",
+        "be": "❌ Такога промокода няма. Правер напісанне і паспрабуй яшчэ раз.",
+        "en": "❌ No such promo code. Check the spelling and try again.",
+    },
+    "promo.used": {
+        "ru": "😉 Ты уже активировал этот промокод.",
+        "uk": "😉 Ти вже активував цей промокод.",
+        "be": "😉 Ты ўжо актываваў гэты промокод.",
+        "en": "😉 You have already activated this promo code.",
+    },
+    "promo.expired": {
+        "ru": "⌛ Срок действия промокода истёк.",
+        "uk": "⌛ Термін дії промокоду минув.",
+        "be": "⌛ Тэрмін дзеяння промокода скончыўся.",
+        "en": "⌛ This promo code has expired.",
+    },
+    "promo.exhausted": {
+        "ru": "😔 Промокод уже разобрали — лимит активаций закончился.",
+        "uk": "😔 Промокод уже розібрали — ліміт активацій вичерпано.",
+        "be": "😔 Промокод ужо разабралі — ліміт актывацый скончыўся.",
+        "en": "😔 This promo code is used up — activation limit reached.",
+    },
+    "promo.inactive": {
+        "ru": "🚫 Промокод отключён.",
+        "uk": "🚫 Промокод вимкнено.",
+        "be": "🚫 Промокод адключаны.",
+        "en": "🚫 This promo code is disabled.",
     },
     "invite.card": {
         "ru": (

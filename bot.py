@@ -75,6 +75,7 @@ COMMANDS = [
     BotCommand(command="tickets", description="Мои обращения и тикеты"),
     BotCommand(command="paysupport", description="Поддержка по оплате"),
     BotCommand(command="bonus", description="Бонус дня за ежедневный вход"),
+    BotCommand(command="promo", description="Активировать промокод"),
     BotCommand(command="invite", description="Пригласить друга и получить запросы"),
     BotCommand(command="me", description="Мой ID и остаток лимита"),
     BotCommand(command="tools", description="Все быстрые команды"),

@@ -273,6 +273,38 @@ async def api_bonus(request: web.Request) -> web.Response:
     )
 
 
+async def api_promo(request: web.Request) -> web.Response:
+    """Активация промокода из Mini App: начисляет запросы и/или генерации."""
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user = data["user"]
+    user_id = int(user["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+    body = await _read_body(request)
+    code = str(body.get("code") or "").strip().upper()
+    if not code:
+        return web.json_response({"ok": False, "status": "empty"})
+    await store.ensure_user(user_id, user.get("username"), user.get("first_name"))
+    result = await store.redeem_promo(code, user_id)
+    status = str(result.get("status") or "not_found")
+    promo = result.get("promo") or {}
+    return web.json_response(
+        {
+            "ok": status == "ok",
+            "status": status,
+            "requests": int(promo.get("requests") or 0),
+            "image_credits": int(promo.get("image_credits") or 0),
+            "balance": int(await store.bonus_requests(user_id)),
+            "image_balance": int(await store.image_credits(user_id)),
+        }
+    )
+
+
 async def api_settings(request: web.Request) -> web.Response:
     settings: Settings = request.app["miniapp_settings"]
     store: Store = request.app["miniapp_store"]
@@ -614,6 +646,7 @@ def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> N
         app.router.add_static("/app/assets/", BASE_DIR, name="miniapp")
     app.router.add_post("/app/api/me", api_me)
     app.router.add_post("/app/api/bonus", api_bonus)
+    app.router.add_post("/app/api/promo", api_promo)
     app.router.add_post("/app/api/settings", api_settings)
     app.router.add_post("/app/api/top", api_top)
     app.router.add_post("/app/api/history", api_history)

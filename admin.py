@@ -10,6 +10,7 @@ import platform
 import random
 import re
 import time
+from datetime import UTC, datetime, timedelta
 from html import escape
 
 from aiogram import Bot, F, Router
@@ -39,7 +40,7 @@ from roles import (
     role_title,
 )
 from runtime import EDITABLE, load_runtime
-from store import Store
+from store import Store, valid_promo
 
 log = logging.getLogger("admin")
 PAGE = 5
@@ -61,6 +62,10 @@ class Panel(StatesGroup):
     channel_add = State()
     channel_text = State()
     channel_button = State()
+    promo_code = State()
+    promo_reward = State()
+    promo_uses = State()
+    promo_days = State()
 
 
 # --------------------------------------------------------------------------- клавиатуры
@@ -81,6 +86,9 @@ def main_kb(role: str | None = ROLE_ADMIN) -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="🎫 Тикеты", callback_data="tick:list:0"),
             InlineKeyboardButton(text="⭐ Платежи", callback_data="adm:payments"),
+        ],
+        [
+            InlineKeyboardButton(text="🎟 Промокоды", callback_data="adm:promo"),
         ],
         [
             InlineKeyboardButton(text="🔍 Найти по ID", callback_data="adm:find"),
@@ -211,6 +219,59 @@ async def render_payments(store: Store) -> tuple[str, InlineKeyboardMarkup]:
         if not row.get("refunded_at")
     ]
     buttons.append([InlineKeyboardButton(text="🔄 Обновить", callback_data="adm:payments")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:main")])
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def promo_line(promo: dict) -> str:
+    """Строка списка промокодов: награда, лимит и срок."""
+    reward: list[str] = []
+    if int(promo.get("requests") or 0):
+        reward.append(f"+{int(promo['requests'])} запросов")
+    if int(promo.get("image_credits") or 0):
+        reward.append(f"+{int(promo['image_credits'])} 🖼")
+    what = " и ".join(reward) or "без награды"
+    limit = "∞" if not int(promo.get("max_uses") or 0) else str(int(promo["max_uses"]))
+    line = (
+        f"<code>{escape(str(promo['code']))}</code> — {what} · "
+        f"{int(promo.get('uses') or 0)}/{limit}"
+    )
+    expires = promo.get("expires_at")
+    if expires is None:
+        line += " · бессрочный"
+    elif expires <= datetime.now(UTC):
+        line += f" · истёк {expires.strftime('%d.%m.%Y')}"
+    else:
+        line += f" · до {expires.strftime('%d.%m.%Y')}"
+    return line
+
+
+async def render_promos(
+    store: Store, limit: int = 10
+) -> tuple[str, InlineKeyboardMarkup]:
+    stats = await store.promo_stats()
+    rows = await store.list_promos(limit)
+    lines = [
+        "🎟 <b>Промокоды</b>\n",
+        f"Всего: <b>{stats['total']}</b> · активных: <b>{stats['active']}</b> · "
+        f"активаций: <b>{stats['uses']}</b>",
+    ]
+    if rows:
+        lines.append("")
+        lines += [f"{i}. {promo_line(p)}" for i, p in enumerate(rows, 1)]
+    else:
+        lines.append("\nПромокодов пока нет. Создай первый кнопкой ниже.")
+    buttons = [[InlineKeyboardButton(text="➕ Создать промокод", callback_data="adm:promo:new")]]
+    for promo in rows[:8]:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"🗑 {promo['code']}",
+                    callback_data=f"adm:promo:del:{promo['code']}",
+                )
+            ]
+        )
+    buttons.append([InlineKeyboardButton(text="🔄 Обновить", callback_data="adm:promo")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:main")])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -840,6 +901,177 @@ async def cb_payments(call: CallbackQuery, store: Store) -> None:
     with contextlib.suppress(TelegramAPIError):
         await call.message.edit_text(text, reply_markup=kb)
     await call.answer()
+
+
+@router.callback_query(F.data == "adm:promo")
+async def cb_promos(
+    call: CallbackQuery, store: Store, state: FSMContext
+) -> None:
+    await state.clear()
+    text, kb = await render_promos(store)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+
+@router.callback_query(F.data == "adm:promo:new")
+async def cb_promo_new(call: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(Panel.promo_code)
+    await state.update_data(promo_draft={})
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(
+            "🎟 <b>Новый промокод</b>\n\n"
+            "Шаг 1 из 4. Пришли код: 3–32 символа, латиница, цифры, "
+            "<code>_</code> и <code>-</code>.\n"
+            "Например: <code>WELCOME50</code>.\n/cancel — отмена.",
+            reply_markup=back_kb("adm:promo"),
+        )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("adm:promo:del:"))
+async def cb_promo_delete(
+    call: CallbackQuery, store: Store, state: FSMContext
+) -> None:
+    code = call.data.rsplit(":", 1)[-1]
+    removed = await store.delete_promo(code)
+    await state.clear()
+    text, kb = await render_promos(store)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer("Удалён" if removed else "Не найден")
+
+
+@router.message(Panel.promo_code, F.text, ~Command("cancel"))
+async def on_promo_code(message: Message, store: Store, state: FSMContext) -> None:
+    code = (message.text or "").strip().upper()
+    if not valid_promo(code):
+        await message.answer(
+            "Код: 3–32 символа, латиница, цифры, <code>_</code> и <code>-</code>. "
+            "Попробуй ещё раз или /cancel."
+        )
+        return
+    if await store.get_promo(code):
+        await message.answer("Такой промокод уже есть. Пришли другой код.")
+        return
+    data = await state.get_data()
+    draft = dict(data.get("promo_draft") or {})
+    draft["code"] = code
+    await state.update_data(promo_draft=draft)
+    await state.set_state(Panel.promo_reward)
+    await message.answer(
+        f"Код: <code>{escape(code)}</code>\n\n"
+        "Шаг 2 из 4. Что выдаёт код?\n"
+        "• <code>50</code> — 50 запросов\n"
+        "• <code>50+5</code> — 50 запросов и 5 генераций картинок\n"
+        "• <code>0+3</code> — только 3 генерации картинок\n/cancel — отмена."
+    )
+
+
+@router.message(Panel.promo_reward, F.text, ~Command("cancel"))
+async def on_promo_reward(message: Message, state: FSMContext) -> None:
+    raw = (message.text or "").strip().replace(" ", "")
+    match = re.fullmatch(r"(\d{1,6})(?:\+(\d{1,5}))?", raw)
+    if not match:
+        await message.answer(
+            "Формат: <code>50</code> или <code>50+5</code>. Попробуй ещё раз."
+        )
+        return
+    requests = int(match.group(1))
+    images = int(match.group(2) or 0)
+    if requests == 0 and images == 0:
+        await message.answer("Нужна хотя бы одна награда: запросы или картинки.")
+        return
+    if requests > 100_000 or images > 10_000:
+        await message.answer("Слишком много: до 100000 запросов и до 10000 картинок.")
+        return
+    data = await state.get_data()
+    draft = dict(data.get("promo_draft") or {})
+    draft.update({"requests": requests, "image_credits": images})
+    await state.update_data(promo_draft=draft)
+    await state.set_state(Panel.promo_uses)
+    await message.answer(
+        "Шаг 3 из 4. Сколько раз можно активировать код?\n"
+        "Пришли число: <code>1</code> — только один пользователь, "
+        "<code>100</code> — сто активаций, <code>0</code> — без ограничений.\n"
+        "/cancel — отмена."
+    )
+
+
+@router.message(Panel.promo_uses, F.text, ~Command("cancel"))
+async def on_promo_uses(message: Message, state: FSMContext) -> None:
+    raw = (message.text or "").strip()
+    if not raw.isdigit():
+        await message.answer("Пришли целое число, например <code>100</code> или <code>0</code>.")
+        return
+    uses = int(raw)
+    if uses > 1_000_000:
+        await message.answer("Слишком много. Максимум 1000000, либо 0 — без лимита.")
+        return
+    data = await state.get_data()
+    draft = dict(data.get("promo_draft") or {})
+    draft["max_uses"] = uses
+    await state.update_data(promo_draft=draft)
+    await state.set_state(Panel.promo_days)
+    await message.answer(
+        "Шаг 4 из 4. Сколько дней действует код?\n"
+        "Пришли число: <code>7</code> — неделя, <code>30</code> — месяц, "
+        "<code>0</code> — бессрочно.\n/cancel — отмена."
+    )
+
+
+@router.message(Panel.promo_days, F.text, ~Command("cancel"))
+async def on_promo_days(
+    message: Message, store: Store, state: FSMContext
+) -> None:
+    raw = (message.text or "").strip()
+    if not raw.isdigit():
+        await message.answer("Пришли число дней, например <code>30</code> или <code>0</code>.")
+        return
+    days = int(raw)
+    if days > 3650:
+        await message.answer("Максимум 3650 дней, либо 0 — бессрочно.")
+        return
+    data = await state.get_data()
+    draft = dict(data.get("promo_draft") or {})
+    expires_at = datetime.now(UTC) + timedelta(days=days) if days else None
+    created_by = message.from_user.id if message.from_user else 0
+    created = await store.create_promo(
+        draft.get("code", ""),
+        int(draft.get("requests") or 0),
+        int(draft.get("image_credits") or 0),
+        int(draft.get("max_uses") or 0),
+        expires_at,
+        created_by,
+    )
+    await state.clear()
+    text, kb = await render_promos(store)
+    head = (
+        f"✅ Промокод <code>{escape(str(draft.get('code', '')))}</code> создан.\n\n"
+        if created
+        else "⚠️ Не удалось создать код — возможно, он уже существует.\n\n"
+    )
+    await message.answer(head + text, reply_markup=kb)
+
+
+@router.message(Panel.promo_code)
+async def on_promo_code_non_text(message: Message) -> None:
+    await message.answer("Пришли код текстом, например <code>WELCOME50</code>.")
+
+
+@router.message(Panel.promo_reward)
+async def on_promo_reward_non_text(message: Message) -> None:
+    await message.answer("Пришли награду текстом: <code>50</code> или <code>50+5</code>.")
+
+
+@router.message(Panel.promo_uses)
+async def on_promo_uses_non_text(message: Message) -> None:
+    await message.answer("Пришли число активаций: <code>100</code> или <code>0</code>.")
+
+
+@router.message(Panel.promo_days)
+async def on_promo_days_non_text(message: Message) -> None:
+    await message.answer("Пришли число дней: <code>30</code> или <code>0</code>.")
 
 
 @router.callback_query(F.data.startswith("adm:refund:ask:"))

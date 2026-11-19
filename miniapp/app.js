@@ -127,6 +127,13 @@
       support_address: "Кошелёк",
       support_copy: "Копировать", support_copied: "Скопировано",
       support_note: "В кошельке выбери токен GRAM и отправь любую сумму на этот адрес.",
+      promo_title: "🎟 Промокод", promo_ph: "Код", promo_apply: "Активировать",
+      promo_hint: "Введи код — запросы и генерации зачислятся сразу.",
+      promo_ok: "🎉 +{n} запросов", promo_ok_img: "🎉 Генерации картинок: +{n}",
+      promo_ok_both: "🎉 +{r} запросов · +{i} 🖼",
+      promo_bad: "Такого промокода нет", promo_used: "Код уже активирован",
+      promo_expired: "Срок действия кода истёк", promo_exhausted: "Код уже разобрали",
+      promo_empty: "Введи промокод",
       paid: "Оплата получена, спасибо!", pay_failed: "Оплата не прошла", already_owned: "Уже куплено",
       added: "Добавлено", limit_reached: "Достигнут предел",
       tab_profile: "Профиль", profile_title: "Профиль",
@@ -201,6 +208,13 @@
       support_address: "Гаманець",
       support_copy: "Копіювати", support_copied: "Скопійовано",
       support_note: "У гаманці вибери токен GRAM і надішли будь-яку суму на цю адресу.",
+      promo_title: "🎟 Промокод", promo_ph: "Код", promo_apply: "Активувати",
+      promo_hint: "Введи код — запити й генерації нарахуються одразу.",
+      promo_ok: "🎉 +{n} запитів", promo_ok_img: "🎉 Генерації зображень: +{n}",
+      promo_ok_both: "🎉 +{r} запитів · +{i} 🖼",
+      promo_bad: "Такого промокоду немає", promo_used: "Код уже активовано",
+      promo_expired: "Термін дії коду минув", promo_exhausted: "Код уже розібрали",
+      promo_empty: "Введи промокод",
       paid: "Оплату отримано, дякую!", pay_failed: "Оплата не пройшла", already_owned: "Уже куплено",
       added: "Додано", limit_reached: "Досягнуто межі",
       tab_profile: "Профіль", profile_title: "Профіль",
@@ -275,6 +289,13 @@
       support_address: "Кашалёк",
       support_copy: "Капіяваць", support_copied: "Скапіявана",
       support_note: "У кашальку выберы токен GRAM і адпраў любую суму на гэты адрас.",
+      promo_title: "🎟 Промокод", promo_ph: "Код", promo_apply: "Актываваць",
+      promo_hint: "Увядзі код — запыты і генерацыі налічацца адразу.",
+      promo_ok: "🎉 +{n} запытаў", promo_ok_img: "🎉 Генерацыі малюнкаў: +{n}",
+      promo_ok_both: "🎉 +{r} запытаў · +{i} 🖼",
+      promo_bad: "Такога промокода няма", promo_used: "Код ужо актываваны",
+      promo_expired: "Тэрмін дзеяння кода скончыўся", promo_exhausted: "Код ужо разабралі",
+      promo_empty: "Увядзі промокод",
       paid: "Аплату атрымана, дзякуй!", pay_failed: "Аплата не прайшла", already_owned: "Ужо куплена",
       added: "Дададзена", limit_reached: "Дасягнута мяжа",
       tab_profile: "Профіль", profile_title: "Профіль",
@@ -349,6 +370,13 @@
       support_address: "Wallet",
       support_copy: "Copy", support_copied: "Copied",
       support_note: "In your wallet pick the GRAM token and send any amount to this address.",
+      promo_title: "🎟 Promo code", promo_ph: "Code", promo_apply: "Activate",
+      promo_hint: "Enter the code — requests and generations are added instantly.",
+      promo_ok: "🎉 +{n} requests", promo_ok_img: "🎉 Image generations: +{n}",
+      promo_ok_both: "🎉 +{r} requests · +{i} 🖼",
+      promo_bad: "No such promo code", promo_used: "Code already activated",
+      promo_expired: "Code has expired", promo_exhausted: "Code is used up",
+      promo_empty: "Enter a promo code",
       paid: "Payment received, thank you!", pay_failed: "Payment failed", already_owned: "Already owned",
       added: "Added", limit_reached: "Limit reached",
       tab_profile: "Profile", profile_title: "Profile",
@@ -833,7 +861,14 @@
       '<div class="ach-grid">' + achHtml + "</div>" +
 
       "<h2>🚀 " + esc(t("quick_access")) + "</h2>" +
-      quick;
+      quick +
+      "<h2>🎟 " + esc(t("promo_title")) + "</h2>" +
+      '<div class="card">' +
+      '<div class="row-sub" style="margin-bottom:8px">' + esc(t("promo_hint")) + "</div>" +
+      '<div class="field"><input class="input" id="promo-input" placeholder="' +
+      esc(t("promo_ph")) + '" autocapitalize="characters" autocomplete="off">' +
+      '<button class="btn small" data-action="promo-apply">' +
+      esc(t("promo_apply")) + "</button></div></div>";
 
     setTimeout(function () {
       var bar = document.querySelector(".xp-bar > span");
@@ -1806,6 +1841,7 @@
     else if (id === "card-a") { event.preventDefault(); toolsAction({ action: "card.add", question: val("card-q"), answer: val("card-a") }, t("added")); }
     else if (id === "rem-dur") { event.preventDefault(); toolsAction({ action: "rem.add", text: val("rem-text"), duration: val("rem-dur") }, t("added")); }
     else if (id === "buy-stars") { event.preventDefault(); buyCustom(); }
+    else if (id === "promo-input") { event.preventDefault(); applyPromo(); }
   }
 
   function buyCustom() {
@@ -1813,6 +1849,33 @@
     var buy = state.buy || {};
     if (!stars || !buy.rate) { toast(t("pay_failed")); return; }
     pay({ stars: stars, requests: stars * buy.rate });
+  }
+
+  function applyPromo() {
+    var code = (val("promo-input") || "").trim();
+    if (!code) { toast(t("promo_empty")); return; }
+    api("promo", { code: code }).then(function (res) {
+      if (!res || res.status !== "ok") {
+        var map = {
+          used: "promo_used", expired: "promo_expired",
+          exhausted: "promo_exhausted", empty: "promo_empty"
+        };
+        toast(t(map[res && res.status] || "promo_bad"));
+        return;
+      }
+      if (state.me) {
+        state.me.bonus_requests = res.balance;
+        state.me.image_credits = res.image_balance;
+      }
+      var reqs = res.requests || 0;
+      var imgs = res.image_credits || 0;
+      if (reqs && imgs) toast(t("promo_ok_both", { r: reqs, i: imgs }));
+      else if (reqs) toast(t("promo_ok", { n: reqs }));
+      else toast(t("promo_ok_img", { n: imgs }));
+      render();
+    }).catch(function () {
+      toast(t("promo_bad"));
+    });
   }
 
   document.addEventListener("click", function (event) {
@@ -1883,6 +1946,8 @@
       });
     } else if (action === "buy-custom") {
       buyCustom();
+    } else if (action === "promo-apply") {
+      applyPromo();
     } else if (action === "support-copy") {
       copyText(node.getAttribute("data-copy") || "");
     } else if (action === "game-dice") {

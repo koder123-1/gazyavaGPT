@@ -121,6 +121,10 @@ class Imagine(StatesGroup):
     awaiting = State()
 
 
+class Promo(StatesGroup):
+    awaiting = State()
+
+
 # --------------------------------------------------------------------------- утилиты
 async def is_admin(user_id: int, settings: Settings, store: Store) -> bool:
     return has_admin_access(await resolve_role(user_id, settings, store))
@@ -235,6 +239,7 @@ MENU_KEYS = (
     "menu.tickets",
     "menu.files",
     "menu.bonus",
+    "menu.promo",
     "menu.invite",
     "menu.lang",
     "menu.help",
@@ -343,7 +348,7 @@ def main_menu_kb(
     if support:
         rows.append(_button_row(lang, "menu.donate"))
     rows.append(_button_row(lang, "menu.tickets", "menu.files"))
-    rows.append(_button_row(lang, "menu.bonus", "menu.invite"))
+    rows.append(_button_row(lang, "menu.promo", "menu.bonus", "menu.invite"))
     rows.append(_button_row(lang, "menu.lang", "menu.help"))
     if payments:
         rows.append(_button_row(lang, "menu.terms", "menu.reset"))
@@ -399,6 +404,7 @@ def menu_inline(
     )
     rows.append(
         [
+            InlineKeyboardButton(text=t(lang, "menu.promo"), callback_data="menu:act:promo"),
             InlineKeyboardButton(text=t(lang, "menu.bonus"), callback_data="menu:act:bonus"),
             InlineKeyboardButton(text=t(lang, "menu.invite"), callback_data="menu:act:invite"),
         ]
@@ -1344,6 +1350,96 @@ async def bonus_view(
     else:
         text = t(lang, "bonus.already", streak=result["streak"], left=left)
     return text, bool(result["claimed"]), int(result["amount"])
+
+
+async def redeem_promo(
+    message: Message,
+    store: Store,
+    lang: str,
+    user_id: int,
+    raw: str,
+) -> None:
+    """Активирует код и сообщает результат. Возвращает текст через message.answer."""
+    code = (raw or "").strip().upper()
+    if not code:
+        await message.answer(t(lang, "promo.ask"))
+        return
+    result = await store.redeem_promo(code, user_id)
+    status = str(result.get("status") or "not_found")
+    if status != "ok":
+        key = {
+            "used": "promo.used",
+            "expired": "promo.expired",
+            "exhausted": "promo.exhausted",
+            "inactive": "promo.inactive",
+        }.get(status, "promo.not_found")
+        await message.answer(t(lang, key))
+        return
+    promo = result.get("promo") or {}
+    requests = int(promo.get("requests") or 0)
+    images = int(promo.get("image_credits") or 0)
+    balance = await store.bonus_requests(user_id)
+    image_balance = await store.image_credits(user_id)
+    kwargs = {
+        "code": escape(code),
+        "requests": requests,
+        "images": images,
+        "balance": balance,
+        "image_balance": image_balance,
+    }
+    if requests and images:
+        text = t(lang, "promo.ok_both", **kwargs)
+    elif requests:
+        text = t(lang, "promo.ok_requests", **kwargs)
+    else:
+        text = t(lang, "promo.ok_images", **kwargs)
+    await message.answer(text)
+
+
+@router.message(Command("promo", "промокод"))
+async def cmd_promo(
+    message: Message, store: Store, settings: Settings, state: FSMContext
+) -> None:
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    if message.chat.type != "private":
+        me = await message.bot.me()
+        await message.answer(
+            t(lang, "promo.private", username=me.username or settings.bot_name)
+        )
+        return
+    await store.ensure_user(user.id, user.username, user.first_name)
+    parts = (message.text or "").split(maxsplit=1)
+    code = parts[1].strip() if len(parts) > 1 else ""
+    if code:
+        await state.clear()
+        await redeem_promo(message, store, lang, user.id, code)
+        return
+    await state.set_state(Promo.awaiting)
+    await message.answer(t(lang, "promo.ask"))
+
+
+@router.message(
+    Promo.awaiting, F.text, ~F.text.startswith("/"), ~F.text.in_(set(menu_label_map()))
+)
+async def on_promo_code(
+    message: Message, store: Store, settings: Settings, state: FSMContext
+) -> None:
+    await state.clear()
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    await redeem_promo(
+        message, store, lang, user.id, (message.text or "").strip()
+    )
+
+
+@router.message(Promo.awaiting)
+async def on_promo_non_text(message: Message) -> None:
+    await message.answer("Пришли промокод текстом или нажми /cancel.")
 
 
 @router.message(Command("invite", "пригласить", "реф", "ref"))
@@ -2598,6 +2694,8 @@ async def on_menu_button(
         )
     elif action == "menu.bonus":
         await cmd_bonus(message, store, settings)
+    elif action == "menu.promo":
+        await cmd_promo(message, store, settings, state)
     elif action == "menu.invite":
         await cmd_invite(message, store, settings)
     elif action == "menu.lang":
@@ -2714,6 +2812,10 @@ async def cb_menu_action(
                 pages=settings.file_max_pdf_pages,
             )
         )
+    elif action == "promo":
+        await store.ensure_user(user.id, user.username, user.first_name)
+        await state.set_state(Promo.awaiting)
+        await call.message.answer(t(lang, "promo.ask"))
     elif action == "bonus":
         await store.ensure_user(user.id, user.username, user.first_name)
         text, claimed, amount = await bonus_view(store, settings, user.id, lang)
