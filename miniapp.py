@@ -15,10 +15,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl
@@ -36,7 +38,20 @@ import styles as style_catalog
 import toolbox
 from config import Settings
 from i18n import LANGS, normalize_lang
-from roles import is_staff, resolve_role
+from roles import (
+    ASSIGNABLE,
+    RANKS,
+    ROLE_ADMIN,
+    ROLE_HEAD_ADMIN,
+    ROLE_SUPPORT,
+    can_assign,
+    can_manage_roles as _can_manage_roles,
+    has_admin_access as _has_admin,
+    is_staff,
+    rank,
+    resolve_role,
+    role_title as _role_title,
+)
 from runtime import load_runtime
 from store import Store
 from subscription import (
@@ -239,6 +254,11 @@ async def api_me(request: web.Request) -> web.Response:
             "langs": list(LANGS),
             "styles": list(STYLES),
             "daily_limit": runtime.daily_limit,
+            "role": role or "",
+            "role_title": _role_title(role),
+            "is_staff": is_staff(role),
+            "is_admin": _has_admin(role),
+            "can_manage_roles": _can_manage_roles(role),
         }
     )
 
@@ -629,12 +649,1264 @@ async def api_invoice(request: web.Request) -> web.Response:
     return web.json_response({"url": url})
 
 
+# --------------------------------------------------------------------------- админ-панель
+def _iso(value: Any) -> str:
+    """Дата/время в JSON: строкой, чтобы браузер сам форматировал."""
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except (TypeError, ValueError):
+            return str(value)
+    return str(value)
+
+
+def _display(row: dict | None) -> str:
+    row = row or {}
+    username = str(row.get("username") or "").strip()
+    if username:
+        return "@" + username
+    first_name = str(row.get("first_name") or "").strip()
+    if first_name:
+        return first_name
+    return str(row.get("user_id") or "")
+
+
+def _admin_json(payload: dict[str, Any], status: int = 200) -> web.Response:
+    return web.json_response(payload, status=status)
+
+
+def _admin_fail(message: str, *, status: int = 200) -> web.Response:
+    return _admin_json({"ok": False, "error": message}, status=status)
+
+
+async def _admin_ctx(
+    request: web.Request, *, min_role: str = ROLE_ADMIN
+) -> tuple[dict[str, Any] | None, web.Response | None]:
+    """Подпись initData + роль не ниже min_role."""
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    data, error = await _auth(request)
+    if error is not None:
+        return None, error
+    user = data["user"]
+    user_id = int(user["id"])
+    await store.ensure_user(user_id, user.get("username"), user.get("first_name"))
+    role = await resolve_role(user_id, settings, store)
+    if rank(role) < RANKS[min_role]:
+        return None, _admin_fail("forbidden", status=403)
+    return {"user_id": user_id, "role": role, "data": data}, None
+
+
+async def _settings_payload(store: Store, settings: Settings) -> dict[str, Any]:
+    rt = await load_runtime(store, settings)
+    overrides = await store.all_settings()
+    items = [
+        {
+            "key": "daily_limit",
+            "label": "Лимит сообщений в день",
+            "hint": "0 — безлимит",
+            "value": str(rt.daily_limit),
+            "multiline": False,
+        },
+        {
+            "key": "max_context",
+            "label": "Глубина контекста",
+            "hint": "0 — без памяти",
+            "value": str(rt.max_context),
+            "multiline": False,
+        },
+        {
+            "key": "image_daily_limit",
+            "label": "Бесплатных картинок в день",
+            "hint": "0 — без бесплатных",
+            "value": str(rt.image_daily_limit),
+            "multiline": False,
+        },
+        {
+            "key": "ai_model",
+            "label": "Модель ИИ",
+            "hint": "например openrouter/free",
+            "value": rt.model,
+            "multiline": False,
+        },
+        {
+            "key": "ai_vision_model",
+            "label": "Модель для фото",
+            "hint": "читает изображения",
+            "value": rt.vision_model,
+            "multiline": False,
+        },
+        {
+            "key": "star_rate",
+            "label": "Запросов за 1 звезду",
+            "hint": "курс Stars",
+            "value": str(rt.star_rate),
+            "multiline": False,
+        },
+        {
+            "key": "star_packages",
+            "label": "Тарифы Stars",
+            "hint": "формат 30:3,60:6,100:10",
+            "value": ",".join(f"{n}:{s}" for n, s in rt.star_packages),
+            "multiline": False,
+        },
+        {
+            "key": "required_channel",
+            "label": "Канал подписки",
+            "hint": "@username, ссылка или ID; пусто — выключено",
+            "value": rt.required_channel or "",
+            "multiline": False,
+        },
+        {
+            "key": "required_channel_url",
+            "label": "Ссылка на канал",
+            "hint": "кнопка «Подписаться»",
+            "value": rt.required_channel_url or "",
+            "multiline": False,
+        },
+        {
+            "key": "system_prompt",
+            "label": "Системный промпт",
+            "hint": "характер и правила ассистента",
+            "value": rt.system_prompt,
+            "multiline": True,
+        },
+    ]
+    for item in items:
+        item["override"] = item["key"] in overrides
+    return {
+        "items": items,
+        "group_gate": bool(rt.group_gate),
+        "group_gate_override": "group_gate" in overrides,
+        "model": rt.model,
+    }
+
+
+async def _validate_setting(
+    key: str, value: str
+) -> tuple[str, str]:
+    """Проверяет значение настройки так же, как админка в боте."""
+    from config import parse_packages
+    from runtime import EDITABLE
+
+    if key not in EDITABLE:
+        return "", "Неизвестная настройка."
+    value = (value or "").strip()
+
+    if key in {"daily_limit", "max_context", "image_daily_limit"}:
+        if not value.isdigit():
+            return "", "Нужно целое число, например 30. 0 — без ограничений."
+        number = int(value)
+        if key == "daily_limit" and number > 10000:
+            return "", "Слишком много. Поставь до 10000."
+        if key == "image_daily_limit" and number > 1000:
+            return "", "Слишком много. Поставь до 1000 картинок в день."
+        if key == "max_context" and number > 100:
+            return "", "Слишком много. Поставь до 100."
+        return str(number), ""
+
+    if key in {"ai_model", "ai_vision_model"}:
+        if not value or len(value) > 120 or " " in value:
+            return "", "Имя модели — одно слово без пробелов, например openrouter/free."
+        return value, ""
+
+    if key == "star_rate":
+        if not value.isdigit():
+            return "", "Нужно целое число, например 2."
+        number = int(value)
+        if not 1 <= number <= 1000:
+            return "", "Поставь от 1 до 1000 запросов за звезду."
+        return str(number), ""
+
+    if key == "star_packages":
+        try:
+            parsed = parse_packages(value, ())
+        except ValueError as exc:
+            return "", f"Не получилось разобрать тарифы: {exc}. Пример: 30:3,60:6,100:10"
+        if not parsed:
+            return "", "Нужен хотя бы один тариф."
+        return ",".join(f"{requests}:{stars}" for requests, stars in parsed), ""
+
+    if key == "required_channel":
+        from subscription import normalize_channel
+
+        normalized = normalize_channel(value)
+        if value and value.lower() not in {"0", "-", "off", "no", "none", "нет", "выкл"} and not normalized:
+            return "", "Не понял канал. Пришли @username, ссылку https://t.me/... или ID -100..., либо off."
+        return normalized, ""
+
+    if key == "required_channel_url":
+        from subscription import normalize_channel_url
+
+        if value and " " in value:
+            return "", "В ссылке не должно быть пробелов. Пример: https://t.me/gazyavaGPT"
+        normalized = normalize_channel_url(value, "")
+        if normalized and not normalized.lower().startswith(("http://", "https://")):
+            return "", "Нужна ссылка вида https://t.me/..."
+        return normalized, ""
+
+    # system_prompt
+    if len(value) < 10:
+        return "", "Слишком коротко — минимум 10 символов."
+    if len(value) > 4000:
+        return "", "Слишком длинно — до 4000 символов."
+    return value, ""
+
+
+async def _user_payload(
+    store: Store, settings: Settings, actor_role: str | None, user_id: int
+) -> dict[str, Any]:
+    card = await store.user_card(user_id) or {}
+    current = await resolve_role(user_id, settings, store)
+    granted = set(await store.list_model_access(user_id))
+    chosen = await store.get_model(user_id)
+    models = []
+    for item in model_catalog.CATALOG:
+        owned = item.stars <= 0 or item.id in granted
+        models.append(
+            {
+                "id": item.id,
+                "title": item.title,
+                "stars": int(item.stars or 0),
+                "owned": owned,
+                "chosen": item.id == chosen,
+                "free": item.stars <= 0,
+            }
+        )
+    options = []
+    for role in ASSIGNABLE:
+        allowed, reason = can_assign(
+            actor_role=actor_role,
+            actor_id=0,
+            target_id=user_id,
+            target_role=current,
+            new_role=role,
+            settings=settings,
+        )
+        options.append(
+            {
+                "role": role,
+                "title": _role_title(role),
+                "allowed": allowed,
+                "reason": reason,
+            }
+        )
+    return {
+        "user": {
+            "id": user_id,
+            "name": _display(card) if card else str(user_id),
+            "username": card.get("username") or "",
+            "first_name": card.get("first_name") or "",
+            "exists": bool(card),
+            "banned": bool(card.get("banned")),
+            "used_today": int(card.get("used_today") or 0),
+            "bonus_requests": int(card.get("bonus_requests") or 0),
+            "image_credits": int(card.get("image_credits") or 0),
+            "total_requests": int(card.get("total_requests") or 0),
+            "history_len": int(card.get("history_len") or 0),
+            "subscription_until": _iso(card.get("subscription_until")),
+        },
+        "role": current or "",
+        "role_title": _role_title(current),
+        "actor_role": actor_role or "",
+        "can_manage_roles": _can_manage_roles(actor_role),
+        "models": models,
+        "assignable": options,
+    }
+
+
+async def _promos_payload(store: Store) -> dict[str, Any]:
+    stats = await store.promo_stats()
+    rows = await store.list_promos(30)
+    now = datetime.now(UTC)
+    items = []
+    for row in rows:
+        expires = row.get("expires_at")
+        items.append(
+            {
+                "code": row.get("code") or "",
+                "requests": int(row.get("requests") or 0),
+                "image_credits": int(row.get("image_credits") or 0),
+                "max_uses": int(row.get("max_uses") or 0),
+                "uses": int(row.get("uses") or 0),
+                "active": bool(row.get("active")),
+                "expired": bool(expires and expires <= now),
+                "expires_at": _iso(expires),
+                "created_at": _iso(row.get("created_at")),
+            }
+        )
+    return {"stats": stats, "items": items}
+
+
+async def _payments_payload(store: Store) -> dict[str, Any]:
+    stats = await store.payments_stats()
+    rows = await store.recent_payments(30)
+    items = []
+    for row in rows:
+        kind = str(row.get("kind") or "requests")
+        items.append(
+            {
+                "id": int(row.get("id") or 0),
+                "user_id": int(row.get("user_id") or 0),
+                "name": _display(row) or str(row.get("user_id") or ""),
+                "kind": kind,
+                "stars": int(row.get("stars") or 0),
+                "requests": int(row.get("requests") or 0),
+                "model": row.get("model") or "",
+                "model_title": model_catalog.title(row.get("model")),
+                "created_at": _iso(row.get("created_at")),
+                "refunded": bool(row.get("refunded_at")),
+            }
+        )
+    return {"stats": stats, "items": items}
+
+
+def _ticket_item(row: dict) -> dict[str, Any]:
+    from tickets import topic_title
+
+    return {
+        "id": int(row.get("id") or 0),
+        "user_id": int(row.get("user_id") or 0),
+        "name": _display(row),
+        "topic": row.get("topic") or "other",
+        "topic_title": topic_title(str(row.get("topic") or "other")),
+        "status": row.get("status") or "open",
+        "created_at": _iso(row.get("created_at")),
+        "updated_at": _iso(row.get("updated_at")),
+        "closed_at": _iso(row.get("closed_at")),
+    }
+
+
+async def _tickets_payload(
+    store: Store, offset: int = 0, limit: int = 20
+) -> dict[str, Any]:
+    offset = max(0, int(offset))
+    rows = await store.open_tickets(limit, offset)
+    stats = await store.tickets_stats()
+    return {
+        "stats": stats,
+        "offset": offset,
+        "limit": limit,
+        "items": [_ticket_item(row) for row in rows],
+    }
+
+
+async def _ticket_payload(store: Store, ticket_id: int) -> dict[str, Any] | None:
+    ticket = await store.get_ticket(ticket_id)
+    if not ticket:
+        return None
+    messages = await store.ticket_messages(ticket_id, 50)
+    return {
+        "ticket": _ticket_item(ticket),
+        "messages": [
+            {
+                "id": int(row.get("id") or 0),
+                "author_id": int(row.get("author_id") or 0),
+                "from_staff": bool(row.get("from_staff")),
+                "text": row.get("text") or "",
+                "created_at": _iso(row.get("created_at")),
+            }
+            for row in messages
+        ],
+    }
+
+
+async def _channels_payload(store: Store, bot: Bot) -> dict[str, Any]:
+    from admin import (
+        CHANNEL_SETTING,
+        MAX_CHANNELS,
+        REQUIRED_CHANNEL_SETTING,
+        _managed_channels,
+        _stored_channels,
+    )
+
+    channels = await _managed_channels(store)
+    required = (await store.get_setting(REQUIRED_CHANNEL_SETTING) or "").strip()
+    items = []
+    for index, channel in enumerate(channels):
+        title = channel
+        count = 0
+        ok = True
+        try:
+            chat = await bot.get_chat(channel)
+            title = chat.title or channel
+            with contextlib.suppress(TelegramAPIError):
+                count = int(await bot.get_chat_member_count(chat.id))
+        except TelegramAPIError:
+            ok = False
+        items.append(
+            {
+                "index": index,
+                "channel": channel,
+                "title": title,
+                "members": count,
+                "ok": ok,
+                "required": channel == required,
+            }
+        )
+    return {
+        "items": items,
+        "required": required,
+        "max": MAX_CHANNELS,
+        "stored": len(_stored_channels(await store.get_setting(CHANNEL_SETTING))),
+    }
+
+
+async def _giveaways_payload(store: Store) -> dict[str, Any]:
+    rows = await store.active_giveaways()
+    items = []
+    for row in rows:
+        items.append(
+            {
+                "id": int(row.get("id") or 0),
+                "chat_id": int(row.get("chat_id") or 0),
+                "prize": row.get("prize") or "",
+                "winners": int(row.get("winners") or 1),
+                "entries": int(row.get("entries") or 0),
+                "ends_at": _iso(row.get("ends_at")),
+                "need_sub": bool(row.get("need_sub")),
+            }
+        )
+    return {"stats": await store.giveaways_stats(), "items": items}
+
+
+async def _run_admin_broadcast(
+    bot: Bot, store: Store, text: str
+) -> tuple[int, int]:
+    ids = await store.user_ids(only_active=True)
+    sent = failed = 0
+    for uid in ids:
+        try:
+            await bot.send_message(uid, text, parse_mode=None)
+            sent += 1
+        except Exception:  # noqa: BLE001 — один недоставленный не должен ломать рассылку
+            failed += 1
+        await asyncio.sleep(0.05)
+    log.info("Mini App: рассылка завершена — %s/%s", sent, len(ids))
+    return sent, failed
+
+
+async def _do_refund(
+    bot: Bot, store: Store, payment_id: int
+) -> tuple[bool, str]:
+    payment = await store.get_payment(payment_id)
+    if not payment:
+        return False, "Платёж не найден."
+    if payment.get("refunded_at"):
+        return False, "Этот платёж уже возвращён."
+    try:
+        ok = await bot.refund_star_payment(
+            user_id=payment["user_id"],
+            telegram_payment_charge_id=payment["charge_id"],
+        )
+    except TelegramAPIError as exc:
+        return False, f"Telegram отказал: {getattr(exc, 'message', str(exc))}"
+    if not ok:
+        return False, "Telegram не подтвердил возврат."
+    refunded = await store.mark_payment_refunded(payment_id)
+    if not refunded:
+        return False, "Платёж уже был возвращён."
+
+    kind = payment.get("kind")
+    user_id = int(payment["user_id"])
+    with contextlib.suppress(TelegramAPIError):
+        if kind == "model":
+            model_id = payment.get("model")
+            if model_id:
+                await store.revoke_model(user_id, model_id)
+                if await store.get_model(user_id) == model_id:
+                    await store.set_model(user_id, None)
+            await bot.send_message(
+                user_id,
+                "↩️ <b>Возврат выполнен</b>\n\n"
+                f"Звёзды за модель {model_catalog.title(payment.get('model'))} "
+                f"({payment['stars']} ⭐) возвращены Telegram.\n"
+                "Доступ к модели закрыт.",
+            )
+        elif kind == "sub":
+            days = int(payment.get("requests") or 0)
+            left = await store.trim_subscription(user_id, days)
+            tail = (
+                f"Остаток подписки: до <b>{left:%d.%m.%Y}</b>."
+                if left
+                else "Подписка отменена."
+            )
+            await bot.send_message(
+                user_id,
+                "↩️ <b>Возврат выполнен</b>\n\n"
+                f"Звёзды за подписку ({payment['stars']} ⭐) возвращены Telegram.\n"
+                f"Снято дней: <b>{days}</b>. {tail}",
+            )
+        else:
+            balance = await store.add_bonus(user_id, -int(payment.get("requests") or 0))
+            await bot.send_message(
+                user_id,
+                "↩️ <b>Возврат выполнен</b>\n\n"
+                f"Звёзды за покупку ({payment['stars']} ⭐) возвращены Telegram.\n"
+                f"Списано запросов: <b>{payment.get('requests') or 0}</b>\n"
+                f"Остаток бонусных запросов: <b>{balance}</b>.",
+            )
+    return True, "Возврат выполнен."
+
+
+async def api_admin(request: web.Request) -> web.Response:
+    """Единая точка админ-панели Mini App.
+
+    Один маршрут вместо десятков: клиент присылает `op`, сервер проверяет роль
+    и выполняет действие. Так проще держать проверки прав в одном месте.
+    """
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    bot: Bot = request.app["miniapp_bot"]
+
+    body = await _read_body(request)
+    op = str(body.get("op") or "dash").strip().lower()
+    ticket_ops = {"dash", "tickets", "ticket", "ticket.reply", "ticket.close"}
+    ctx, error = await _admin_ctx(
+        request, min_role=ROLE_SUPPORT if op in ticket_ops else ROLE_ADMIN
+    )
+    if error is not None:
+        return error
+    assert ctx is not None
+    user_id = int(ctx["user_id"])
+    role = ctx["role"]
+
+    try:
+        if op == "dash":
+            stats = await store.stats()
+            tickets = await store.tickets_stats()
+            payments_stats = await store.payments_stats()
+            promos = await store.promo_stats()
+            rt = await load_runtime(store, settings)
+            return _admin_json(
+                {
+                    "ok": True,
+                    "role": role,
+                    "role_title": _role_title(role),
+                    "is_admin": _has_admin(role),
+                    "can_manage_roles": _can_manage_roles(role),
+                    "stats": stats,
+                    "tickets": tickets,
+                    "payments": payments_stats,
+                    "promos": promos,
+                    "runtime": {
+                        "model": rt.model,
+                        "daily_limit": rt.daily_limit,
+                        "max_context": rt.max_context,
+                    },
+                }
+            )
+
+        if op == "stats":
+            stats = await store.stats()
+            feedback = await store.feedback_stats()
+            tickets = await store.tickets_stats()
+            payments_stats = await store.payments_stats()
+            top = await store.top_users(10)
+            activity = await store.activity_by_day(7)
+            rt = await load_runtime(store, settings)
+            return _admin_json(
+                {
+                    "ok": True,
+                    "stats": stats,
+                    "feedback": feedback,
+                    "tickets": tickets,
+                    "payments": payments_stats,
+                    "top": [
+                        {
+                            "user_id": int(row["user_id"]),
+                            "name": _display(row),
+                            "total": int(row.get("total") or 0),
+                        }
+                        for row in top
+                    ],
+                    "activity": [
+                        {"day": str(row["day"]), "total": int(row.get("total") or 0)}
+                        for row in activity
+                    ],
+                    "runtime": {
+                        "model": rt.model,
+                        "daily_limit": rt.daily_limit,
+                        "max_context": rt.max_context,
+                    },
+                }
+            )
+
+        if op == "users":
+            offset = max(0, _as_int(body.get("offset")) or 0)
+            page = 20
+            total = int((await store.stats()).get("users") or 0)
+            offset = max(0, min(offset, max(0, total - page)))
+            rows = await store.list_users(offset, page)
+            return _admin_json(
+                {
+                    "ok": True,
+                    "offset": offset,
+                    "page": page,
+                    "total": total,
+                    "items": [
+                        {
+                            "user_id": int(row["user_id"]),
+                            "name": _display(row),
+                            "username": row.get("username") or "",
+                            "first_name": row.get("first_name") or "",
+                            "banned": bool(row.get("banned")),
+                            "used_today": int(row.get("used_today") or 0),
+                        }
+                        for row in rows
+                    ],
+                }
+            )
+
+        if op == "user":
+            target = _as_int(body.get("id"))
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            return _admin_json(
+                {"ok": True, "card": await _user_payload(store, settings, role, target)}
+            )
+
+        if op == "user.ban":
+            target = _as_int(body.get("id"))
+            banned = bool(body.get("banned"))
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            if target == user_id:
+                return _admin_fail("Себя забанить нельзя 🙂")
+            if settings.owner_id and target == settings.owner_id:
+                return _admin_fail("Владельца забанить нельзя 👑")
+            target_role = await resolve_role(target, settings, store)
+            if rank(target_role) >= rank(role):
+                return _admin_fail("Нельзя забанить равного или старшего по роли.")
+            if not await store.set_banned(target, banned):
+                return _admin_fail("Пользователь не найден в базе.")
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Пользователь забанен." if banned else "Пользователь разбанен.",
+                    "card": await _user_payload(store, settings, role, target),
+                }
+            )
+
+        if op == "user.bonus":
+            target = _as_int(body.get("id"))
+            count = _as_int(body.get("count")) or 0
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            if not 1 <= count <= 100_000:
+                return _admin_fail("Запросов можно выдать от 1 до 100000.")
+            if not await store.user_exists(target):
+                return _admin_fail("Пользователь не найден в базе.")
+            balance = await store.add_bonus(target, count)
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Выдано {count} запросов. Баланс: {balance}.",
+                    "card": await _user_payload(store, settings, role, target),
+                }
+            )
+
+        if op == "user.images":
+            target = _as_int(body.get("id"))
+            count = _as_int(body.get("count")) or 0
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            if not 1 <= count <= 10_000:
+                return _admin_fail("Генераций можно выдать от 1 до 10000.")
+            if not await store.user_exists(target):
+                return _admin_fail("Пользователь не найден в базе.")
+            balance = await store.add_image_credits(target, count)
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Выдано {count} генераций. Баланс: {balance}.",
+                    "card": await _user_payload(store, settings, role, target),
+                }
+            )
+
+        if op == "user.reset":
+            target = _as_int(body.get("id"))
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            await store.reset(target)
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Контекст диалога сброшен.",
+                    "card": await _user_payload(store, settings, role, target),
+                }
+            )
+
+        if op == "user.role":
+            target = _as_int(body.get("id"))
+            new_role = str(body.get("role") or "")
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            current = await resolve_role(target, settings, store)
+            allowed, reason = can_assign(
+                actor_role=role,
+                actor_id=user_id,
+                target_id=target,
+                target_role=current,
+                new_role=new_role,
+                settings=settings,
+            )
+            if not allowed:
+                return _admin_fail(reason)
+            if await store.get_role(target) == new_role:
+                return _admin_fail("Уже эта роль.")
+            await store.set_role(target, new_role, user_id)
+            hint = (
+                "Теперь тебе доступны обращения пользователей: /tickets"
+                if new_role == ROLE_SUPPORT
+                else "Теперь тебе доступна админка: /admin"
+            )
+            with contextlib.suppress(TelegramAPIError):
+                await bot.send_message(
+                    target,
+                    f"🎖 <b>Тебе выдана роль</b>\n\n{_role_title(new_role)}\n{hint}",
+                )
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Роль выдана.",
+                    "card": await _user_payload(store, settings, role, target),
+                }
+            )
+
+        if op == "user.role.clear":
+            target = _as_int(body.get("id"))
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            current = await resolve_role(target, settings, store)
+            allowed, reason = can_assign(
+                actor_role=role,
+                actor_id=user_id,
+                target_id=target,
+                target_role=current,
+                new_role=None,
+                settings=settings,
+            )
+            if not allowed:
+                return _admin_fail(reason)
+            await store.delete_role(target)
+            extra = (
+                " Доступ из ADMIN_IDS остался — снимите ID в настройках Render."
+                if target in settings.admin_ids
+                else ""
+            )
+            with contextlib.suppress(TelegramAPIError):
+                await bot.send_message(
+                    target,
+                    "🎖 <b>Роль снята</b>\n\n"
+                    "Если это ошибка — напиши владельцу сообщества." + extra,
+                )
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Роль снята." + extra,
+                    "card": await _user_payload(store, settings, role, target),
+                }
+            )
+
+        if op == "user.model":
+            target = _as_int(body.get("id"))
+            model_id = str(body.get("model") or "")
+            grant = bool(body.get("grant"))
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            item = model_catalog.info(model_id)
+            if item is None:
+                return _admin_fail("Неизвестная модель.")
+            if item.stars <= 0:
+                return _admin_fail("Эта модель бесплатна для всех.")
+            if grant:
+                await store.grant_model(target, model_id, user_id)
+                notice = f"Модель {item.title} открыта."
+            else:
+                await store.revoke_model(target, model_id)
+                if await store.get_model(target) == model_id:
+                    await store.set_model(target, None)
+                notice = f"Модель {item.title} закрыта."
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": notice,
+                    "card": await _user_payload(store, settings, role, target),
+                }
+            )
+
+        if op == "payments":
+            return _admin_json({"ok": True, **(await _payments_payload(store))})
+
+        if op == "payment.refund":
+            payment_id = _as_int(body.get("id"))
+            if payment_id is None:
+                return _admin_fail("Некорректный платёж.")
+            done, message = await _do_refund(bot, store, payment_id)
+            if not done:
+                return _admin_fail(message)
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": message,
+                    **(await _payments_payload(store)),
+                }
+            )
+
+        if op == "promos":
+            return _admin_json({"ok": True, **(await _promos_payload(store))})
+
+        if op == "promo.create":
+            from store import valid_promo
+
+            code = str(body.get("code") or "").strip().upper()
+            if not valid_promo(code):
+                return _admin_fail("Код: 3–32 символа, латиница, цифры, _ и -.")
+            if await store.get_promo(code):
+                return _admin_fail("Такой промокод уже существует.")
+            requests = _as_int(body.get("requests")) or 0
+            images = _as_int(body.get("images")) or 0
+            if requests == 0 and images == 0:
+                return _admin_fail("Нужна хотя бы одна награда: запросы или генерации.")
+            if requests < 0 or images < 0:
+                return _admin_fail("Награда не может быть отрицательной.")
+            if requests > 100_000 or images > 10_000:
+                return _admin_fail("Слишком много: до 100000 запросов и до 10000 генераций.")
+            max_uses = _as_int(body.get("max_uses")) or 0
+            if max_uses < 0 or max_uses > 1_000_000:
+                return _admin_fail("Лимит активаций — от 0 до 1000000.")
+            days = _as_int(body.get("days")) or 0
+            if days < 0 or days > 3650:
+                return _admin_fail("Срок — от 0 до 3650 дней.")
+            expires_at = datetime.now(UTC) + timedelta(days=days) if days else None
+            created = await store.create_promo(
+                code, requests, images, max_uses, expires_at, user_id
+            )
+            if not created:
+                return _admin_fail("Не удалось создать промокод.")
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Промокод {code} создан.",
+                    **(await _promos_payload(store)),
+                }
+            )
+
+        if op == "promo.delete":
+            code = str(body.get("code") or "").strip()
+            if not await store.delete_promo(code):
+                return _admin_fail("Промокод не найден.")
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Промокод {code.upper()} удалён.",
+                    **(await _promos_payload(store)),
+                }
+            )
+
+        if op == "settings":
+            return _admin_json(
+                {"ok": True, "settings": await _settings_payload(store, settings)}
+            )
+
+        if op == "setting.save":
+            key = str(body.get("key") or "")
+            value, problem = await _validate_setting(key, str(body.get("value") or ""))
+            if problem:
+                return _admin_fail(problem)
+            await store.set_setting(key, value)
+            if key in {"required_channel", "required_channel_url"}:
+                from subscription import reset_cache
+
+                reset_cache()
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Сохранено.",
+                    "settings": await _settings_payload(store, settings),
+                }
+            )
+
+        if op == "settings.reset":
+            from runtime import EDITABLE
+
+            for key in EDITABLE:
+                await store.delete_setting(key)
+            await store.delete_setting("group_gate")
+            for key in (
+                "autopost_enabled",
+                "autopost_channel",
+                "autopost_hour",
+                "autopost_kind",
+            ):
+                await store.delete_setting(key)
+            from subscription import reset_cache
+
+            reset_cache()
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Возвращены значения из env.",
+                    "settings": await _settings_payload(store, settings),
+                }
+            )
+
+        if op == "settings.gate":
+            rt = await load_runtime(store, settings)
+            await store.set_setting("group_gate", "off" if rt.group_gate else "on")
+            from subscription import reset_cache
+
+            reset_cache()
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Гейт в чатах выключен."
+                    if rt.group_gate
+                    else "Гейт в чатах включён.",
+                    "settings": await _settings_payload(store, settings),
+                }
+            )
+
+        if op == "roles":
+            rows = await store.list_roles()
+            return _admin_json(
+                {
+                    "ok": True,
+                    "can_manage": _can_manage_roles(role),
+                    "owner_id": settings.owner_id or 0,
+                    "items": [
+                        {
+                            "user_id": int(row["user_id"]),
+                            "name": _display(row),
+                            "role": row.get("role") or "",
+                            "role_title": _role_title(row.get("role")),
+                        }
+                        for row in rows
+                    ],
+                    "env_admins": sorted(
+                        set(settings.admin_ids) - {row["user_id"] for row in rows}
+                    ),
+                    "assignable": [
+                        {"role": item, "title": _role_title(item)}
+                        for item in ASSIGNABLE
+                    ],
+                }
+            )
+
+        if op == "role.card":
+            target = _as_int(body.get("id"))
+            if target is None:
+                return _admin_fail("Нужен числовой ID пользователя.")
+            card = await store.user_card(target)
+            current = await resolve_role(target, settings, store)
+            options = []
+            for item in ASSIGNABLE:
+                allowed, reason = can_assign(
+                    actor_role=role,
+                    actor_id=user_id,
+                    target_id=target,
+                    target_role=current,
+                    new_role=item,
+                    settings=settings,
+                )
+                options.append(
+                    {
+                        "role": item,
+                        "title": _role_title(item),
+                        "allowed": allowed,
+                        "reason": reason,
+                    }
+                )
+            return _admin_json(
+                {
+                    "ok": True,
+                    "target": {
+                        "user_id": target,
+                        "name": _display(card) if card else str(target),
+                        "exists": bool(card),
+                        "role": current or "",
+                        "role_title": _role_title(current),
+                        "stored": bool(await store.get_role(target)),
+                        "from_env": target in settings.admin_ids,
+                        "owner": bool(settings.owner_id and target == settings.owner_id),
+                    },
+                    "assignable": options,
+                    "can_manage": _can_manage_roles(role),
+                }
+            )
+
+        if op == "broadcast.count":
+            ids = await store.user_ids(only_active=True)
+            return _admin_json({"ok": True, "count": len(ids)})
+
+        if op == "broadcast":
+            text = str(body.get("text") or "").strip()
+            if len(text) < 2:
+                return _admin_fail("Текст рассылки слишком короткий.")
+            if len(text) > 4000:
+                return _admin_fail("Текст длиннее 4000 символов.")
+            ids = await store.user_ids(only_active=True)
+            if not ids:
+                return _admin_fail("Нет получателей.")
+            asyncio.create_task(_run_admin_broadcast(bot, store, text))
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Рассылка запущена: {len(ids)} получателей.",
+                }
+            )
+
+        if op == "aitest":
+            client = request.app.get("miniapp_ai")
+            if client is None:
+                return _admin_fail("ИИ-клиент не подключён на сервере.")
+            rt = await load_runtime(store, settings)
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            try:
+                answer = await client.reply([], "Ответь одним словом: работает?")
+                elapsed = loop.time() - started
+                return _admin_json(
+                    {
+                        "ok": True,
+                        "success": True,
+                        "model": rt.model,
+                        "answer": str(answer)[:500],
+                        "elapsed": round(elapsed, 2),
+                    }
+                )
+            except Exception as exc:  # noqa: BLE001 — показываем причину админу
+                elapsed = loop.time() - started
+                return _admin_json(
+                    {
+                        "ok": True,
+                        "success": False,
+                        "model": rt.model,
+                        "error": str(exc)[:500],
+                        "elapsed": round(elapsed, 2),
+                    }
+                )
+
+        if op == "tickets":
+            return _admin_json(
+                {
+                    "ok": True,
+                    **(await _tickets_payload(
+                        store, offset=max(0, _as_int(body.get("offset")) or 0)
+                    )),
+                }
+            )
+
+        if op == "ticket":
+            ticket_id = _as_int(body.get("id"))
+            if ticket_id is None:
+                return _admin_fail("Некорректное обращение.")
+            payload = await _ticket_payload(store, ticket_id)
+            if payload is None:
+                return _admin_fail("Обращение не найдено.")
+            return _admin_json({"ok": True, **payload, "can_reply": True})
+
+        if op == "ticket.reply":
+            ticket_id = _as_int(body.get("id"))
+            text = str(body.get("text") or "").strip()
+            if ticket_id is None:
+                return _admin_fail("Некорректное обращение.")
+            if not text:
+                return _admin_fail("Пустой ответ не отправлю.")
+            if len(text) > 4000:
+                return _admin_fail("Слишком длинно: до 4000 символов.")
+            ticket = await store.get_ticket(ticket_id)
+            if not ticket:
+                return _admin_fail("Обращение не найдено.")
+            if ticket.get("status") != "open":
+                return _admin_fail("Обращение уже закрыто — ответить нельзя.")
+            await store.append_ticket_message(ticket_id, user_id, text, True)
+            delivered = True
+            with contextlib.suppress(TelegramAPIError):
+                await bot.send_message(
+                    int(ticket["user_id"]),
+                    f"💬 <b>Ответ поддержки</b> · обращение #{ticket_id}\n\n{text}",
+                )
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Ответ добавлен."
+                    if delivered
+                    else "Ответ добавлен, но доставка не удалась.",
+                    **(await _ticket_payload(store, ticket_id)),
+                }
+            )
+
+        if op == "ticket.close":
+            ticket_id = _as_int(body.get("id"))
+            if ticket_id is None:
+                return _admin_fail("Некорректное обращение.")
+            ticket = await store.get_ticket(ticket_id)
+            if not ticket:
+                return _admin_fail("Обращение не найдено.")
+            if not await store.close_ticket(ticket_id, user_id):
+                return _admin_fail("Обращение уже закрыто.")
+            with contextlib.suppress(TelegramAPIError):
+                await bot.send_message(
+                    int(ticket["user_id"]),
+                    f"✅ <b>Обращение #{ticket_id} закрыто</b>\n\n"
+                    "Если проблема вернётся — создай новое обращение через /support.",
+                )
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Обращение закрыто.",
+                    **(await _ticket_payload(store, ticket_id)),
+                }
+            )
+
+        if op == "channels":
+            return _admin_json(
+                {"ok": True, **(await _channels_payload(store, bot))}
+            )
+
+        if op == "channel.add":
+            from admin import (
+                CHANNEL_SETTING,
+                MAX_CHANNELS,
+                _stored_channels,
+                _verify_channel,
+            )
+
+            raw = str(body.get("channel") or "").strip()
+            if not raw:
+                return _admin_fail("Укажи канал: @username или ссылку.")
+            channel, problem = await _verify_channel(bot, raw)
+            if problem:
+                return _admin_fail(problem)
+            channels = _stored_channels(await store.get_setting(CHANNEL_SETTING))
+            if channel and channel not in channels:
+                if len(channels) >= MAX_CHANNELS:
+                    return _admin_fail("Подключено максимальное число каналов.")
+                channels.append(channel)
+                await store.set_setting(
+                    CHANNEL_SETTING, json.dumps(channels, ensure_ascii=False)
+                )
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Канал {channel} подключён.",
+                    **(await _channels_payload(store, bot)),
+                }
+            )
+
+        if op == "channel.remove":
+            from admin import (
+                CHANNEL_SETTING,
+                REQUIRED_CHANNEL_SETTING,
+                _managed_channels,
+                _stored_channels,
+            )
+
+            index = _as_int(body.get("index")) or 0
+            visible = await _managed_channels(store)
+            if index < 0 or index >= len(visible):
+                return _admin_fail("Канал уже удалён.")
+            removed = visible[index]
+            required = (await store.get_setting(REQUIRED_CHANNEL_SETTING) or "").strip()
+            if removed == required:
+                return _admin_fail(
+                    "Это канал обязательной подписки. Сначала измени настройку «Канал подписки»."
+                )
+            channels = [
+                channel
+                for channel in _stored_channels(await store.get_setting(CHANNEL_SETTING))
+                if channel != removed
+            ]
+            await store.set_setting(
+                CHANNEL_SETTING, json.dumps(channels, ensure_ascii=False)
+            )
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Канал {removed} отвязан.",
+                    **(await _channels_payload(store, bot)),
+                }
+            )
+
+        if op == "channel.publish":
+            import channelkit
+            from admin import _managed_channels
+
+            index = _as_int(body.get("index")) or 0
+            text = str(body.get("text") or "").strip()
+            if not text:
+                return _admin_fail("Текст поста пуст.")
+            if len(text) > 4000:
+                return _admin_fail("Пост длиннее 4000 символов.")
+            channels = await _managed_channels(store)
+            if index < 0 or index >= len(channels):
+                return _admin_fail("Канал не найден.")
+            try:
+                sent = await channelkit.publish_to_channel(
+                    bot, store, channels[index], {"text": text}
+                )
+            except TelegramAPIError as exc:
+                return _admin_fail(f"Telegram не принял пост: {exc}")
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Пост опубликован в {channels[index]}.",
+                    "message_id": int(sent.message_id),
+                    **(await _channels_payload(store, bot)),
+                }
+            )
+
+        if op == "giveaways":
+            return _admin_json({"ok": True, **(await _giveaways_payload(store))})
+
+        if op == "giveaway.cancel":
+            giveaway_id = _as_int(body.get("id"))
+            if giveaway_id is None:
+                return _admin_fail("Некорректный розыгрыш.")
+            if not await store.cancel_giveaway(giveaway_id):
+                return _admin_fail("Розыгрыш не найден или уже завершён.")
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Розыгрыш отменён.",
+                    **(await _giveaways_payload(store)),
+                }
+            )
+
+        if op == "giftall":
+            amount = _as_int(body.get("count")) or 0
+            if not 1 <= amount <= 10_000:
+                return _admin_fail("Подарить можно от 1 до 10000 запросов.")
+            count = await store.add_bonus_all(amount)
+            return _admin_json(
+                {"ok": True, "notice": f"Подарено {amount} запросов {count} пользователям."}
+            )
+
+    except Exception:  # noqa: BLE001 — админка не должна ронять сервер
+        log.exception("Mini App admin: ошибка операции %s", op)
+        return _admin_fail("Внутренняя ошибка сервера. Попробуй ещё раз.", status=500)
+
+    return _admin_fail("Неизвестная операция.", status=400)
+
+
 # --------------------------------------------------------------------------- подключение
-def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> None:
+def setup(
+    app: web.Application,
+    settings: Settings,
+    store: Store,
+    bot: Bot,
+    ai: Any | None = None,
+) -> None:
     """Вешает маршруты Mini App на уже существующее приложение."""
     app["miniapp_settings"] = settings
     app["miniapp_store"] = store
     app["miniapp_bot"] = bot
+    if ai is not None:
+        app["miniapp_ai"] = ai
 
     if not app.get("miniapp_no_cache_hook"):
         app["miniapp_no_cache_hook"] = True
@@ -653,4 +1925,5 @@ def setup(app: web.Application, settings: Settings, store: Store, bot: Bot) -> N
     app.router.add_post("/app/api/tools", api_tools)
     app.router.add_post("/app/api/buy", api_buy)
     app.router.add_post("/app/api/invoice", api_invoice)
+    app.router.add_post("/app/api/admin", api_admin)
     app.router.add_post("/app/api/answer", api_answer)

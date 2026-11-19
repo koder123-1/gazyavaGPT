@@ -424,6 +424,17 @@
     fatal: null,
     answerData: null,
     answerLoading: null,
+    adminScreen: "dash",
+    adminData: null,
+    adminUser: null,
+    adminTicket: null,
+    adminLoading: false,
+    adminError: null,
+    adminEdit: null,
+    adminBcastConfirm: false,
+    adminChannel: null,
+    adminUsersOffset: 0,
+    adminTicketsOffset: 0,
     _langReady: false
   };
 
@@ -582,21 +593,23 @@
     var activeKey = state.tab;
     if (state.screen === "friends" || state.screen === "settings") activeKey = "profile";
     var keys = ["home", "stats", "tasks", "games", "profile"];
+    if (state.me && (state.me.is_admin || state.me.is_staff)) keys.push("admin");
     if (keys.indexOf(activeKey) === -1) activeKey = "home";
-    var icons = { home: "🏠", stats: "📈", tasks: "🎯", games: "🎲", profile: "👤" };
+    var icons = { home: "🏠", stats: "📈", tasks: "🎯", games: "🎲", profile: "👤", admin: "🛠" };
 
     // Пересобираем док только при смене языка — иначе сохраняем «пилюлю» живой,
     // чтобы её позиция плавно перетекала между вкладками.
     var hadTabs = !!tabsEl.querySelector(".tab");
-    if (!hadTabs || state._dockLang !== state.lang) {
+    if (!hadTabs || state._dockLang !== state.lang || state._dockAdmin !== (keys.length > 5)) {
       tabsEl.innerHTML = keys.map(function (key) {
-        var label = key === "profile" ? t("tab_profile") : t(key);
+        var label = key === "profile" ? t("tab_profile") : (key === "admin" ? "Админ" : t(key));
         return '<button class="tab" data-action="tab" data-value="' + key +
           '" role="tab" aria-selected="false">' +
           '<span class="tab-icon">' + icons[key] + '</span>' +
           '<span class="tab-label">' + esc(label) + "</span></button>";
       }).join("") + '<span class="dock-pill" aria-hidden="true"></span>';
       state._dockLang = state.lang;
+      state._dockAdmin = keys.length > 5;
       hadTabs = false;
     }
 
@@ -1595,6 +1608,591 @@
       "</div>";
   }
 
+  // ---------------------------------------------------------------- админ-панель
+  var ADMIN_TITLES = {
+    dash: "Админ-панель", stats: "Статистика", users: "Пользователи",
+    user: "Пользователь", payments: "Платежи", promos: "Промокоды",
+    settings: "Настройки", roles: "Роли", broadcast: "Рассылка",
+    aitest: "Проверка ИИ", tickets: "Тикеты", ticket: "Обращение",
+    channels: "Каналы", giveaways: "Розыгрыши"
+  };
+
+  function adminApi(op, payload) {
+    return api("admin", Object.assign({ op: op }, payload || {})).then(function (data) {
+      if (data && data.ok === false) {
+        var err = new Error(data.error || "Ошибка");
+        err.admin = true;
+        throw err;
+      }
+      return data || {};
+    });
+  }
+
+  function adminApply(screen, data) {
+    if (screen === "user") state.adminUser = data;
+    else if (screen === "ticket") state.adminTicket = data;
+    else state.adminData = data;
+    state.adminScreen = screen;
+    state.adminLoading = false;
+    if (data && data.notice) toast(data.notice);
+    render();
+    return data;
+  }
+
+  function adminGo(screen, opts) {
+    opts = opts || {};
+    state.adminScreen = screen;
+    state.adminLoading = true;
+    state.adminError = null;
+    if (screen === "user") state.adminUser = null;
+    if (screen === "ticket") state.adminTicket = null;
+    if (screen !== "users") state.adminUsersOffset = state.adminUsersOffset || 0;
+    setDir(opts.back ? "back" : "fwd");
+    render();
+    adminApi(opts.op || screen, opts.payload).then(function (data) {
+      adminApply(screen, data);
+    }).catch(function (err) {
+      state.adminLoading = false;
+      state.adminError = err.message || t("error_text");
+      toast(state.adminError);
+      render();
+    });
+  }
+
+  function adminMutate(op, payload, screen) {
+    return adminApi(op, payload).then(function (data) {
+      adminApply(screen || state.adminScreen, data);
+    }).catch(function (err) {
+      toast(err.message || t("error_text"));
+    });
+  }
+
+  function adminRefresh() {
+    var s = state.adminScreen;
+    if (s === "user" && state.adminUser && state.adminUser.card) {
+      return adminGo("user", { payload: { id: state.adminUser.card.user.id } });
+    }
+    if (s === "ticket" && state.adminTicket && state.adminTicket.ticket) {
+      return adminGo("ticket", { payload: { id: state.adminTicket.ticket.id } });
+    }
+    if (s === "broadcast") return adminGo("broadcast", { op: "broadcast.count" });
+    if (s === "aitest") return adminGo("aitest", { op: "aitest" });
+    return adminGo(s || "dash");
+  }
+
+  function adminBack() {
+    var s = state.adminScreen;
+    if (s === "user") {
+      return adminGo("users", { payload: { offset: state.adminUsersOffset || 0 }, back: true });
+    }
+    if (s === "ticket") {
+      return adminGo("tickets", { payload: { offset: state.adminTicketsOffset || 0 }, back: true });
+    }
+    return adminGo("dash", { back: true });
+  }
+
+  function adminHead(title) {
+    var back = state.adminScreen === "dash"
+      ? ""
+      : '<button class="back" data-action="admin-back">← Назад</button>';
+    return '<div class="head">' + back + '<span class="admin-role">' +
+      esc((state.me && state.me.role_title) || "сотрудник") + "</span></div>" +
+      "<h1>" + esc(title) + "</h1>";
+  }
+
+  function adminTile(icon, title, section, sub) {
+    return '<button class="admin-tile" data-action="admin-nav" data-value="' + section + '">' +
+      '<span class="admin-tile-ico">' + icon + "</span>" +
+      '<span class="admin-tile-title">' + esc(title) + "</span>" +
+      (sub ? '<span class="admin-tile-sub">' + esc(sub) + "</span>" : "") + "</button>";
+  }
+
+  function adminSectionAllowed(section) {
+    if (!state.me) return false;
+    if (state.me.is_admin) return true;
+    return section === "dash" || section === "tickets" || section === "ticket";
+  }
+
+  function renderAdmin() {
+    if (!state.me || (!state.me.is_admin && !state.me.is_staff)) {
+      view.innerHTML = '<div class="card"><div class="row-title">Нет доступа</div>' +
+        '<div class="muted">Раздел доступен только сотрудникам.</div></div>';
+      return;
+    }
+    var screen = state.adminScreen || "dash";
+    if (!adminSectionAllowed(screen)) { screen = "dash"; state.adminScreen = screen; }
+    if (state.adminLoading) {
+      view.innerHTML = adminHead(ADMIN_TITLES[screen] || "Админ-панель") +
+        '<div class="skeleton"></div><div class="skeleton"></div>';
+      return;
+    }
+    if (state.adminError && !state.adminData && !state.adminUser && !state.adminTicket) {
+      view.innerHTML = adminHead(ADMIN_TITLES[screen] || "Админ-панель") +
+        '<div class="card"><div class="muted">' + esc(state.adminError) + "</div>" +
+        '<button class="btn secondary" data-action="admin-refresh">↻ Повторить</button></div>';
+      return;
+    }
+    if (screen === "stats") renderAdminStats();
+    else if (screen === "users") renderAdminUsers();
+    else if (screen === "user") renderAdminUser();
+    else if (screen === "payments") renderAdminPayments();
+    else if (screen === "promos") renderAdminPromos();
+    else if (screen === "settings") renderAdminSettings();
+    else if (screen === "roles") renderAdminRoles();
+    else if (screen === "broadcast") renderAdminBroadcast();
+    else if (screen === "aitest") renderAdminAiTest();
+    else if (screen === "tickets") renderAdminTickets();
+    else if (screen === "ticket") renderAdminTicket();
+    else if (screen === "channels") renderAdminChannels();
+    else if (screen === "giveaways") renderAdminGiveaways();
+    else renderAdminDash();
+  }
+
+  function renderAdminDash() {
+    var d = state.adminData || {};
+    var s = d.stats || {};
+    var pay = d.payments || {};
+    var tickets = d.tickets || {};
+    var promos = d.promos || {};
+    var admin = !!(state.me && state.me.is_admin);
+    var tiles = "";
+    if (admin) {
+      tiles += adminTile("👥", "Пользователи", "users", (s.users || 0) + " чел.");
+      tiles += adminTile("📊", "Статистика", "stats", (s.requests_today || 0) + " сегодня");
+      tiles += adminTile("⭐", "Платежи", "payments", (pay.stars || 0) + " ⭐");
+      tiles += adminTile("🎟", "Промокоды", "promos", (promos.active || 0) + " активных");
+      tiles += adminTile("⚙️", "Настройки", "settings");
+      tiles += adminTile("📣", "Рассылка", "broadcast");
+      if (state.me && state.me.can_manage_roles) tiles += adminTile("👑", "Роли", "roles");
+      tiles += adminTile("📢", "Каналы", "channels");
+      tiles += adminTile("🎉", "Розыгрыши", "giveaways");
+      tiles += adminTile("🧪", "Проверка ИИ", "aitest");
+    }
+    tiles += adminTile("🎫", "Тикеты", "tickets", (tickets.open || 0) + " открыто");
+
+    var kpi = '<div class="grid">' +
+      statCard(s.users || 0, "пользователей") +
+      statCard(s.requests_today || 0, "сегодня") +
+      statCard(s.active_today || 0, "активных") +
+      statCard(s.banned || 0, "забанено") +
+      statCard(tickets.open || 0, "тикетов") +
+      statCard(promos.active || 0, "промокодов") +
+      "</div>";
+
+    var gift = admin
+      ? "<h2>🎁 Подарить всем</h2>" +
+        '<div class="card"><div class="muted">Начислит бонусные запросы каждому пользователю.</div>' +
+        '<div class="field"><input class="input" id="admin-gift-count" type="number" min="1" max="10000" placeholder="Сколько запросов">' +
+        '<button class="btn small" data-action="admin-giftall">Выдать</button></div></div>'
+      : "";
+
+    view.innerHTML = adminHead("Админ-панель") +
+      (admin ? '<div class="card"><div class="row"><div><div class="row-title">' +
+        esc(d.role_title || "Сотрудник") + '</div><div class="row-sub">Модель: ' +
+        esc((d.runtime && d.runtime.model) || "—") + '</div></div>' +
+        '<button class="chip" data-action="admin-refresh">↻</button></div></div>' : "") +
+      kpi +
+      "<h2>Разделы</h2>" +
+      '<div class="admin-grid">' + tiles + "</div>" +
+      gift;
+  }
+
+  function renderAdminStats() {
+    var d = state.adminData || {};
+    var s = d.stats || {};
+    var pay = d.payments || {};
+    var tickets = d.tickets || {};
+    var fb = d.feedback || {};
+    var rt = d.runtime || {};
+    var top = (d.top || []).map(function (row, i) {
+      return '<div class="item"><div class="body"><b>' + (i + 1) + ". " + esc(row.name) +
+        '</b><div class="when">ID ' + row.user_id + "</div></div>" +
+        '<span class="admin-count">' + esc(row.total) + "</span></div>";
+    }).join("") || '<div class="empty">Пока пусто</div>';
+    var max = 1;
+    (d.activity || []).forEach(function (a) { if (a.total > max) max = a.total; });
+    var bars = (d.activity || []).map(function (a) {
+      var h = Math.max(4, Math.round((a.total / max) * 100));
+      return '<div class="admin-bar" title="' + esc(a.day) + ": " + a.total + '">' +
+        '<span style="height:' + h + '%"></span><em>' + esc(a.day.slice(5)) + "</em></div>";
+    }).join("");
+
+    view.innerHTML = adminHead("Статистика") +
+      '<div class="grid">' +
+      statCard(s.users || 0, "пользователей") +
+      statCard(s.banned || 0, "забанено") +
+      statCard(s.active_today || 0, "активных") +
+      statCard(s.requests_today || 0, "запросов сегодня") +
+      statCard(tickets.open || 0, "тикетов") +
+      statCard(pay.stars || 0, "звёзд") +
+      "</div>" +
+      "<h2>Активность за 7 дней</h2>" +
+      '<div class="card"><div class="admin-chart">' + bars + "</div></div>" +
+      "<h2>Обратная связь</h2>" +
+      '<div class="card"><div class="row"><div class="row-title">👍 / 👎</div>' +
+      '<div class="admin-count">' + (fb.up || 0) + " / " + (fb.down || 0) + "</div></div>" +
+      '<div class="muted" style="margin-top:6px">Оценено ответов: ' + (fb.total || 0) + "</div></div>" +
+      "<h2>Топ по запросам</h2>" +
+      '<div class="card">' + top + "</div>" +
+      "<h2>Сейчас</h2>" +
+      '<div class="card"><div class="row"><div class="row-title">Модель</div><div class="admin-count">' +
+      esc(rt.model || "—") + '</div></div><div class="row"><div class="row-title">Лимит в день</div>' +
+      '<div class="admin-count">' + (rt.daily_limit > 0 ? rt.daily_limit : "∞") + "</div></div>" +
+      '<div class="row"><div class="row-title">Контекст</div><div class="admin-count">' +
+      (rt.max_context || 0) + "</div></div></div>";
+  }
+
+  function renderAdminUsers() {
+    var d = state.adminData || { items: [], total: 0, offset: 0 };
+    state.adminUsersOffset = d.offset || 0;
+    var rows = (d.items || []).map(function (u) {
+      return '<button class="admin-item" data-action="admin-user-open" data-value="' + u.user_id + '">' +
+        '<span class="admin-item-ico">' + (u.banned ? "🚫" : "👤") + "</span>" +
+        '<span class="admin-item-main"><b>' + esc(u.name) + "</b>" +
+        '<span class="admin-sub">ID ' + u.user_id + " · сегодня " + u.used_today + "</span></span>" +
+        '<span class="admin-chev">›</span></button>';
+    }).join("") || '<div class="empty">Пользователей пока нет</div>';
+    var nav = "";
+    if ((d.offset || 0) > 0) {
+      nav += '<button class="chip" data-action="admin-users-page" data-value="' +
+        Math.max(0, d.offset - (d.page || 20)) + '">← Назад</button>';
+    }
+    if ((d.offset || 0) + (d.page || 20) < (d.total || 0)) {
+      nav += '<button class="chip" data-action="admin-users-page" data-value="' +
+        (d.offset + (d.page || 20)) + '">Дальше →</button>';
+    }
+    view.innerHTML = adminHead("Пользователи") +
+      '<div class="card"><div class="field"><input class="input" id="admin-user-search" type="number" inputmode="numeric" placeholder="ID пользователя">' +
+      '<button class="btn small" data-action="admin-user-find">Найти</button></div>' +
+      '<div class="muted" style="margin-top:8px">Всего: ' + (d.total || 0) + "</div></div>" +
+      '<div class="admin-list">' + rows + "</div>" +
+      (nav ? '<div class="field admin-pager">' + nav + "</div>" : "");
+  }
+
+  function renderAdminUser() {
+    var data = state.adminUser || {};
+    var card = data.card || {};
+    var u = card.user || {};
+    var models = card.models || [];
+    var uid = u.id || 0;
+    var roleChips = (card.assignable || []).filter(function (o) {
+      return o.allowed;
+    }).map(function (o) {
+      var on = o.role === card.role ? " active" : "";
+      return '<button class="chip' + on + '" data-action="admin-user-role" data-value="' +
+        o.role + '">' + esc(o.title) + "</button>";
+    }).join("");
+    var modelRows = models.map(function (m) {
+      var mark = m.owned ? "✅" : "⬜";
+      if (m.free) {
+        return '<div class="row"><div><div class="row-title">' + mark + " " + esc(m.title) +
+          '</div><div class="row-sub">бесплатная</div></div>' +
+          (m.chosen ? '<span class="admin-badge">выбрана</span>' : "") + "</div>";
+      }
+      return '<div class="row"><div><div class="row-title">' + mark + " " + esc(m.title) +
+        '</div><div class="row-sub">' + (m.stars || 0) + ' ⭐</div></div>' +
+        '<button class="chip" data-action="admin-model" data-value="' + esc(m.id) +
+        '" data-grant="' + (m.owned ? "0" : "1") + '">' + (m.owned ? "Закрыть" : "Открыть") + "</button></div>";
+    }).join("");
+
+    view.innerHTML = adminHead("Пользователь") +
+      '<div class="card">' +
+      '<div class="row"><div><div class="row-title">' + esc(u.name || ("ID " + uid)) +
+      '</div><div class="row-sub">ID ' + uid + (u.username ? " · @" + esc(u.username) : "") +
+      "</div></div>" +
+      '<span class="admin-badge ' + (u.banned ? "bad" : "ok") + '">' +
+      (u.banned ? "забанен" : "активен") + "</span></div>" +
+      '<div class="row"><div class="row-title">Роль</div><div class="admin-count">' +
+      esc(card.role_title || "обычный") + "</div></div>" +
+      '<div class="row"><div class="row-title">Сегодня / всего</div><div class="admin-count">' +
+      (u.used_today || 0) + " / " + (u.total_requests || 0) + "</div></div>" +
+      '<div class="row"><div class="row-title">Бонусные запросы</div><div class="admin-count">' +
+      (u.bonus_requests || 0) + "</div></div>" +
+      '<div class="row"><div class="row-title">Генерации картинок</div><div class="admin-count">' +
+      (u.image_credits || 0) + "</div></div>" +
+      '<div class="row"><div class="row-title">История</div><div class="admin-count">' +
+      (u.history_len || 0) + " сообщений</div></div>" +
+      '<div class="row"><div class="row-title">Подписка</div><div class="admin-count">' +
+      (u.subscription_until ? esc(when(u.subscription_until)) : "—") + "</div></div>" +
+      "</div>" +
+
+      '<div class="card"><div class="row"><div class="row-title">Действия</div></div>' +
+      '<button class="btn ' + (u.banned ? "" : "secondary") + '" data-action="admin-user-ban" data-value="' +
+      (u.banned ? "0" : "1") + '">' + (u.banned ? "✅ Разбанить" : "🚫 Забанить") + "</button>" +
+      '<button class="btn secondary" data-action="admin-user-reset">🧹 Сбросить контекст</button></div>' +
+
+      '<div class="card"><div class="row"><div class="row-title">⭐ Выдать запросы</div></div>' +
+      '<div class="field"><input class="input" id="admin-bonus" type="number" min="1" max="100000" placeholder="Сколько запросов">' +
+      '<button class="btn small" data-action="admin-user-bonus">Выдать</button></div></div>' +
+
+      '<div class="card"><div class="row"><div class="row-title">🖼 Выдать генерации</div></div>' +
+      '<div class="field"><input class="input" id="admin-images" type="number" min="1" max="10000" placeholder="Сколько генераций">' +
+      '<button class="btn small" data-action="admin-user-images">Выдать</button></div></div>' +
+
+      (card.can_manage_roles && roleChips
+        ? '<div class="card"><div class="row"><div class="row-title">👑 Роль</div></div>' +
+          '<div class="chips">' + roleChips + "</div>" +
+          (card.role
+            ? '<button class="btn secondary" data-action="admin-user-role-clear">Снять роль</button>'
+            : "") + "</div>"
+        : "") +
+
+      '<div class="card"><div class="row"><div class="row-title">🧠 Модели</div></div>' +
+      modelRows + "</div>";
+  }
+
+  function renderAdminPayments() {
+    var d = state.adminData || { stats: {}, items: [] };
+    var s = d.stats || {};
+    var rows = (d.items || []).map(function (p) {
+      var what;
+      if (p.kind === "sub") what = "💎 подписка · " + p.requests + " дн.";
+      else if (p.kind === "model") what = "🧠 " + (p.model_title || p.model);
+      else what = "+" + p.requests + " запросов";
+      return '<div class="item"><div class="body"><b>' + esc(what) + "</b>" +
+        '<div class="when">' + esc(p.name) + " · " + (p.stars || 0) + " ⭐ · " +
+        esc(when(p.created_at)) + (p.refunded ? " · ↩️ возвращён" : "") + "</div></div>" +
+        (p.refunded ? "" : '<button class="chip admin-danger" data-action="admin-refund" data-value="' +
+          p.id + '">↩️</button>') + "</div>";
+    }).join("") || '<div class="empty">Покупок пока не было</div>';
+
+    view.innerHTML = adminHead("Платежи") +
+      '<div class="grid">' +
+      statCard(s.count || 0, "платежей") +
+      statCard(s.stars || 0, "звёзд") +
+      statCard(s.requests || 0, "продано") +
+      "</div>" +
+      "<h2>Последние</h2>" +
+      '<div class="card">' + rows + "</div>";
+  }
+
+  function renderAdminPromos() {
+    var d = state.adminData || { stats: {}, items: [] };
+    var s = d.stats || {};
+    var rows = (d.items || []).map(function (p) {
+      var reward = [];
+      if (p.requests) reward.push("+" + p.requests + " зап.");
+      if (p.image_credits) reward.push("+" + p.image_credits + " 🖼");
+      var limit = p.max_uses > 0 ? (p.uses + "/" + p.max_uses) : (p.uses + " без лимита");
+      var expiry = p.expires_at ? ("до " + when(p.expires_at)) : "бессрочно";
+      return '<div class="item"><div class="body"><b>' + esc(p.code) + "</b>" +
+        '<div class="when">' + esc(reward.join(" · ") || "—") + " · " + esc(limit) +
+        " · " + esc(expiry) + (p.expired ? " · истёк" : "") + "</div></div>" +
+        '<button class="chip admin-danger" data-action="admin-promo-del" data-value="' +
+        esc(p.code) + '">🗑</button></div>';
+    }).join("") || '<div class="empty">Промокодов пока нет</div>';
+
+    view.innerHTML = adminHead("Промокоды") +
+      '<div class="card"><div class="row"><div><div class="row-title">Всего ' + (s.total || 0) +
+      '</div><div class="row-sub">Активных: ' + (s.active || 0) + " · активаций: " + (s.uses || 0) +
+      "</div></div></div>" +
+      '<div class="field"><input class="input" id="admin-promo-code" placeholder="КОД" autocapitalize="characters"></div>' +
+      '<div class="field"><input class="input" id="admin-promo-req" type="number" min="0" placeholder="Запросы">' +
+      '<input class="input" id="admin-promo-img" type="number" min="0" placeholder="Картинки"></div>' +
+      '<div class="field"><input class="input" id="admin-promo-uses" type="number" min="0" placeholder="Лимит (0 — без)">' +
+      '<input class="input" id="admin-promo-days" type="number" min="0" placeholder="Дней (0 — бессрочно)"></div>' +
+      '<button class="btn" data-action="admin-promo-create">➕ Создать промокод</button></div>' +
+      "<h2>Список</h2>" +
+      '<div class="card">' + rows + "</div>";
+  }
+
+  function renderAdminSettings() {
+    var d = state.adminData || {};
+    var s = d.settings || {};
+    var items = s.items || [];
+    var rows = items.map(function (it) {
+      var html = '<div class="admin-setting"><div class="row"><div><div class="row-title">' +
+        esc(it.label) + '</div><div class="row-sub">' + esc(it.hint || "") + "</div></div>" +
+        '<button class="chip" data-action="admin-setting-edit" data-value="' + esc(it.key) + '">✏️</button></div>';
+      if (state.adminEdit === it.key) {
+        html += it.multiline
+          ? '<textarea class="input admin-textarea" id="admin-set-' + it.key + '">' + esc(it.value) + "</textarea>"
+          : '<input class="input admin-input" id="admin-set-' + it.key + '" value="' + esc(it.value) + '">';
+        html += '<div class="field"><button class="btn small" data-action="admin-setting-save" data-value="' +
+          esc(it.key) + '">Сохранить</button>' +
+          '<button class="btn small secondary" data-action="admin-setting-cancel">Отмена</button></div>';
+      } else {
+        html += '<div class="admin-value">' + esc(it.value || "—") +
+          (it.override ? ' <span class="admin-badge">из админки</span>' : "") + "</div>";
+      }
+      return html + "</div>";
+    }).join("");
+
+    view.innerHTML = adminHead("Настройки") +
+      '<div class="card"><div class="row"><div><div class="row-title">🔐 Гейт в чатах</div>' +
+      '<div class="row-sub">' + (s.group_gate ? "включён" : "выключен") + "</div></div>" +
+      '<button class="btn small secondary" data-action="admin-gate">' +
+      (s.group_gate ? "Выключить" : "Включить") + "</button></div></div>" +
+      '<div class="card">' + rows + "</div>" +
+      '<button class="btn secondary" data-action="admin-setting-reset">♻️ Вернуть значения из env</button>';
+  }
+
+  function renderAdminRoles() {
+    var d = state.adminData || {};
+    var rows = (d.items || []).map(function (r) {
+      return '<div class="item"><div class="body"><b>' + esc(r.name) + "</b>" +
+        '<div class="when">' + esc(r.role_title) + " · ID " + r.user_id + "</div></div>" +
+        '<button class="chip admin-danger" data-action="admin-role-clear" data-value="' +
+        r.user_id + '">Снять</button></div>';
+    }).join("") || '<div class="empty">Ролей из бота пока нет</div>';
+    var env = (d.env_admins || []).map(function (id) {
+      return '<div class="item"><div class="body"><b>ID ' + id + "</b>" +
+        '<div class="when">🛡 админ из ADMIN_IDS</div></div></div>';
+    }).join("");
+    var chips = (d.assignable || []).map(function (o) {
+      return '<button class="chip" data-action="admin-role-grant" data-value="' +
+        o.role + '">' + esc(o.title) + "</button>";
+    }).join("");
+
+    view.innerHTML = adminHead("Роли") +
+      '<div class="card"><div class="row"><div class="row-title">👑 Владелец</div>' +
+      '<div class="admin-count">' + (d.owner_id || "не задан") + "</div></div>" +
+      '<div class="muted" style="margin-top:6px">Владелец задаётся только через OWNER_ID.</div></div>' +
+      '<div class="card"><div class="row"><div class="row-title">➕ Выдать роль по ID</div></div>' +
+      '<div class="field"><input class="input" id="admin-role-id" type="number" inputmode="numeric" placeholder="Telegram ID"></div>' +
+      '<div class="chips">' + chips + "</div>" +
+      '<div class="muted" style="margin-top:8px">Пользователь должен хотя бы раз написать боту, иначе уведомление не дойдёт.</div></div>' +
+      "<h2>Назначенные роли</h2>" +
+      '<div class="card">' + rows + env + "</div>";
+  }
+
+  function renderAdminBroadcast() {
+    var d = state.adminData || {};
+    if (d.count != null) state.adminBcastCount = d.count;
+    var count = state.adminBcastCount || 0;
+    view.innerHTML = adminHead("Рассылка") +
+      '<div class="card"><div class="row"><div><div class="row-title">Получатели</div>' +
+      '<div class="row-sub">активные пользователи</div></div>' +
+      '<div class="admin-count">' + count + "</div></div>" +
+      '<textarea class="input admin-textarea" id="admin-bcast-text" placeholder="Текст рассылки">' +
+      esc(state.adminBcastText || "") + "</textarea>" +
+      '<button class="btn" data-action="admin-bcast-send">' +
+      (state.adminBcastConfirm ? "✅ Подтвердить отправку" : "📣 Отправить") + "</button>" +
+      (state.adminBcastConfirm ? '<div class="muted" style="margin-top:8px">Нажми ещё раз, чтобы подтвердить.</div>' : "") +
+      "</div>";
+  }
+
+  function renderAdminAiTest() {
+    var d = state.adminData || {};
+    var body;
+    if (d.success === true) {
+      body = '<div class="card"><div class="row"><div class="row-title">✅ ИИ отвечает</div>' +
+        '<div class="admin-count">' + esc(d.elapsed || 0) + " с</div></div>" +
+        '<div class="admin-value">' + esc(d.answer || "") + "</div></div>";
+    } else if (d.success === false) {
+      body = '<div class="card"><div class="row"><div class="row-title">⚠️ ИИ не ответил</div>' +
+        '<div class="admin-count">' + esc(d.elapsed || 0) + " с</div></div>" +
+        '<div class="admin-value">' + esc(d.error || "") + "</div></div>";
+    } else {
+      body = '<div class="skeleton"></div>';
+    }
+    view.innerHTML = adminHead("Проверка ИИ") + body +
+      '<button class="btn secondary" data-action="admin-refresh">🔄 Проверить снова</button>';
+  }
+
+  function renderAdminTickets() {
+    var d = state.adminData || { stats: {}, items: [] };
+    state.adminTicketsOffset = d.offset || 0;
+    var s = d.stats || {};
+    var rows = (d.items || []).map(function (t) {
+      return '<button class="admin-item" data-action="admin-ticket-open" data-value="' + t.id + '">' +
+        '<span class="admin-item-ico">🎫</span>' +
+        '<span class="admin-item-main"><b>#' + t.id + " · " + esc(t.topic_title) + "</b>" +
+        '<span class="admin-sub">' + esc(t.name) + " · " + esc(when(t.updated_at)) + "</span></span>" +
+        '<span class="admin-chev">›</span></button>';
+    }).join("") || '<div class="empty">Открытых обращений нет</div>';
+    var nav = "";
+    if ((d.offset || 0) > 0) {
+      nav += '<button class="chip" data-action="admin-tickets-page" data-value="' +
+        Math.max(0, d.offset - (d.limit || 20)) + '">← Назад</button>';
+    }
+    if ((d.items || []).length >= (d.limit || 20)) {
+      nav += '<button class="chip" data-action="admin-tickets-page" data-value="' +
+        (d.offset + (d.limit || 20)) + '">Дальше →</button>';
+    }
+    view.innerHTML = adminHead("Тикеты") +
+      '<div class="grid">' +
+      statCard(s.open || 0, "открыто") +
+      statCard(s.closed || 0, "закрыто") +
+      statCard(s.total || 0, "всего") +
+      "</div>" +
+      '<div class="admin-list">' + rows + "</div>" +
+      (nav ? '<div class="field admin-pager">' + nav + "</div>" : "");
+  }
+
+  function renderAdminTicket() {
+    var data = state.adminTicket || {};
+    var t = data.ticket || {};
+    var msgs = (data.messages || []).map(function (m) {
+      return '<div class="admin-msg' + (m.from_staff ? " staff" : "") + '">' +
+        '<div class="admin-msg-head">' + (m.from_staff ? "🛡 Поддержка" : "👤 Пользователь") +
+        " · " + esc(when(m.created_at)) + "</div>" +
+        '<div class="admin-msg-text">' + esc(m.text) + "</div></div>";
+    }).join("") || '<div class="empty">Сообщений нет</div>';
+    var open = t.status === "open";
+    view.innerHTML = adminHead("Обращение #" + (t.id || "")) +
+      '<div class="card"><div class="row"><div><div class="row-title">' + esc(t.topic_title || "") +
+      '</div><div class="row-sub">' + esc(t.name || "") + " · ID " + (t.user_id || "") +
+      "</div></div><span class='admin-badge " + (open ? "ok" : "") + "'>" +
+      (open ? "открыто" : "закрыто") + "</span></div></div>" +
+      '<div class="card">' + msgs + "</div>" +
+      (open
+        ? '<div class="card"><textarea class="input admin-textarea" id="admin-ticket-reply" placeholder="Ответ пользователю"></textarea>' +
+          '<button class="btn" data-action="admin-ticket-send">✍️ Ответить</button>' +
+          '<button class="btn secondary" data-action="admin-ticket-close">✅ Закрыть обращение</button></div>'
+        : "");
+  }
+
+  function renderAdminChannels() {
+    var d = state.adminData || { items: [] };
+    var items = d.items || [];
+    if (state.adminChannel == null) state.adminChannel = items.length ? 0 : -1;
+    if (state.adminChannel >= items.length) state.adminChannel = items.length ? 0 : -1;
+    var list = items.map(function (ch) {
+      return '<div class="item"><div class="body"><b>' + esc(ch.title) + "</b>" +
+        '<div class="when">' + esc(ch.channel) + " · " + (ch.members || 0) + " подписчиков" +
+        (ch.required ? " · проверка подписки" : "") + (ch.ok ? "" : " · ⚠️ нет доступа") + "</div></div>" +
+        (ch.required ? "" : '<button class="chip admin-danger" data-action="admin-channel-del" data-value="' +
+          ch.index + '">🗑</button>') + "</div>";
+    }).join("") || '<div class="empty">Каналы не подключены</div>';
+    var chips = items.map(function (ch) {
+      return '<button class="chip' + (ch.index === state.adminChannel ? " active" : "") +
+        '" data-action="admin-channel-pick" data-value="' + ch.index + '">' + esc(ch.title) + "</button>";
+    }).join("");
+
+    view.innerHTML = adminHead("Каналы") +
+      '<div class="card"><div class="row"><div class="row-title">Подключённые каналы</div>' +
+      '<div class="admin-count">' + items.length + "/" + (d.max || 8) + "</div></div>" + list +
+      '<div class="muted" style="margin-top:8px">Бот должен быть администратором канала.</div></div>' +
+      '<div class="card"><div class="row"><div class="row-title">➕ Подключить</div></div>' +
+      '<div class="field"><input class="input" id="admin-channel-input" placeholder="@username или ссылка">' +
+      '<button class="btn small" data-action="admin-channel-add">Добавить</button></div></div>' +
+      (items.length
+        ? '<div class="card"><div class="row"><div class="row-title">📝 Пост в канал</div></div>' +
+          '<div class="chips">' + chips + "</div>" +
+          '<textarea class="input admin-textarea" id="admin-channel-text" placeholder="Текст поста"></textarea>' +
+          '<button class="btn" data-action="admin-channel-publish">📤 Опубликовать</button></div>'
+        : "");
+  }
+
+  function renderAdminGiveaways() {
+    var d = state.adminData || { stats: {}, items: [] };
+    var s = d.stats || {};
+    var rows = (d.items || []).map(function (g) {
+      return '<div class="item"><div class="body"><b>' + esc(g.prize) + "</b>" +
+        '<div class="when">до ' + esc(when(g.ends_at)) + " · участников: " + g.entries +
+        " · победителей: " + g.winners + "</div></div>" +
+        '<button class="chip admin-danger" data-action="admin-giveaway-cancel" data-value="' +
+        g.id + '">Отменить</button></div>';
+    }).join("") || '<div class="empty">Активных розыгрышей нет</div>';
+    view.innerHTML = adminHead("Розыгрыши") +
+      '<div class="grid">' +
+      statCard(s.active || 0, "активных") +
+      statCard(s.finished || 0, "завершено") +
+      "</div>" +
+      '<div class="card">' + rows + "</div>";
+  }
+
   function renderError() {
     view.innerHTML =
       '<div class="card center" style="margin-top:24px">' +
@@ -1620,6 +2218,7 @@
     else if (state.screen === "buy") renderBuy();
     else if (state.screen === "friends") renderFriends(true);
     else if (state.screen === "settings") renderSettings(true);
+    else if (state.tab === "admin") renderAdmin();
     else if (state.tab === "stats") renderStats();
     else if (state.tab === "tasks") renderTools();
     else if (state.tab === "games") renderGames();
@@ -1842,6 +2441,11 @@
     else if (id === "rem-dur") { event.preventDefault(); toolsAction({ action: "rem.add", text: val("rem-text"), duration: val("rem-dur") }, t("added")); }
     else if (id === "buy-stars") { event.preventDefault(); buyCustom(); }
     else if (id === "promo-input") { event.preventDefault(); applyPromo(); }
+    else if (id === "admin-user-search") {
+      event.preventDefault();
+      var aid = parseInt(val("admin-user-search"), 10);
+      if (aid) adminGo("user", { payload: { id: aid } });
+    }
   }
 
   function buyCustom() {
@@ -1894,6 +2498,10 @@
       state.tab = value;
       if (value === "friends" && state.top == null) loadTop().then(render);
       else if (value === "tasks" && state.tools === null) { render(); ensureTools(); }
+      else if (value === "admin") {
+        if (state.adminData || state.adminUser || state.adminTicket) render();
+        else adminGo(state.adminScreen || "dash");
+      }
       else render();
     } else if (action === "open") {
       state.anchor = node.getAttribute("data-anchor") || null;
@@ -1985,6 +2593,152 @@
           toast(t("copied")); haptic("success");
         });
       }
+    } else if (action === "admin-nav") {
+      state.adminEdit = null;
+      state.adminBcastConfirm = false;
+      state.adminBcastText = "";
+      if (value === "broadcast") adminGo("broadcast", { op: "broadcast.count" });
+      else if (value === "aitest") adminGo("aitest", { op: "aitest" });
+      else if (value === "tickets") adminGo("tickets", { payload: { offset: 0 } });
+      else adminGo(value);
+    } else if (action === "admin-back") {
+      state.adminEdit = null;
+      adminBack();
+    } else if (action === "admin-refresh") {
+      adminRefresh();
+    } else if (action === "admin-user-open") {
+      adminGo("user", { payload: { id: parseInt(value, 10) } });
+    } else if (action === "admin-user-find") {
+      var findId = parseInt(val("admin-user-search"), 10);
+      if (!findId) { toast("Введи числовой ID"); return; }
+      adminGo("user", { payload: { id: findId } });
+    } else if (action === "admin-users-page") {
+      adminGo("users", { payload: { offset: parseInt(value, 10) } });
+    } else if (action === "admin-user-ban") {
+      var banId = state.adminUser && state.adminUser.card ? state.adminUser.card.user.id : 0;
+      if (banId) adminMutate("user.ban", { id: banId, banned: value === "1" }, "user");
+    } else if (action === "admin-user-reset") {
+      var resetId = state.adminUser && state.adminUser.card ? state.adminUser.card.user.id : 0;
+      if (resetId) adminMutate("user.reset", { id: resetId }, "user");
+    } else if (action === "admin-user-bonus") {
+      var bonusId = state.adminUser && state.adminUser.card ? state.adminUser.card.user.id : 0;
+      var bonusCount = parseInt(val("admin-bonus"), 10);
+      if (!bonusId) return;
+      if (!bonusCount || bonusCount < 1) { toast("Введи число запросов"); return; }
+      adminMutate("user.bonus", { id: bonusId, count: bonusCount }, "user");
+    } else if (action === "admin-user-images") {
+      var imgId = state.adminUser && state.adminUser.card ? state.adminUser.card.user.id : 0;
+      var imgCount = parseInt(val("admin-images"), 10);
+      if (!imgId) return;
+      if (!imgCount || imgCount < 1) { toast("Введи число генераций"); return; }
+      adminMutate("user.images", { id: imgId, count: imgCount }, "user");
+    } else if (action === "admin-user-role") {
+      var roleId = state.adminUser && state.adminUser.card ? state.adminUser.card.user.id : 0;
+      if (roleId) adminMutate("user.role", { id: roleId, role: value }, "user");
+    } else if (action === "admin-user-role-clear") {
+      var clearId = state.adminUser && state.adminUser.card ? state.adminUser.card.user.id : 0;
+      if (clearId) adminMutate("user.role.clear", { id: clearId }, "user");
+    } else if (action === "admin-model") {
+      var modelId = state.adminUser && state.adminUser.card ? state.adminUser.card.user.id : 0;
+      if (modelId) {
+        adminMutate("user.model", {
+          id: modelId, model: value, grant: node.getAttribute("data-grant") === "1"
+        }, "user");
+      }
+    } else if (action === "admin-refund") {
+      adminMutate("payment.refund", { id: parseInt(value, 10) }, "payments");
+    } else if (action === "admin-promo-create") {
+      adminMutate("promo.create", {
+        code: val("admin-promo-code"),
+        requests: parseInt(val("admin-promo-req"), 10) || 0,
+        images: parseInt(val("admin-promo-img"), 10) || 0,
+        max_uses: parseInt(val("admin-promo-uses"), 10) || 0,
+        days: parseInt(val("admin-promo-days"), 10) || 0
+      }, "promos");
+    } else if (action === "admin-promo-del") {
+      adminMutate("promo.delete", { code: value }, "promos");
+    } else if (action === "admin-setting-edit") {
+      state.adminEdit = value;
+      render();
+    } else if (action === "admin-setting-cancel") {
+      state.adminEdit = null;
+      render();
+    } else if (action === "admin-setting-save") {
+      var setInput = document.getElementById("admin-set-" + value);
+      adminApi("setting.save", {
+        key: value, value: setInput ? setInput.value : ""
+      }).then(function (data) {
+        state.adminEdit = null;
+        adminApply("settings", data);
+      }).catch(function (err) { toast(err.message || t("error_text")); });
+    } else if (action === "admin-setting-reset") {
+      adminMutate("settings.reset", {}, "settings");
+    } else if (action === "admin-gate") {
+      adminMutate("settings.gate", {}, "settings");
+    } else if (action === "admin-bcast-send") {
+      state.adminBcastText = val("admin-bcast-text");
+      if (!state.adminBcastConfirm) {
+        if (!state.adminBcastText || state.adminBcastText.length < 2) {
+          toast("Текст слишком короткий");
+          return;
+        }
+        state.adminBcastConfirm = true;
+        render();
+        return;
+      }
+      state.adminBcastConfirm = false;
+      var bcastText = state.adminBcastText;
+      if (!bcastText || bcastText.length < 2) { toast("Текст слишком короткий"); return; }
+      state.adminBcastText = "";
+      adminMutate("broadcast", { text: bcastText }, "broadcast");
+    } else if (action === "admin-role-grant") {
+      var grantId = parseInt(val("admin-role-id"), 10);
+      if (!grantId) { toast("Введи Telegram ID"); return; }
+      adminApi("user.role", { id: grantId, role: value }).then(function (data) {
+        if (data.notice) toast(data.notice);
+        adminGo("roles");
+      }).catch(function (err) { toast(err.message || t("error_text")); });
+    } else if (action === "admin-role-clear") {
+      adminApi("user.role.clear", { id: parseInt(value, 10) }).then(function (data) {
+        if (data.notice) toast(data.notice);
+        adminGo("roles");
+      }).catch(function (err) { toast(err.message || t("error_text")); });
+    } else if (action === "admin-tickets-page") {
+      adminGo("tickets", { payload: { offset: parseInt(value, 10) } });
+    } else if (action === "admin-ticket-open") {
+      adminGo("ticket", { payload: { id: parseInt(value, 10) } });
+    } else if (action === "admin-ticket-send") {
+      var ticketId = state.adminTicket && state.adminTicket.ticket
+        ? state.adminTicket.ticket.id : 0;
+      var replyText = val("admin-ticket-reply");
+      if (!ticketId) return;
+      if (!replyText) { toast("Введи текст ответа"); return; }
+      adminMutate("ticket.reply", { id: ticketId, text: replyText }, "ticket");
+    } else if (action === "admin-ticket-close") {
+      var closeTicketId = state.adminTicket && state.adminTicket.ticket
+        ? state.adminTicket.ticket.id : 0;
+      if (closeTicketId) adminMutate("ticket.close", { id: closeTicketId }, "ticket");
+    } else if (action === "admin-channel-add") {
+      adminMutate("channel.add", { channel: val("admin-channel-input") }, "channels");
+    } else if (action === "admin-channel-del") {
+      adminMutate("channel.remove", { index: parseInt(value, 10) }, "channels");
+    } else if (action === "admin-channel-pick") {
+      state.adminChannel = parseInt(value, 10);
+      render();
+    } else if (action === "admin-channel-publish") {
+      adminMutate("channel.publish", {
+        index: state.adminChannel == null ? 0 : state.adminChannel,
+        text: val("admin-channel-text")
+      }, "channels");
+    } else if (action === "admin-giveaway-cancel") {
+      adminMutate("giveaway.cancel", { id: parseInt(value, 10) }, "giveaways");
+    } else if (action === "admin-giftall") {
+      var giftCount = parseInt(val("admin-gift-count"), 10);
+      if (!giftCount || giftCount < 1) { toast("Введи число запросов"); return; }
+      adminApi("giftall", { count: giftCount }).then(function (data) {
+        toast(data.notice || "Готово");
+        adminGo("dash");
+      }).catch(function (err) { toast(err.message || t("error_text")); });
     }
   });
 

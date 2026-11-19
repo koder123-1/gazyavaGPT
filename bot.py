@@ -314,6 +314,7 @@ def create_app(
     dispatcher: Dispatcher,
     bot: Bot,
     store: Store,
+    ai: AIClient | None = None,
 ) -> web.Application:
     app = web.Application()
     SimpleRequestHandler(
@@ -332,7 +333,7 @@ def create_app(
 
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
-    miniapp.setup(app, settings, store, bot)
+    miniapp.setup(app, settings, store, bot, ai)
     return app
 
 
@@ -345,7 +346,7 @@ def main() -> None:
     dispatcher = create_dispatcher(settings, store, ai, images)
 
     if settings.use_webhook:
-        app = create_app(settings, dispatcher, bot, store)
+        app = create_app(settings, dispatcher, bot, store, ai)
         web.run_app(app, host="0.0.0.0", port=settings.port, print=None)
     else:
         asyncio.run(dispatcher.start_polling(bot))
