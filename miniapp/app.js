@@ -898,131 +898,380 @@
         '<div class="card"><div class="chips">' + models + "</div>" + themeBtn + "</div>";
     }
 
+  // ---------------------------------------------------------------- игры
+  var DICE_PIPS = {
+    1: ["2/2"],
+    2: ["1/1", "3/3"],
+    3: ["1/1", "2/2", "3/3"],
+    4: ["1/1", "3/1", "1/3", "3/3"],
+    5: ["1/1", "3/1", "2/2", "1/3", "3/3"],
+    6: ["1/1", "3/1", "1/2", "3/2", "1/3", "3/3"]
+  };
+  // как повернуть куб, чтобы нужная грань смотрела на игрока
+  var DICE_ROT = { 1: [0, 0], 2: [-90, 0], 3: [0, -90], 4: [0, 90], 5: [90, 0], 6: [0, 180] };
+  var SLOT_SYMBOLS = ["🍒", "🍋", "🍊", "🍇", "⭐", "💎", "7️⃣"];
+  var WHEEL_PRIZES = ["🎁 +5", "⭐ Удача", "🍀 Клевер", "💎 Алмаз", "🔥 Огонь", "🌈 Радуга", "🎯 Точка", "🍕 Пицца", "🚀 Ракета", "👑 Корона"];
+  var WHEEL_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#f59e0b", "#fbbf24", "#10b981", "#14b8a6", "#22d3ee", "#3b82f6"];
+
+  function diceFace(n) {
+    return '<div class="cf f' + n + '">' + DICE_PIPS[n].map(function (pos) {
+      var rc = pos.split("/");
+      return '<span style="grid-area:' + rc[0] + "/" + rc[1] + '"></span>';
+    }).join("") + "</div>";
+  }
+
+  function reelHtml(start) {
+    var cells = "";
+    for (var i = 0; i < 42; i++) {
+      cells += '<div class="reel-cell">' + SLOT_SYMBOLS[i % SLOT_SYMBOLS.length] + "</div>";
+    }
+    return '<div class="reel"><div class="reel-strip" style="transform:translateY(' +
+      (11 - start * 34) + 'px)">' + cells + "</div></div>";
+  }
+
+  // ---------------------------------------------------------------- 5D-эффекты
+  function shakeScreen() {
+    var app = document.getElementById("app");
+    if (!app) return;
+    app.classList.remove("screen-shake");
+    void app.offsetWidth;
+    app.classList.add("screen-shake");
+    setTimeout(function () { app.classList.remove("screen-shake"); }, 520);
+  }
+
+  function burst(x, y) {
+    var ring = document.createElement("div");
+    ring.className = "shock-ring";
+    ring.style.left = x + "px";
+    ring.style.top = y + "px";
+    document.body.appendChild(ring);
+    setTimeout(function () { ring.remove(); }, 900);
+
+    var colors = ["#fbbf24", "#f472b6", "#22d3ee", "#a78bfa", "#34d399"];
+    for (var i = 0; i < 16; i++) {
+      (function (i) {
+        var spark = document.createElement("i");
+        spark.className = "spark";
+        var angle = (Math.PI * 2 * i) / 16 + Math.random() * 0.5;
+        var dist = 42 + Math.random() * 74;
+        spark.style.left = x + "px";
+        spark.style.top = y + "px";
+        spark.style.background = colors[i % colors.length];
+        spark.style.color = colors[i % colors.length];
+        spark.style.setProperty("--dx", (Math.cos(angle) * dist).toFixed(1) + "px");
+        spark.style.setProperty("--dy", (Math.sin(angle) * dist).toFixed(1) + "px");
+        spark.style.animationDelay = (Math.random() * 0.08).toFixed(2) + "s";
+        document.body.appendChild(spark);
+        setTimeout(function () { spark.remove(); }, 950);
+      })(i);
+    }
+  }
+
+  function celebrate(el, big) {
+    if (!el) return;
+    var rect = el.getBoundingClientRect();
+    burst(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    el.classList.remove("win-glow");
+    void el.offsetWidth;
+    el.classList.add("win-glow");
+    setTimeout(function () { el.classList.remove("win-glow"); }, 1200);
+    if (big) {
+      var flash = document.createElement("div");
+      flash.className = "win-flash";
+      document.body.appendChild(flash);
+      setTimeout(function () { flash.remove(); }, 760);
+      shakeScreen();
+      confetti(window.innerWidth / 2, window.innerHeight / 2.4);
+      haptic("success");
+    }
+  }
+
+  function gameCard(el) {
+    return el && el.closest ? el.closest(".game-card") : null;
+  }
+
   function renderGames() {
     view.innerHTML =
       "<h1>🎲 " + esc(t("games")) + "</h1>" +
       '<div class="games-grid">' +
-      '<div class="card game-card center" data-action="game-dice"><div id="dice-face" style="font-size:36px;transition:transform .2s">🎲</div><div class="game-label">Кубик</div></div>' +
-      '<div class="card game-card center" data-action="game-coin"><div id="coin-flip" style="font-size:36px;transition:transform .2s">🪙</div><div class="game-label">Монетка</div></div>' +
-      '<div class="card game-card center" data-action="game-num"><div id="num-slot" style="font-size:26px;font-weight:800;color:var(--ink)">?</div><div class="game-label">Число</div></div>' +
-      '<div class="card game-card center" data-action="game-slots"><div id="slots-reels" style="font-size:28px;letter-spacing:2px">🍒🍋🍊</div><div class="game-label">Слоты</div></div>' +
-      '<div class="card game-card center" data-action="game-8ball"><div id="ball-answer" style="font-size:36px">🔮</div><div id="ball-text" class="game-label">Шар</div></div>' +
-      '<div class="card game-card center"><div id="rps-result" style="font-size:36px">✊</div><div class="game-label">КНБ</div><div style="display:flex;gap:4px;justify-content:center;margin-top:4px"><button class="chip rps-btn" data-action="rps-pick" data-value="0">✊</button><button class="chip rps-btn" data-action="rps-pick" data-value="1">✋</button><button class="chip rps-btn" data-action="rps-pick" data-value="2">✌️</button></div></div>' +
-      '<div class="card game-card center" data-action="game-react"><div id="react-box" style="font-size:28px;font-weight:800;color:var(--hint)">⚡</div><div id="react-label" class="game-label">Реакция</div></div>' +
-      '<div class="card game-card center" data-action="game-wheel"><div id="wheel-icon" style="font-size:36px;transition:transform .3s">🎡</div><div id="wheel-text" class="game-label">Колесо</div></div>' +
-      '<div class="card game-card center"><div id="guess-hint" style="font-size:22px;font-weight:700;color:var(--ink)">🔢</div><div class="game-label">Угадай</div><div style="display:flex;gap:4px;margin-top:4px"><input id="guess-input" class="input" type="number" min="1" max="100" placeholder="1–100" style="padding:6px 8px;font-size:13px;width:60px"><button class="chip rps-btn" data-action="guess-submit">→</button></div></div>' +
+
+      '<div class="card game-card center" data-action="game-dice">' +
+      '<div class="g-stage dice-stage"><div class="cube" id="dice-cube">' +
+      diceFace(1) + diceFace(2) + diceFace(3) + diceFace(4) + diceFace(5) + diceFace(6) +
+      "</div></div><div class=\"game-label\">Кубик</div></div>" +
+
+      '<div class="card game-card center" data-action="game-coin">' +
+      '<div class="g-stage coin-stage"><div class="coin3d" id="coin3d">' +
+      '<div class="cface front">🦅</div><div class="cface back">🪙</div>' +
+      "</div></div><div class=\"game-label\">Монетка</div></div>" +
+
+      '<div class="card game-card center" data-action="game-num">' +
+      '<div class="g-stage"><div class="odo-empty" id="num-slot">?</div></div>' +
+      '<div class="game-label">Число</div></div>' +
+
+      '<div class="card game-card center" data-action="game-slots">' +
+      '<div class="reels" id="slots-reels">' + reelHtml(0) + reelHtml(1) + reelHtml(2) + "</div>" +
+      '<div class="game-label">Слоты</div></div>' +
+
+      '<div class="card game-card center" data-action="game-8ball">' +
+      '<div class="g-stage"><div class="ball8" id="ball-answer">8</div></div>' +
+      '<div class="game-label" id="ball-text">Шар</div></div>' +
+
+      '<div class="card game-card center">' +
+      '<div class="g-stage"><div class="rps" id="rps-result">✊</div></div>' +
+      '<div class="game-label">КНБ</div>' +
+      '<div class="rps-row"><button class="chip rps-btn" data-action="rps-pick" data-value="0">✊</button>' +
+      '<button class="chip rps-btn" data-action="rps-pick" data-value="1">✋</button>' +
+      '<button class="chip rps-btn" data-action="rps-pick" data-value="2">✌️</button></div></div>' +
+
+      '<div class="card game-card center" data-action="game-react">' +
+      '<div class="g-stage"><div class="react-orb" id="react-box">⚡</div></div>' +
+      '<div class="game-label" id="react-label">Реакция</div></div>' +
+
+      '<div class="card game-card center" data-action="game-wheel">' +
+      '<div class="wheel-stage"><div class="wheel-tilt">' +
+      '<div class="wheel" id="wheel" style="background:' + wheelGradient() + '">' +
+      '<span class="wheel-hub">🎯</span></div></div>' +
+      '<span class="wheel-pointer" aria-hidden="true"></span></div>' +
+      '<div class="game-label" id="wheel-text">Колесо</div></div>' +
+
+      '<div class="card game-card center">' +
+      '<div class="g-stage"><div class="guess-num" id="guess-hint">🔢</div></div>' +
+      '<div class="game-label">Угадай</div>' +
+      '<div class="guess-row"><input id="guess-input" class="input" type="number" min="1" max="100" placeholder="1–100">' +
+      '<button class="chip rps-btn" data-action="guess-submit">→</button></div></div>' +
+
       "</div>";
-    state._guessTarget = Math.floor(Math.random()*100)+1;
+    state._guessTarget = Math.floor(Math.random() * 100) + 1;
     state._guessAttempts = 0;
     state._reactState = "idle";
+    state._slotsBusy = false;
+    state._slotK = [0, 1, 2];
+    state._wheelAngle = 0;
+  }
+
+  function wheelGradient() {
+    var seg = 360 / WHEEL_PRIZES.length;
+    var stops = WHEEL_PRIZES.map(function (_, i) {
+      var from = (i * seg).toFixed(2);
+      var to = ((i + 1) * seg).toFixed(2);
+      return WHEEL_COLORS[i % WHEEL_COLORS.length] + " " + from + "deg " + to + "deg";
+    }).join(",");
+    return "conic-gradient(from 0deg," + stops + ")";
   }
 
   function rollDice() {
-    var el = document.getElementById("dice-face"); if (!el) return;
-    var faces = ["⚀","⚁","⚂","⚃","⚄","⚅"];
-    var i = 0, steps = 12;
-    function step() {
-      el.textContent = faces[Math.floor(Math.random()*6)];
-      el.style.transform = "rotate(" + (Math.random()*360) + "deg) scale(1.3)";
-      i++; if (i < steps) setTimeout(step, 60 + i*8);
-      else { el.textContent = faces[Math.floor(Math.random()*6)]; el.style.transform = "rotate(0deg) scale(1)"; haptic("success"); }
-    }
-    step();
+    var cube = document.getElementById("dice-cube");
+    if (!cube || state._diceBusy) return;
+    state._diceBusy = true;
+    var result = 1 + Math.floor(Math.random() * 6);
+    var rot = DICE_ROT[result];
+    var spinX = 360 * (2 + Math.floor(Math.random() * 3)) + rot[0];
+    var spinY = 360 * (2 + Math.floor(Math.random() * 3)) + rot[1];
+
+    var stage = cube.parentNode;
+    stage.classList.add("throwing");
+    cube.classList.add("spinning");
+    cube.style.transform = "rotateX(" + spinX + "deg) rotateY(" + spinY + "deg)";
+    haptic("light");
+
+    setTimeout(function () {
+      cube.classList.remove("spinning");
+      stage.classList.remove("throwing");
+      state._diceBusy = false;
+      haptic("success");
+      celebrate(gameCard(cube), result === 6);
+    }, 1200);
   }
 
   function flipCoin() {
-    var el = document.getElementById("coin-flip"); if (!el) return;
-    var result = Math.random() < 0.5 ? "🦅" : "🪙";
-    var i = 0, spins = 8;
-    function spin() {
-      el.textContent = i % 2 ? "🪙" : "🦅";
-      el.style.transform = "rotateY(" + (i * 45) + "deg)";
-      i++; if (i < spins) setTimeout(spin, 70 + i * 5);
-      else { el.textContent = result; el.style.transform = "rotateY(0deg)"; haptic("success"); }
-    }
-    spin();
+    var coin = document.getElementById("coin3d");
+    if (!coin || state._coinBusy) return;
+    state._coinBusy = true;
+    var heads = Math.random() < 0.5;
+    var spins = 4 + Math.floor(Math.random() * 3);
+    coin.classList.add("spinning");
+    coin.style.transform = "rotateY(" + (360 * spins + (heads ? 0 : 180)) + "deg)";
+    haptic("light");
+
+    setTimeout(function () {
+      coin.classList.remove("spinning");
+      // нормализуем угол без анимации, чтобы следующий бросок не «прыгал»
+      coin.style.transition = "none";
+      coin.style.transform = "rotateY(" + (heads ? 0 : 180) + "deg)";
+      setTimeout(function () { coin.style.transition = ""; }, 60);
+      state._coinBusy = false;
+      toast(heads ? "Орёл! 🦅" : "Решка! 🪙");
+      haptic("success");
+      celebrate(gameCard(coin), false);
+    }, 1560);
   }
 
   function randNum() {
-    var el = document.getElementById("num-slot"); if (!el) return;
+    var slot = document.getElementById("num-slot");
+    if (!slot || state._numBusy) return;
+    state._numBusy = true;
     var target = Math.floor(Math.random() * 100) + 1;
-    var i = 0, steps = 15;
-    function tick() {
-      el.textContent = Math.floor(Math.random() * 100) + 1;
-      el.style.transform = "scale(1.2)";
-      i++; if (i < steps) setTimeout(tick, 50 + i * 6);
-      else { el.textContent = target; el.style.transform = "scale(1)"; haptic("success"); }
+    var digits = ("00" + target).slice(-3).split("");
+    var cell = 42;
+
+    slot.className = "odo";
+    slot.innerHTML = digits.map(function () {
+      var cells = "";
+      for (var i = 0; i < 40; i++) cells += '<div class="odo-cell">' + (i % 10) + "</div>";
+      return '<div class="odo-col"><div class="odo-strip">' + cells + "</div></div>";
+    }).join("");
+
+    var strips = slot.querySelectorAll(".odo-strip");
+    void slot.offsetHeight; // фиксируем стартовую позицию, чтобы сработал переход
+    for (var i = 0; i < strips.length; i++) {
+      var d = parseInt(digits[i], 10);
+      var loops = 3 + i;
+      strips[i].style.transitionDelay = (i * 90) + "ms";
+      strips[i].style.transform = "translateY(" + (-(loops * 10 + d) * cell) + "px)";
     }
-    tick();
+    haptic("light");
+
+    setTimeout(function () {
+      state._numBusy = false;
+      haptic("success");
+      celebrate(gameCard(slot), target === 100);
+    }, 1350);
   }
 
   function playRPS(choice) {
-    var el = document.getElementById("rps-result"); if (!el) return;
-    var hands = ["✊","✋","✌️"];
-    var cpu = Math.floor(Math.random()*3);
-    var i = 0, steps = 8;
-    function shake() {
-      el.textContent = hands[i % 3];
-      el.style.transform = "scale(1.2) rotate(" + (i*15-60) + "deg)";
-      i++; if (i < steps) setTimeout(shake, 80);
-      else {
-        el.textContent = hands[choice] + " vs " + hands[cpu];
-        el.style.transform = "scale(1)";
-        var win = (choice === 0 && cpu === 2) || (choice === 1 && cpu === 0) || (choice === 2 && cpu === 1);
-        var draw = choice === cpu;
-        haptic(draw ? "warning" : win ? "success" : "error");
-        if (win) confetti(window.innerWidth/2, window.innerHeight/2);
-        toast(draw ? "Ничья!" : win ? "Ты победил! 🎉" : "Компьютер выиграл 🤖");
-      }
-    }
-    shake();
+    var el = document.getElementById("rps-result");
+    if (!el || state._rpsBusy) return;
+    state._rpsBusy = true;
+    var hands = ["✊", "✋", "✌️"];
+    var cpu = Math.floor(Math.random() * 3);
+    el.classList.add("shaking");
+    haptic("light");
+
+    setTimeout(function () {
+      el.classList.remove("shaking");
+      el.classList.add("reveal");
+      el.innerHTML = hands[choice] + '<span class="vs">vs</span>' + hands[cpu];
+      var win = (choice === 0 && cpu === 2) || (choice === 1 && cpu === 0) || (choice === 2 && cpu === 1);
+      var draw = choice === cpu;
+      state._rpsBusy = false;
+      haptic(draw ? "warning" : win ? "success" : "error");
+      toast(draw ? "Ничья!" : win ? "Ты победил! 🎉" : "Компьютер выиграл 🤖");
+      if (win) celebrate(gameCard(el), true);
+      else if (!draw) celebrate(gameCard(el), false);
+      setTimeout(function () {
+        el.classList.remove("reveal");
+        el.innerHTML = "✊";
+      }, 1400);
+    }, 780);
   }
 
   function playSlots() {
-    var el = document.getElementById("slots-reels"); if (!el) return;
-    var symbols = ["🍒","🍋","🍊","🍇","⭐","💎","7️⃣"];
-    var reels = [0,0,0], stopped = [false,false,false];
-    var i = 0;
-    function spin() {
-      for (var r = 0; r < 3; r++) {
-        if (!stopped[r]) reels[r] = Math.floor(Math.random()*symbols.length);
-      }
-      el.textContent = symbols[reels[0]] + symbols[reels[1]] + symbols[reels[2]];
-      el.style.transform = "scale(1.05)";
-      i++;
-      if (i === 10) stopped[0] = true;
-      if (i === 16) stopped[1] = true;
-      if (i === 22) { stopped[2] = true; el.style.transform = "scale(1)";
-        var jackpot = reels[0] === reels[1] && reels[1] === reels[2];
-        haptic(jackpot ? "success" : "light");
-        if (jackpot) { toast("ДЖЕКПОТ! " + symbols[reels[0]] + symbols[reels[0]] + symbols[reels[0]] + " 🎉"); confetti(window.innerWidth/2, window.innerHeight/3); }
-        return;
-      }
-      setTimeout(spin, 60 + i*4);
+    var reelsEl = document.getElementById("slots-reels");
+    if (!reelsEl || state._slotsBusy) return;
+    state._slotsBusy = true;
+
+    var reels = reelsEl.querySelectorAll(".reel");
+    var strips = reelsEl.querySelectorAll(".reel-strip");
+    var results = [0, 0, 0];
+    var delays = [0, 240, 480];
+    var durs = [1150, 1400, 1700];
+    var cell = 34, pad = 11;
+
+    for (var r = 0; r < results.length; r++) {
+      results[r] = Math.floor(Math.random() * SLOT_SYMBOLS.length);
     }
-    spin();
+    // если первые два совпали — третья крутится дольше (саспенс)
+    if (results[0] === results[1]) durs[2] += 550;
+
+    for (var i = 0; i < strips.length; i++) {
+      (function (i) {
+        var base = state._slotK[i] || 0;
+        var k = base + 7 + ((results[i] - (base % 7) + 7) % 7);
+        state._slotK[i] = k;
+        var strip = strips[i], reel = reels[i];
+        strip.style.transitionDuration = durs[i] + "ms";
+        strip.style.transitionDelay = delays[i] + "ms";
+        reel.classList.remove("landed", "win");
+        reel.classList.add("spinning");
+        strip.style.transform = "translateY(" + (pad - k * cell) + "px)";
+
+        setTimeout(function () {
+          reel.classList.remove("spinning");
+          reel.classList.add("landed");
+          haptic("light");
+          if (i === strips.length - 1) finishSlots(results, reels, strips, pad, cell);
+        }, delays[i] + durs[i] + 40);
+      })(i);
+    }
+    haptic("light");
+  }
+
+  function finishSlots(results, reels, strips, pad, cell) {
+    state._slotsBusy = false;
+    var jackpot = results[0] === results[1] && results[1] === results[2];
+    var winIdx = [];
+    if (results[0] === results[1]) winIdx = [0, 1];
+    else if (results[1] === results[2]) winIdx = [1, 2];
+    else if (results[0] === results[2]) winIdx = [0, 2];
+
+    // нормализуем позиции, чтобы следующее вращение снова шло вверх
+    for (var i = 0; i < strips.length; i++) {
+      strips[i].style.transitionDuration = "0ms";
+      strips[i].style.transitionDelay = "0ms";
+      strips[i].style.transform = "translateY(" + (pad - (7 + results[i]) * cell) + "px)";
+      state._slotK[i] = 7 + results[i];
+    }
+    setTimeout(function () {
+      for (var j = 0; j < strips.length; j++) {
+        strips[j].style.transitionDuration = "";
+        strips[j].style.transitionDelay = "";
+      }
+    }, 70);
+
+    var card = gameCard(reels[0]);
+    if (jackpot) {
+      for (var w = 0; w < reels.length; w++) reels[w].classList.add("win");
+      toast("ДЖЕКПОТ! " + SLOT_SYMBOLS[results[0]] + SLOT_SYMBOLS[results[0]] + SLOT_SYMBOLS[results[0]] + " 🎉");
+      haptic("success");
+      celebrate(card, true);
+    } else if (winIdx.length) {
+      for (var p = 0; p < winIdx.length; p++) reels[winIdx[p]].classList.add("win");
+      toast("Почти! Две совпали ✨");
+      haptic("warning");
+      celebrate(card, false);
+    } else {
+      haptic("light");
+    }
+    setTimeout(function () {
+      for (var c = 0; c < reels.length; c++) reels[c].classList.remove("win");
+    }, 2000);
   }
 
   function play8Ball() {
     var el = document.getElementById("ball-answer");
     var txt = document.getElementById("ball-text");
-    if (!el) return;
-    var answers = ["Да!","Нет.","Возможно…","Определённо да","Спроси позже","Не рассчитывай","Знаки говорят да","Мой ответ — нет","Без сомнений","Перспективы хороши","Сконцентрируйся и спроси снова","Даже не думай","Звёзды говорят да","Туманно, попробуй ещё"];
-    var i = 0, steps = 10;
-    function shake() {
-      el.textContent = "🔮";
-      el.style.transform = "translateX(" + (Math.random()*16-8) + "px) rotate(" + (Math.random()*20-10) + "deg)";
-      i++; if (i < steps) setTimeout(shake, 70);
-      else {
-        el.textContent = "🎱";
-        el.style.transform = "none";
-        txt.textContent = answers[Math.floor(Math.random()*answers.length)];
-        txt.style.color = "var(--ink)";
-        txt.style.fontWeight = "700";
-        haptic("success");
-      }
-    }
-    shake();
+    if (!el || state._ballBusy) return;
+    state._ballBusy = true;
+    var answers = ["Да!", "Нет.", "Возможно…", "Определённо да", "Спроси позже", "Не рассчитывай", "Знаки говорят да", "Мой ответ — нет", "Без сомнений", "Перспективы хороши", "Сконцентрируйся и спроси снова", "Даже не думай", "Звёзды говорят да", "Туманно, попробуй ещё"];
+    el.classList.add("shaking");
+    txt.textContent = "Думаю…";
+    txt.classList.remove("answer-pop");
+    haptic("light");
+
+    setTimeout(function () {
+      el.classList.remove("shaking");
+      el.classList.add("revealed");
+      txt.textContent = answers[Math.floor(Math.random() * answers.length)];
+      txt.classList.add("answer-pop");
+      state._ballBusy = false;
+      haptic("success");
+      celebrate(gameCard(el), false);
+      setTimeout(function () {
+        el.classList.remove("revealed");
+        txt.classList.remove("answer-pop");
+      }, 1800);
+    }, 900);
   }
 
   function playReact() {
@@ -1059,23 +1308,34 @@
   }
 
   function playWheel() {
-    var icon = document.getElementById("wheel-icon");
+    var wheel = document.getElementById("wheel");
     var txt = document.getElementById("wheel-text");
-    if (!icon) return;
-    var prizes = ["🎁 +5 запросов","⭐ Удача!","🍀 Клевер","💎 Бриллиант","🔥 Огонь!","🌈 Радуга","🎯 В точку!","🍕 Пицца","🚀 Ракета","👑 Корона"];
-    var i = 0, steps = 20;
-    function spin() {
-      icon.style.transform = "rotate(" + (i * 36) + "deg)";
-      i++; if (i < steps) setTimeout(spin, 50 + i*6);
-      else {
-        icon.style.transform = "rotate(0deg)";
-        icon.textContent = "🎡";
-        txt.textContent = prizes[Math.floor(Math.random()*prizes.length)];
-        txt.style.color = "var(--ink)"; txt.style.fontWeight = "700";
-        haptic("success");
-      }
-    }
-    spin();
+    if (!wheel || state._wheelBusy) return;
+    state._wheelBusy = true;
+
+    var seg = 360 / WHEEL_PRIZES.length;
+    var idx = Math.floor(Math.random() * WHEEL_PRIZES.length);
+    var jitter = (Math.random() * (seg - 12) - (seg - 12) / 2);
+    var turns = 5 + Math.floor(Math.random() * 3);
+    // сегмент idx должен оказаться под указателем (сверху)
+    var base = state._wheelAngle || 0;
+    var target = -(idx * seg + seg / 2) + jitter;
+    var minTarget = base + 360 * turns;
+    target += Math.ceil((minTarget - target) / 360) * 360;
+    state._wheelAngle = target;
+
+    wheel.style.transform = "rotate(" + target + "deg)";
+    txt.textContent = "Крутится…";
+    haptic("light");
+
+    setTimeout(function () {
+      state._wheelBusy = false;
+      txt.textContent = WHEEL_PRIZES[idx];
+      txt.classList.add("answer-pop");
+      haptic("success");
+      celebrate(gameCard(wheel), idx === 0 || idx === 9);
+      setTimeout(function () { txt.classList.remove("answer-pop"); }, 1600);
+    }, 3700);
   }
 
   function submitGuess() {
@@ -1087,9 +1347,11 @@
     state._guessAttempts = (state._guessAttempts || 0) + 1;
     if (val === state._guessTarget) {
       hint.textContent = "🎉"; hint.style.color = "#00c9a7";
+      hint.classList.add("answer-pop");
       toast("Угадал за " + state._guessAttempts + " попыток! 🎉");
       haptic("success");
-      confetti(window.innerWidth/2, window.innerHeight/2);
+      celebrate(gameCard(hint), state._guessAttempts <= 3);
+      setTimeout(function () { hint.classList.remove("answer-pop"); }, 1500);
       state._guessTarget = Math.floor(Math.random()*100)+1;
       state._guessAttempts = 0;
       input.value = "";

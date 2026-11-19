@@ -199,6 +199,106 @@ html[data-theme="light"] .tabs{box-shadow:0 20px 50px -24px rgba(15,23,42,.25),0
 .game-label{font-size:11px;color:var(--hint);margin-top:6px;font-weight:700;letter-spacing:.03em}
 .rps-btn{padding:6px 10px;font-size:16px;border-radius:10px}
 
+/* ═══════════════════════════════════════════════════════════
+   Игры · 5D-сцена: куб, монета, одометр, барабаны, колесо
+   ═══════════════════════════════════════════════════════════ */
+.games-grid{grid-auto-rows:minmax(112px,auto)}
+.game-card{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 7px 11px}
+.g-stage{position:relative;width:100%;height:62px;display:grid;place-items:center;perspective:460px}
+.g-stage.flat{perspective:none}
+
+/* ── Кубик: настоящий 3D-куб ── */
+.dice-stage{perspective:420px}
+.cube{position:relative;width:40px;height:40px;transform-style:preserve-3d;transform:rotateX(-16deg) rotateY(-24deg);transition:transform 1.15s cubic-bezier(.16,.78,.18,1);will-change:transform}
+.cube .cf{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:5px;border-radius:9px;background:linear-gradient(150deg,#ffffff,#d8ddf2 62%,#b7c0dd);box-shadow:inset 0 0 0 1px rgba(255,255,255,.9),inset 0 -7px 12px rgba(35,45,80,.26)}
+.cube .cf span{width:7px;height:7px;border-radius:50%;align-self:center;justify-self:center;background:radial-gradient(circle at 34% 28%,#5a628a,#111529 72%);box-shadow:inset 0 1px 1px rgba(255,255,255,.45),0 1px 1px rgba(0,0,0,.25)}
+.cube .f1{transform:translateZ(20px)}
+.cube .f2{transform:rotateX(90deg) translateZ(20px)}
+.cube .f3{transform:rotateY(90deg) translateZ(20px)}
+.cube .f4{transform:rotateY(-90deg) translateZ(20px)}
+.cube .f5{transform:rotateX(-90deg) translateZ(20px)}
+.cube .f6{transform:rotateY(180deg) translateZ(20px)}
+.cube.spinning .cf{filter:blur(.35px)}
+.dice-stage.throwing{animation:dice-toss 1.15s var(--out)}
+@keyframes dice-toss{0%,100%{transform:translateY(0)}32%{transform:translateY(-15px) scale(1.06)}68%{transform:translateY(3px) scale(.98)}}
+.dice-stage.throwing::after{content:"";position:absolute;left:22%;right:22%;top:26%;bottom:10%;border-radius:50%;background:radial-gradient(ellipse,rgba(var(--acc-rgb),.35),transparent 70%);filter:blur(7px);pointer-events:none;animation:toss-glow 1.1s ease-out}
+@keyframes toss-glow{0%{opacity:0}40%{opacity:1}100%{opacity:0}}
+
+/* ── Монета: 3D-переворот ── */
+.coin-stage{perspective:400px}
+.coin3d{position:relative;width:46px;height:46px;transform-style:preserve-3d;transition:transform 1.55s cubic-bezier(.2,.72,.15,1);will-change:transform}
+.coin3d .cface{position:absolute;inset:0;border-radius:50%;display:grid;place-items:center;font-size:23px;backface-visibility:hidden;color:#6b4a00;background:radial-gradient(circle at 32% 25%,#fff8d6,#f7c948 45%,#c58a12 100%);box-shadow:inset 0 0 0 2px rgba(255,255,255,.55),inset 0 -6px 12px rgba(120,70,0,.45),0 7px 15px rgba(0,0,0,.35)}
+.coin3d .cface.back{transform:rotateY(180deg)}
+.coin3d.spinning{filter:drop-shadow(0 0 12px rgba(247,201,72,.75))}
+
+/* ── Число: одометр ── */
+.odo-empty{font-size:26px;font-weight:900;color:var(--ink);opacity:.75}
+.odo{display:flex;gap:3px;justify-content:center}
+.odo-col{position:relative;width:24px;height:42px;overflow:hidden;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(0,0,0,.3));border:1px solid var(--st);box-shadow:inset 0 5px 10px rgba(0,0,0,.45),inset 0 -5px 10px rgba(0,0,0,.45)}
+.odo-col::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.55),transparent 30%,transparent 70%,rgba(0,0,0,.55))}
+.odo-strip{transition:transform 1.15s cubic-bezier(.16,.86,.16,1);will-change:transform}
+.odo-cell{height:42px;display:grid;place-items:center;font-size:23px;font-weight:900;color:var(--tx);font-variant-numeric:tabular-nums}
+
+/* ── Слоты: барабаны в перспективе ── */
+.reels{display:flex;gap:5px;justify-content:center;perspective:520px}
+.reel{position:relative;width:25px;height:58px;overflow:hidden;border-radius:9px;border:1px solid var(--st);background:linear-gradient(180deg,rgba(0,0,0,.5),rgba(255,255,255,.05) 50%,rgba(0,0,0,.5));box-shadow:inset 0 6px 12px rgba(0,0,0,.55),inset 0 -6px 12px rgba(0,0,0,.55);transition:box-shadow .3s,border-color .3s}
+.reel-strip{transition:transform 1.2s cubic-bezier(.14,.75,.12,1);will-change:transform}
+.reel-cell{height:34px;display:grid;place-items:center;font-size:21px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+.reel.spinning .reel-strip{filter:blur(1.1px)}
+.reel.landed{animation:reel-bounce .36s var(--spring)}
+@keyframes reel-bounce{0%{transform:scale(.94)}55%{transform:scale(1.06)}100%{transform:scale(1)}}
+.reel.win{border-color:rgba(251,191,36,.9);background:linear-gradient(180deg,rgba(251,191,36,.25),rgba(251,191,36,.06));box-shadow:inset 0 0 0 1px rgba(251,191,36,.6),0 0 20px rgba(251,191,36,.75)}
+.reel.win .reel-cell{filter:drop-shadow(0 0 6px rgba(251,191,36,.95))}
+
+/* ── Шар ── */
+.ball8{position:relative;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-size:16px;font-weight:900;color:#fff;background:radial-gradient(circle at 32% 26%,#5c6480,#20233a 45%,#07080f 100%);box-shadow:inset -6px -8px 16px rgba(0,0,0,.8),inset 5px 6px 12px rgba(255,255,255,.16),0 10px 18px rgba(0,0,0,.45);transition:transform .4s var(--spring),box-shadow .4s}
+.ball8::after{content:"";position:absolute;width:14px;height:10px;left:21%;top:15%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.85),transparent 70%);filter:blur(1px)}
+.ball8.shaking{animation:ball-shake .18s linear infinite}
+@keyframes ball-shake{0%{transform:rotate(-6deg) translateX(-2px)}50%{transform:rotate(7deg) translateX(2px)}100%{transform:rotate(-6deg) translateX(-2px)}}
+.ball8.revealed{transform:scale(1.12);box-shadow:0 0 0 2px rgba(var(--acc-rgb),.55),0 0 32px rgba(var(--acc-rgb),.8),inset -6px -8px 16px rgba(0,0,0,.8),inset 5px 6px 12px rgba(255,255,255,.16)}
+
+/* ── КНБ ── */
+.rps{font-size:30px;line-height:1;display:flex;align-items:center;gap:6px;transition:transform .4s var(--spring)}
+.rps .vs{font-size:10px;font-weight:800;color:var(--hint);letter-spacing:.08em;text-transform:uppercase}
+.rps.shaking{animation:rps-shake .16s linear infinite}
+@keyframes rps-shake{0%{transform:rotate(-10deg) scale(1.04)}50%{transform:rotate(10deg) scale(1.14)}100%{transform:rotate(-10deg) scale(1.04)}}
+.rps.reveal{animation:rps-pop .5s var(--spring)}
+@keyframes rps-pop{0%{transform:scale(.6) rotate(-14deg)}60%{transform:scale(1.18) rotate(4deg)}100%{transform:scale(1)}}
+.rps-row{display:flex;gap:4px;justify-content:center;margin-top:6px}
+
+/* ── Реакция ── */
+.react-orb{position:relative;width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-size:15px;font-weight:900;line-height:1;color:var(--hint);background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.22),rgba(var(--acc-rgb),.18) 45%,rgba(10,12,22,.65) 100%);border:1px solid var(--st2);box-shadow:inset 0 -6px 12px rgba(0,0,0,.5),0 8px 18px rgba(0,0,0,.35),0 0 22px rgba(var(--acc-rgb),.28);transition:transform .3s var(--spring),box-shadow .3s,color .3s}
+.react-orb::before,.react-orb::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:1px solid rgba(var(--acc-rgb),.35);animation:orb-pulse 2.4s ease-out infinite;pointer-events:none}
+.react-orb::after{animation-delay:1.2s}
+@keyframes orb-pulse{0%{transform:scale(.9);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+
+/* ── Колесо ── */
+.wheel-stage{position:relative;width:100%;height:64px;display:grid;place-items:center;perspective:520px}
+.wheel-tilt{transform:rotateX(22deg);transform-style:preserve-3d}
+.wheel{position:relative;width:58px;height:58px;border-radius:50%;border:3px solid rgba(255,255,255,.9);box-shadow:0 10px 18px rgba(0,0,0,.5),inset 0 0 0 2px rgba(0,0,0,.35),0 0 20px rgba(var(--acc-rgb),.45);transition:transform 3.6s cubic-bezier(.1,.72,.08,1);will-change:transform}
+.wheel-hub{position:absolute;left:50%;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;display:grid;place-items:center;font-size:10px;background:radial-gradient(circle at 35% 30%,#fff,#cfd6ee);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px rgba(255,255,255,.65);z-index:2}
+.wheel-pointer{position:absolute;top:1px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:9px solid #fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,.65));z-index:3}
+
+/* ── Угадай ── */
+.guess-num{font-size:26px;font-weight:900;color:var(--ink);transition:transform .3s var(--spring)}
+.guess-row{display:flex;gap:4px;margin-top:2px;justify-content:center;width:100%}
+.guess-row .input{flex:1;min-width:0;padding:5px 7px;font-size:12px;border-radius:9px;text-align:center}
+.guess-row .rps-btn{padding:5px 8px;font-size:14px}
+
+/* ── Общий «победный» слой ── */
+.answer-pop{animation:answer-pop .55s var(--spring)}
+@keyframes answer-pop{0%{transform:scale(.6);opacity:.4}55%{transform:scale(1.16)}100%{transform:scale(1);opacity:1}}
+.game-card.win-glow{animation:card-win 1s var(--out);border-color:rgba(251,191,36,.65);box-shadow:0 0 0 1px rgba(251,191,36,.5) inset,0 18px 44px -18px rgba(251,191,36,.85)}
+@keyframes card-win{0%{transform:scale(1)}28%{transform:scale(1.07) rotate(-1.2deg)}58%{transform:scale(.995) rotate(.4deg)}100%{transform:scale(1)}}
+.shock-ring{position:fixed;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid rgba(255,255,255,.95);box-shadow:0 0 30px rgba(251,191,36,.95),inset 0 0 18px rgba(251,191,36,.75);z-index:120;pointer-events:none;animation:shock .8s var(--out) forwards}
+@keyframes shock{0%{transform:scale(.3);opacity:1}100%{transform:scale(6.5);opacity:0;border-width:1px}}
+.spark{position:fixed;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;z-index:121;pointer-events:none;box-shadow:0 0 10px currentColor;animation:spark .8s var(--out) forwards}
+@keyframes spark{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--dx,0),var(--dy,0)) scale(.15);opacity:0}}
+.win-flash{position:fixed;inset:0;z-index:110;pointer-events:none;background:radial-gradient(circle at 50% 42%,rgba(251,191,36,.55),rgba(251,191,36,0) 58%);animation:win-flash .72s ease-out forwards}
+@keyframes win-flash{0%{opacity:0}16%{opacity:1}100%{opacity:0}}
+.screen-shake{animation:screen-shake .42s cubic-bezier(.36,.07,.19,.97)}
+@keyframes screen-shake{10%,90%{transform:translate(-1px,0)}20%,80%{transform:translate(2px,-1px)}30%,50%,70%{transform:translate(-3px,1px)}40%,60%{transform:translate(3px,-1px)}}
+
 .answer-body{line-height:1.8;font-size:15px;color:var(--tx2)}
 .answer-body b,.answer-body strong{color:var(--ink);font-weight:700}
 .answer-body code{background:var(--s3);padding:3px 8px;border-radius:8px;font:13.5px ui-monospace,"SF Mono",monospace;color:var(--tx);border:1px solid var(--st)}
@@ -314,6 +414,11 @@ body.scrolled .topbar{background:linear-gradient(180deg,var(--dock-bg),rgba(0,0,
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
   .bg-fx .orb{display:none}
+}
+@media(max-width:420px){
+  .games-grid{grid-template-columns:repeat(2,1fr)}
+  .rps-row{gap:3px}
+  .rps-btn{padding:5px 7px;font-size:15px}
 }
 @media(max-width:380px){
   h1{font-size:26px}.hero .value{font-size:46px}
