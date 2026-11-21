@@ -502,6 +502,8 @@ textarea.input{font-family:inherit}
 .leak-comment{margin-top:6px;padding:10px 12px;border-radius:12px;background:rgba(127,127,127,.08);
   border:1px solid var(--st);font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
 .leak-card .btn{margin-top:4px;align-self:flex-start}
+.leak-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.leak-actions .btn{margin-top:0}
 .admin-file{padding:9px 10px;font-size:12.5px}
 .admin-file::file-selector-button{margin-right:10px;border:0;border-radius:10px;padding:7px 11px;
   background:rgba(var(--acc-rgb),.16);color:var(--ink);font-family:inherit;font-weight:700;cursor:pointer}

@@ -37,6 +37,7 @@ import debugmode
 import growth
 import media
 import models as model_catalog
+import share
 from ai import AIClient, AIError
 from config import Settings
 from formatting import humanize_answer, split_big_code, to_telegram_html
@@ -1264,6 +1265,13 @@ async def cmd_start(message: Message, store: Store, settings: Settings) -> None:
     if not stored:
         await message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))
 
+    # Deep-link на файл: /start leak_<id> или отложенный файл после гейта.
+    parts = (message.text or "").split(maxsplit=1)
+    payload = parts[1].strip() if len(parts) > 1 else ""
+    leak_id = share.parse_payload(payload) or await share.take_pending(store, user.id)
+    if leak_id and not await share.deliver(message.bot, store, message.chat.id, leak_id):
+        await message.answer(t(lang, "leaks.gone"))
+
 
 @router.message(Command("app", "кабинет", "cabinet"))
 async def cmd_app(message: Message, store: Store, settings: Settings) -> None:
@@ -1437,7 +1445,7 @@ def _leak_size(size: int) -> str:
 
 
 async def render_leaks_menu(
-    store: Store, lang: str
+    store: Store, lang: str, username: str = ""
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     """Список файлов «Сливов» кнопками: тап присылает документ."""
     items = await store.list_leaks(20)
@@ -1445,16 +1453,19 @@ async def render_leaks_menu(
         return t(lang, "leaks.empty"), None
     rows: list[list[InlineKeyboardButton]] = []
     for row in items:
+        leak_id = int(row.get("id") or 0)
         title = str(row.get("title") or row.get("file_name") or "").strip()
         title = title[:48] or "Файл"
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{title} · {_leak_size(row.get('file_size'))}",
-                    callback_data=f"lk:{int(row.get('id') or 0)}",
-                )
-            ]
-        )
+        buttons = [
+            InlineKeyboardButton(
+                text=f"{title} · {_leak_size(row.get('file_size'))}",
+                callback_data=f"lk:{leak_id}",
+            )
+        ]
+        url = share.share_url(username, leak_id, title)
+        if url:
+            buttons.append(InlineKeyboardButton(text="🔗", url=url))
+        rows.append(buttons)
     return t(lang, "leaks.title"), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1469,7 +1480,8 @@ async def cmd_leaks(message: Message, store: Store, settings: Settings) -> None:
         await message.answer(t(lang, "leaks.private", username=me.username or settings.bot_name))
         return
     await store.ensure_user(user.id, user.username, user.first_name)
-    text, kb = await render_leaks_menu(store, lang)
+    me = await message.bot.me()
+    text, kb = await render_leaks_menu(store, lang, me.username or "")
     await message.answer(text, reply_markup=kb)
 
 
@@ -1494,12 +1506,15 @@ async def cb_leak_send(
     title = str(row.get("title") or row.get("file_name") or "Файл")
     comment = str(row.get("comment") or "").strip()
     caption = title + ("\n\n" + comment if comment else "")
+    me = await bot.me()
+    markup = share.share_keyboard(me.username or "", leak_id, lang, title)
     try:
         await bot.send_document(
             call.message.chat.id,
             str(row.get("file_id") or ""),
             caption=caption[:1024],
             parse_mode=None,
+            reply_markup=markup,
         )
     except TelegramAPIError:
         await call.answer(t(lang, "leaks.gone"), show_alert=True)
@@ -2782,7 +2797,8 @@ async def on_menu_button(
     elif action == "menu.bonus":
         await cmd_bonus(message, store, settings)
     elif action == "menu.leaks":
-        text, kb = await render_leaks_menu(store, lang)
+        me = await bot.me()
+        text, kb = await render_leaks_menu(store, lang, me.username or "")
         await message.answer(text, reply_markup=kb)
     elif action == "menu.promo":
         await cmd_promo(message, store, settings, state)
@@ -2908,7 +2924,8 @@ async def cb_menu_action(
         await call.message.answer(t(lang, "promo.ask"))
     elif action == "leaks":
         await store.ensure_user(user.id, user.username, user.first_name)
-        text, kb = await render_leaks_menu(store, lang)
+        me = await call.bot.me()
+        text, kb = await render_leaks_menu(store, lang, me.username or "")
         await call.message.answer(text, reply_markup=kb)
     elif action == "bonus":
         await store.ensure_user(user.id, user.username, user.first_name)

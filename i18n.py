@@ -427,6 +427,12 @@ TR: dict[str, dict[str, str]] = {
         "be": "Дасылаю файл…",
         "en": "Sending the file…",
     },
+    "leaks.share": {
+        "ru": "🔗 Поделиться",
+        "uk": "🔗 Поділитися",
+        "be": "🔗 Падзяліцца",
+        "en": "🔗 Share",
+    },
     "leaks.private": {
         "ru": "Сливы доступны в личке с ботом: @{username}",
         "uk": "Зливи доступні в особистих із ботом: @{username}",

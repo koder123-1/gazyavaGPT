@@ -35,6 +35,7 @@ from aiohttp import web
 import models as model_catalog
 import payments
 import reminders
+import share
 import styles as style_catalog
 import toolbox
 from config import Settings
@@ -332,6 +333,7 @@ MAX_LEAK_SIZE = 20 * 1024 * 1024
 async def api_leaks(request: web.Request) -> web.Response:
     """Список файлов раздела «Сливы»."""
     store: Store = request.app["miniapp_store"]
+    bot: Bot = request.app["miniapp_bot"]
     data, error = await _auth(request)
     if error is not None:
         return error
@@ -339,7 +341,10 @@ async def api_leaks(request: web.Request) -> web.Response:
     gate = await _gate(request, user_id)
     if gate is not None:
         return gate
-    return web.json_response({"ok": True, **(await _leaks_payload(store))})
+    username = await _bot_username(bot)
+    return web.json_response(
+        {"ok": True, **(await _leaks_payload(store, username=username))}
+    )
 
 
 async def api_leak_file(request: web.Request) -> web.Response:
@@ -727,6 +732,15 @@ def _display(row: dict | None) -> str:
     return str(row.get("user_id") or "")
 
 
+async def _bot_username(bot: Bot) -> str:
+    """Юзернейм бота для deep-link'ов. aiogram кэширует getMe, так что дёшево."""
+    try:
+        me = await bot.me()
+    except Exception:  # noqa: BLE001 — без ссылки просто не будет кнопки
+        return ""
+    return str(getattr(me, "username", "") or "")
+
+
 def _admin_json(payload: dict[str, Any], status: int = 200) -> web.Response:
     return web.json_response(payload, status=status)
 
@@ -994,20 +1008,26 @@ async def _promos_payload(store: Store) -> dict[str, Any]:
     return {"stats": stats, "items": items}
 
 
-async def _leaks_payload(store: Store, *, admin: bool = False) -> dict[str, Any]:
+async def _leaks_payload(
+    store: Store, *, admin: bool = False, username: str = ""
+) -> dict[str, Any]:
     rows = await store.list_leaks(100)
     items = []
     for row in rows:
+        leak_id = int(row.get("id") or 0)
+        title = str(row.get("title") or row.get("file_name") or "")
         items.append(
             {
-                "id": int(row.get("id") or 0),
-                "title": str(row.get("title") or row.get("file_name") or ""),
+                "id": leak_id,
+                "title": title,
                 "comment": str(row.get("comment") or ""),
                 "file_name": str(row.get("file_name") or ""),
                 "file_size": int(row.get("file_size") or 0),
                 "mime": str(row.get("mime") or ""),
                 "downloads": int(row.get("downloads") or 0),
                 "created_at": _iso(row.get("created_at")),
+                "deep_link": share.deep_link(username, leak_id),
+                "share_url": share.share_url(username, leak_id, title),
                 **({"created_by": int(row.get("created_by") or 0)} if admin else {}),
             }
         )
@@ -1291,7 +1311,11 @@ async def api_admin_leak_upload(request: web.Request) -> web.Response:
         {
             "ok": True,
             "notice": "Файл загружен.",
-            **(await _leaks_payload(store, admin=True)),
+            **(
+                await _leaks_payload(
+                    store, admin=True, username=await _bot_username(bot)
+                )
+            ),
         }
     )
 
@@ -1654,7 +1678,14 @@ async def api_admin(request: web.Request) -> web.Response:
 
         if op == "leaks":
             return _admin_json(
-                {"ok": True, **(await _leaks_payload(store, admin=True))}
+                {
+                    "ok": True,
+                    **(
+                        await _leaks_payload(
+                            store, admin=True, username=await _bot_username(bot)
+                        )
+                    ),
+                }
             )
 
         if op == "leak.update":
@@ -1676,7 +1707,11 @@ async def api_admin(request: web.Request) -> web.Response:
                 {
                     "ok": True,
                     "notice": "Сохранено.",
-                    **(await _leaks_payload(store, admin=True)),
+                    **(
+                        await _leaks_payload(
+                            store, admin=True, username=await _bot_username(bot)
+                        )
+                    ),
                 }
             )
 
@@ -1688,7 +1723,11 @@ async def api_admin(request: web.Request) -> web.Response:
                 {
                     "ok": True,
                     "notice": "Файл удалён.",
-                    **(await _leaks_payload(store, admin=True)),
+                    **(
+                        await _leaks_payload(
+                            store, admin=True, username=await _bot_username(bot)
+                        )
+                    ),
                 }
             )
 

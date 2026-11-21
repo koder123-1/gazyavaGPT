@@ -35,6 +35,12 @@ from i18n import normalize_lang, t
 from moderation import ChatAdminCache
 from roles import has_admin_access, resolve_role
 from runtime import Runtime, load_runtime
+from share import (
+    deliver as deliver_leak,
+    parse_payload as parse_leak_payload,
+    remember_pending as remember_pending_leak,
+    take_pending as take_pending_leak,
+)
 from store import Store
 
 log = logging.getLogger("subscription_gate")
@@ -306,6 +312,9 @@ class SubscriptionMiddleware(BaseMiddleware):
                 referrer_id = await parse_ref(parts[1])
                 if referrer_id:
                     await remember_pending(store, user.id, referrer_id)
+                leak_id = parse_leak_payload(parts[1])
+                if leak_id:
+                    await remember_pending_leak(store, user.id, leak_id)
             await self._send_gate(bot, event, store, settings, channel, url)
             return None
 
@@ -506,5 +515,8 @@ async def check_subscription(
         await call.message.answer(
             t(lang, "invite.welcome", amount=settings.invited_reward)
         )
+    leak_id = await take_pending_leak(store, user.id)
+    if leak_id and not await deliver_leak(bot, store, call.message.chat.id, leak_id):
+        await call.message.answer(t(lang, "leaks.gone"))
     if not stored:
         await call.message.answer(t(lang, "lang.pick"), reply_markup=language_kb(lang))

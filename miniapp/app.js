@@ -140,6 +140,7 @@
       leaks: "Сливы", leaks_title: "🗂 Сливы", leaks_hint: "Файлы и материалы от админов",
       leaks_empty: "Пока ничего не выложили.", leak_download: "Скачать",
       leak_downloading: "Скачиваю…", leak_failed: "Не удалось скачать файл",
+      leak_share: "Поделиться", leak_link_copied: "Ссылка скопирована",
       level: "Уровень {n}", rank: "Ранг", xp: "Опыт", total_xp: "Всего XP",
       xp_left: "До уровня {n} осталось {x} XP", xp_max: "Максимальный уровень",
       achievements: "Достижения", ach_progress: "{a} из {b}", ach_locked: "Закрыто",
@@ -224,6 +225,7 @@
       leaks: "Зливи", leaks_title: "🗂 Зливи", leaks_hint: "Файли й матеріали від адмінів",
       leaks_empty: "Поки нічого не виклали.", leak_download: "Завантажити",
       leak_downloading: "Завантажую…", leak_failed: "Не вдалося завантажити файл",
+      leak_share: "Поділитися", leak_link_copied: "Посилання скопійовано",
       level: "Рівень {n}", rank: "Ранг", xp: "Досвід", total_xp: "Усього XP",
       xp_left: "До рівня {n} залишилось {x} XP", xp_max: "Максимальний рівень",
       achievements: "Досягнення", ach_progress: "{a} з {b}", ach_locked: "Закрито",
@@ -308,6 +310,7 @@
       leaks: "Злівы", leaks_title: "🗂 Злівы", leaks_hint: "Файлы і матэрыялы ад адмінаў",
       leaks_empty: "Пакуль нічога не выклалі.", leak_download: "Спампаваць",
       leak_downloading: "Спампоўваю…", leak_failed: "Не ўдалося спампаваць файл",
+      leak_share: "Падзяліцца", leak_link_copied: "Спасылка скапіяваная",
       level: "Узровень {n}", rank: "Ранг", xp: "Вопыт", total_xp: "Усяго XP",
       xp_left: "Да ўзроўню {n} засталося {x} XP", xp_max: "Максімальны ўзровень",
       achievements: "Дасягненні", ach_progress: "{a} з {b}", ach_locked: "Закрыта",
@@ -392,6 +395,7 @@
       leaks: "Leaks", leaks_title: "🗂 Leaks", leaks_hint: "Files and materials from admins",
       leaks_empty: "Nothing posted yet.", leak_download: "Download",
       leak_downloading: "Downloading…", leak_failed: "Could not download the file",
+      leak_share: "Share", leak_link_copied: "Link copied",
       level: "Level {n}", rank: "Rank", xp: "XP", total_xp: "Total XP",
       xp_left: "{x} XP to level {n}", xp_max: "Max level",
       achievements: "Achievements", ach_progress: "{a} of {b}", ach_locked: "Locked",
@@ -1574,9 +1578,15 @@
         '<div class="row-title">' + esc(it.title || it.file_name || ("#" + it.id)) + "</div>" +
         '<div class="row-sub">' + esc(meta.filter(Boolean).join(" · ")) + "</div>" +
         (it.comment ? '<div class="leak-comment">' + esc(it.comment) + "</div>" : "") +
+        '<div class="leak-actions">' +
         '<button class="btn small' + (busy ? "" : "") + '" data-action="leak-download" data-value="' + it.id + '"' +
         (busy ? ' disabled' : "") + ">" +
         (busy ? "⏳ " + esc(t("leak_downloading")) : "⬇ " + esc(t("leak_download"))) + "</button>" +
+        (it.share_url
+          ? '<button class="btn small secondary" data-action="leak-share" data-value="' + it.id + '">🔗 ' +
+            esc(t("leak_share")) + "</button>"
+          : "") +
+        "</div>" +
         "</div>";
     }).join("");
     view.innerHTML = head +
@@ -1634,6 +1644,26 @@
         state.leakBusy = 0;
         render();
       });
+  }
+
+  function shareLeak(id, list) {
+    var items = list || (state.leaks && state.leaks.items) || [];
+    var item = null;
+    for (var i = 0; i < items.length; i++) if (items[i].id === id) item = items[i];
+    if (!item || !item.share_url) { toast(t("leak_failed")); return; }
+    haptic("light");
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(item.share_url);
+    else window.open(item.share_url, "_blank");
+  }
+
+  function copyText(text) {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        toast(t("leak_link_copied"));
+        haptic("success");
+      });
+    }
   }
 
   function renderBuy() {
@@ -2323,6 +2353,7 @@
         : (it.comment ? '<div class="admin-value">' + esc(it.comment) + "</div>" : "") +
           '<div class="row" style="gap:8px;margin-top:8px">' +
           '<button class="chip" data-action="admin-leak-edit" data-value="' + it.id + '">✏️ Комментарий</button>' +
+          '<button class="chip" data-action="admin-leak-link" data-value="' + it.id + '">🔗 Ссылка</button>' +
           '<button class="chip admin-danger" data-action="admin-leak-del" data-value="' + it.id + '">Удалить</button></div>';
       return '<div class="admin-setting"><div class="row-title">' + esc(it.title) + "</div>" +
         '<div class="admin-sub">' + esc(it.file_name) + " · " + esc(humanSize(it.file_size)) +
@@ -2778,6 +2809,13 @@
       }
     } else if (action === "leak-download") {
       downloadLeak(parseInt(value, 10));
+    } else if (action === "leak-share") {
+      shareLeak(parseInt(value, 10));
+    } else if (action === "admin-leak-link") {
+      var items = (state.adminData && state.adminData.items) || [];
+      for (var li = 0; li < items.length; li++) {
+        if (items[li].id === parseInt(value, 10)) { copyText(items[li].deep_link); break; }
+      }
     } else if (action === "leaks-reload") {
       loadLeaks(true);
     } else if (action === "admin-nav") {
