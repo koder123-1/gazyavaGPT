@@ -154,7 +154,8 @@ html[data-theme="light"] .tabs{box-shadow:0 20px 50px -24px rgba(15,23,42,.25),0
 .dock-pill{position:absolute;left:0;top:8px;bottom:8px;width:0;border-radius:22px;background:linear-gradient(180deg,rgba(var(--acc-rgb),.30),rgba(var(--acc-rgb),.10));box-shadow:0 0 0 1px rgba(var(--acc-rgb),.25) inset,0 10px 26px -14px rgba(var(--acc-rgb),.9);transition:transform .45s var(--spring),width .45s var(--spring),opacity .25s;z-index:0;pointer-events:none;will-change:transform,width}
 .dock-pill::after{content:"";position:absolute;left:50%;bottom:5px;transform:translateX(-50%);width:16px;height:3px;border-radius:999px;background:linear-gradient(90deg,var(--acc),var(--acc3));box-shadow:0 0 10px rgba(var(--acc-rgb),.9)}
 .tab .tab-icon{font-size:20px;line-height:1;filter:saturate(.7) opacity(.75);transition:transform .35s var(--spring),filter .25s var(--ease)}
-.tab .tab-label{transition:opacity .25s,transform .25s var(--ease)}
+.tab .tab-label{transition:opacity .25s,transform .25s var(--ease);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabs[data-count="7"] .tab .tab-label{font-size:9px;letter-spacing:-.02em}
 .tab:active{transform:scale(.92)}
 .tab.active{color:var(--tx);background:transparent;box-shadow:none}
 .tab.active .tab-icon{filter:saturate(1.1) opacity(1);transform:translateY(-3px) scale(1.08)}
@@ -492,3 +493,15 @@ textarea.input{font-family:inherit}
   .admin-grid{grid-template-columns:1fr 1fr;gap:8px}
   .admin-tile{padding:12px 11px}
 }
+
+/* ── сливы ── */
+.leaks-hint{margin:-2px 0 12px;font-size:12.5px;color:var(--hint)}
+.leaks-list{display:flex;flex-direction:column;gap:10px}
+.leak-card{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+.leak-card .row-sub{margin-top:2px}
+.leak-comment{margin-top:6px;padding:10px 12px;border-radius:12px;background:rgba(127,127,127,.08);
+  border:1px solid var(--st);font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.leak-card .btn{margin-top:4px;align-self:flex-start}
+.admin-file{padding:9px 10px;font-size:12.5px}
+.admin-file::file-selector-button{margin-right:10px;border:0;border-radius:10px;padding:7px 11px;
+  background:rgba(var(--acc-rgb),.16);color:var(--ink);font-family:inherit;font-weight:700;cursor:pointer}

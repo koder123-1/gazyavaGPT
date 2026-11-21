@@ -316,7 +316,7 @@ def create_app(
     store: Store,
     ai: AIClient | None = None,
 ) -> web.Application:
-    app = web.Application()
+    app = web.Application(client_max_size=miniapp.MAX_LEAK_SIZE + 1024 * 1024)
     SimpleRequestHandler(
         dispatcher=dispatcher,
         bot=bot,

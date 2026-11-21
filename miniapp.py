@@ -19,15 +19,16 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, quote
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import LabeledPrice
+from aiogram.types import BufferedInputFile, LabeledPrice
 from aiogram.utils.web_app import check_webapp_signature
 from aiohttp import web
 
@@ -138,10 +139,10 @@ def _as_int(value: Any) -> int | None:
 
 
 async def _auth(
-    request: web.Request,
+    request: web.Request, *, use_body: bool = True
 ) -> tuple[dict[str, Any] | None, web.Response | None]:
     settings: Settings = request.app["miniapp_settings"]
-    body = await _read_body(request)
+    body = await _read_body(request) if use_body else {}
     raw = body.get("init_data") or request.headers.get("X-Init-Data") or ""
     data = parse_init_data(settings.bot_token, str(raw))
     if data is None:
@@ -322,6 +323,59 @@ async def api_promo(request: web.Request) -> web.Response:
             "balance": int(await store.bonus_requests(user_id)),
             "image_balance": int(await store.image_credits(user_id)),
         }
+    )
+
+
+MAX_LEAK_SIZE = 20 * 1024 * 1024
+
+
+async def api_leaks(request: web.Request) -> web.Response:
+    """Список файлов раздела «Сливы»."""
+    store: Store = request.app["miniapp_store"]
+    data, error = await _auth(request)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+    return web.json_response({"ok": True, **(await _leaks_payload(store))})
+
+
+async def api_leak_file(request: web.Request) -> web.Response:
+    """Отдаёт файл из Telegram. Подпись передаётся заголовком X-Init-Data."""
+    store: Store = request.app["miniapp_store"]
+    bot: Bot = request.app["miniapp_bot"]
+    data, error = await _auth(request, use_body=False)
+    if error is not None:
+        return error
+    user_id = int(data["user"]["id"])
+    gate = await _gate(request, user_id)
+    if gate is not None:
+        return gate
+    leak_id = _as_int(request.match_info.get("leak_id"))
+    row = await store.get_leak(leak_id) if leak_id else None
+    if not row:
+        return web.json_response({"error": "not_found"}, status=404)
+    try:
+        buf = await bot.download_file(str(row.get("file_id") or ""))
+    except TelegramAPIError as exc:
+        return web.json_response(
+            {"error": f"Telegram: {getattr(exc, 'message', str(exc))}"}, status=502
+        )
+    await store.bump_leak_downloads(int(leak_id))
+    name = str(row.get("file_name") or f"file-{leak_id}")
+    ascii_name = re.sub(r"[^A-Za-z0-9._-]", "_", name)[:120] or "file"
+    disposition = (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(name, safe='')}"
+    )
+    return web.Response(
+        body=buf.getvalue(),
+        headers={
+            "Content-Disposition": disposition,
+            "Content-Type": str(row.get("mime") or "application/octet-stream"),
+        },
     )
 
 
@@ -682,12 +736,12 @@ def _admin_fail(message: str, *, status: int = 200) -> web.Response:
 
 
 async def _admin_ctx(
-    request: web.Request, *, min_role: str = ROLE_ADMIN
+    request: web.Request, *, min_role: str = ROLE_ADMIN, use_body: bool = True
 ) -> tuple[dict[str, Any] | None, web.Response | None]:
     """Подпись initData + роль не ниже min_role."""
     settings: Settings = request.app["miniapp_settings"]
     store: Store = request.app["miniapp_store"]
-    data, error = await _auth(request)
+    data, error = await _auth(request, use_body=use_body)
     if error is not None:
         return None, error
     user = data["user"]
@@ -940,6 +994,26 @@ async def _promos_payload(store: Store) -> dict[str, Any]:
     return {"stats": stats, "items": items}
 
 
+async def _leaks_payload(store: Store, *, admin: bool = False) -> dict[str, Any]:
+    rows = await store.list_leaks(100)
+    items = []
+    for row in rows:
+        items.append(
+            {
+                "id": int(row.get("id") or 0),
+                "title": str(row.get("title") or row.get("file_name") or ""),
+                "comment": str(row.get("comment") or ""),
+                "file_name": str(row.get("file_name") or ""),
+                "file_size": int(row.get("file_size") or 0),
+                "mime": str(row.get("mime") or ""),
+                "downloads": int(row.get("downloads") or 0),
+                "created_at": _iso(row.get("created_at")),
+                **({"created_by": int(row.get("created_by") or 0)} if admin else {}),
+            }
+        )
+    return {"total": await store.count_leaks(), "items": items}
+
+
 async def _payments_payload(store: Store) -> dict[str, Any]:
     stats = await store.payments_stats()
     rows = await store.recent_payments(30)
@@ -1149,6 +1223,77 @@ async def _do_refund(
                 f"Остаток бонусных запросов: <b>{balance}</b>.",
             )
     return True, "Возврат выполнен."
+
+
+async def api_admin_leak_upload(request: web.Request) -> web.Response:
+    """Загрузка файла в «Сливы»: multipart/form-data, подпись — в X-Init-Data."""
+    ctx, error = await _admin_ctx(request, use_body=False)
+    if error is not None:
+        return error
+    assert ctx is not None
+    store: Store = request.app["miniapp_store"]
+    bot: Bot = request.app["miniapp_bot"]
+    if not str(request.content_type or "").startswith("multipart/"):
+        return _admin_fail("Нужен multipart/form-data.")
+    reader = await request.multipart()
+    fields: dict[str, str] = {}
+    file_bytes = b""
+    file_name = ""
+    mime = ""
+    while True:
+        part = await reader.next()
+        if part is None:
+            break
+        if part.name == "file":
+            file_name = Path(str(part.filename or "file")).name[:120] or "file"
+            mime = str(part.headers.get("Content-Type") or "application/octet-stream")
+            chunks = bytearray()
+            while True:
+                chunk = await part.read_chunk(64 * 1024)
+                if not chunk:
+                    break
+                chunks.extend(chunk)
+                if len(chunks) > MAX_LEAK_SIZE:
+                    return _admin_fail("Файл больше 20 МБ.")
+            file_bytes = bytes(chunks)
+        else:
+            fields[part.name] = (await part.text()).strip()
+    if not file_bytes:
+        return _admin_fail("Файл не получен.")
+    title = (fields.get("title") or file_name)[:120]
+    comment = fields.get("comment") or ""
+    if len(comment) > 2000:
+        return _admin_fail("Комментарий — до 2000 символов.")
+    try:
+        message = await bot.send_document(
+            chat_id=int(ctx["user_id"]),
+            document=BufferedInputFile(file_bytes, filename=file_name),
+            caption=("🗂 " + title)[:1024],
+        )
+    except TelegramAPIError as exc:
+        return _admin_fail(
+            f"Telegram не принял файл: {getattr(exc, 'message', str(exc))}"
+        )
+    document = getattr(message, "document", None)
+    file_id = str(getattr(document, "file_id", "") or "")
+    if not file_id:
+        return _admin_fail("Telegram не вернул file_id.")
+    await store.add_leak(
+        title=title,
+        comment=comment,
+        file_id=file_id,
+        file_name=str(getattr(document, "file_name", "") or file_name),
+        file_size=int(getattr(document, "file_size", 0) or len(file_bytes)),
+        mime=str(getattr(document, "mime_type", "") or mime),
+        created_by=int(ctx["user_id"]),
+    )
+    return _admin_json(
+        {
+            "ok": True,
+            "notice": "Файл загружен.",
+            **(await _leaks_payload(store, admin=True)),
+        }
+    )
 
 
 async def api_admin(request: web.Request) -> web.Response:
@@ -1504,6 +1649,46 @@ async def api_admin(request: web.Request) -> web.Response:
                     "ok": True,
                     "notice": f"Промокод {code.upper()} удалён.",
                     **(await _promos_payload(store)),
+                }
+            )
+
+        if op == "leaks":
+            return _admin_json(
+                {"ok": True, **(await _leaks_payload(store, admin=True))}
+            )
+
+        if op == "leak.update":
+            leak_id = _as_int(body.get("id"))
+            if not leak_id or not await store.get_leak(leak_id):
+                return _admin_fail("Файл не найден.")
+            title = body.get("title")
+            comment = body.get("comment")
+            if title is not None and len(str(title)) > 120:
+                return _admin_fail("Название — до 120 символов.")
+            if comment is not None and len(str(comment)) > 2000:
+                return _admin_fail("Комментарий — до 2000 символов.")
+            await store.update_leak(
+                leak_id,
+                title=None if title is None else str(title),
+                comment=None if comment is None else str(comment),
+            )
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Сохранено.",
+                    **(await _leaks_payload(store, admin=True)),
+                }
+            )
+
+        if op == "leak.delete":
+            leak_id = _as_int(body.get("id"))
+            if not leak_id or not await store.delete_leak(leak_id):
+                return _admin_fail("Файл не найден.")
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": "Файл удалён.",
+                    **(await _leaks_payload(store, admin=True)),
                 }
             )
 
@@ -1919,6 +2104,8 @@ def setup(
     app.router.add_post("/app/api/me", api_me)
     app.router.add_post("/app/api/bonus", api_bonus)
     app.router.add_post("/app/api/promo", api_promo)
+    app.router.add_post("/app/api/leaks", api_leaks)
+    app.router.add_get("/app/api/leaks/{leak_id}/file", api_leak_file)
     app.router.add_post("/app/api/settings", api_settings)
     app.router.add_post("/app/api/top", api_top)
     app.router.add_post("/app/api/history", api_history)
@@ -1926,4 +2113,5 @@ def setup(
     app.router.add_post("/app/api/buy", api_buy)
     app.router.add_post("/app/api/invoice", api_invoice)
     app.router.add_post("/app/api/admin", api_admin)
+    app.router.add_post("/app/api/admin/leak", api_admin_leak_upload)
     app.router.add_post("/app/api/answer", api_answer)

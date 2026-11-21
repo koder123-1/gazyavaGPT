@@ -181,6 +181,27 @@ class Store(Protocol):
     async def promo_stats(self) -> dict[str, int]: ...
     async def redeem_promo(self, code: str, user_id: int) -> dict: ...
 
+    # ---------------------------------------------------------------- сливы
+    async def add_leak(
+        self,
+        *,
+        title: str,
+        comment: str,
+        file_id: str,
+        file_name: str,
+        file_size: int,
+        mime: str,
+        created_by: int = 0,
+    ) -> dict: ...
+    async def list_leaks(self, limit: int = 100, offset: int = 0) -> list[dict]: ...
+    async def count_leaks(self) -> int: ...
+    async def get_leak(self, leak_id: int) -> dict | None: ...
+    async def update_leak(
+        self, leak_id: int, *, title: str | None = None, comment: str | None = None
+    ) -> dict | None: ...
+    async def delete_leak(self, leak_id: int) -> bool: ...
+    async def bump_leak_downloads(self, leak_id: int) -> None: ...
+
 
 # --------------------------------------------------------------------------- память
 class MemoryStore:
@@ -207,12 +228,14 @@ class MemoryStore:
         self._giveaway_entries: dict[int, dict[int, dict]] = {}
         self._promos: dict[str, dict] = {}
         self._promo_uses: dict[str, set[int]] = {}
+        self._leaks: dict[int, dict] = {}
         self._referrals: dict[int, dict] = {}
         self._seq = 0
         self._exchange_seq = 0
         self._payment_seq = 0
         self._ticket_seq = 0
         self._giveaway_seq = 0
+        self._leak_seq = 0
 
     async def start(self) -> None:
         log.warning("DATABASE_URL не задан -> данные хранятся в памяти (пропадут при рестарте)")
@@ -1097,6 +1120,65 @@ class MemoryStore:
         if promo["image_credits"]:
             await self.add_image_credits(user_id, int(promo["image_credits"]))
         return {"status": "ok", "promo": dict(promo)}
+
+    # ---------------------------------------------------------------- сливы
+    async def add_leak(
+        self,
+        *,
+        title: str,
+        comment: str,
+        file_id: str,
+        file_name: str,
+        file_size: int,
+        mime: str,
+        created_by: int = 0,
+    ) -> dict:
+        self._leak_seq += 1
+        row = {
+            "id": self._leak_seq,
+            "title": title,
+            "comment": comment,
+            "file_id": file_id,
+            "file_name": file_name,
+            "file_size": int(file_size),
+            "mime": mime,
+            "created_by": created_by,
+            "downloads": 0,
+            "created_at": datetime.now(UTC),
+        }
+        self._leaks[self._leak_seq] = row
+        return dict(row)
+
+    async def list_leaks(self, limit: int = 100, offset: int = 0) -> list[dict]:
+        rows = sorted(self._leaks.values(), key=lambda r: r["id"], reverse=True)
+        return [dict(r) for r in rows[max(0, offset) : max(0, offset) + max(1, limit)]]
+
+    async def count_leaks(self) -> int:
+        return len(self._leaks)
+
+    async def get_leak(self, leak_id: int) -> dict | None:
+        row = self._leaks.get(int(leak_id))
+        return dict(row) if row is not None else None
+
+    async def update_leak(
+        self, leak_id: int, *, title: str | None = None, comment: str | None = None
+    ) -> dict | None:
+        row = self._leaks.get(int(leak_id))
+        if row is None:
+            return None
+        if title is not None:
+            row["title"] = title
+        if comment is not None:
+            row["comment"] = comment
+        return dict(row)
+
+    async def delete_leak(self, leak_id: int) -> bool:
+        return self._leaks.pop(int(leak_id), None) is not None
+
+    async def bump_leak_downloads(self, leak_id: int) -> None:
+        row = self._leaks.get(int(leak_id))
+        if row is not None:
+            row["downloads"] = int(row.get("downloads") or 0) + 1
 
 
 # --------------------------------------------------------------------------- postgres
@@ -2549,6 +2631,85 @@ class PostgresStore:
                 promo["uses"] = int(row["uses"]) + 1
                 return {"status": "ok", "promo": promo}
 
+    # ---------------------------------------------------------------- сливы
+    async def add_leak(
+        self,
+        *,
+        title: str,
+        comment: str,
+        file_id: str,
+        file_name: str,
+        file_size: int,
+        mime: str,
+        created_by: int = 0,
+    ) -> dict:
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            """
+            INSERT INTO leaks
+                (title, comment, file_id, file_name, file_size, mime, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+            """,
+            title,
+            comment,
+            file_id,
+            file_name,
+            max(0, int(file_size)),
+            mime,
+            created_by,
+        )
+        return dict(row) if row else {}
+
+    async def list_leaks(self, limit: int = 100, offset: int = 0) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            "SELECT * FROM leaks ORDER BY id DESC LIMIT $1 OFFSET $2",
+            max(1, limit),
+            max(0, offset),
+        )
+        return [dict(r) for r in rows]
+
+    async def count_leaks(self) -> int:
+        assert self._pool is not None
+        return int(await self._pool.fetchval("SELECT count(*) FROM leaks") or 0)
+
+    async def get_leak(self, leak_id: int) -> dict | None:
+        assert self._pool is not None
+        row = await self._pool.fetchrow("SELECT * FROM leaks WHERE id = $1", int(leak_id))
+        return dict(row) if row else None
+
+    async def update_leak(
+        self, leak_id: int, *, title: str | None = None, comment: str | None = None
+    ) -> dict | None:
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            """
+            UPDATE leaks
+               SET title   = COALESCE($2, title),
+                   comment = COALESCE($3, comment)
+             WHERE id = $1
+            RETURNING *
+            """,
+            int(leak_id),
+            title,
+            comment,
+        )
+        return dict(row) if row else None
+
+    async def delete_leak(self, leak_id: int) -> bool:
+        assert self._pool is not None
+        row = await self._pool.fetchval(
+            "DELETE FROM leaks WHERE id = $1 RETURNING id", int(leak_id)
+        )
+        return row is not None
+
+    async def bump_leak_downloads(self, leak_id: int) -> None:
+        assert self._pool is not None
+        await self._pool.execute(
+            "UPDATE leaks SET downloads = downloads + 1 WHERE id = $1", int(leak_id)
+        )
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -2734,6 +2895,19 @@ CREATE TABLE IF NOT EXISTS promo_uses (
 );
 
 CREATE INDEX IF NOT EXISTS promo_uses_user_idx ON promo_uses (user_id);
+
+CREATE TABLE IF NOT EXISTS leaks (
+    id          BIGSERIAL PRIMARY KEY,
+    title       TEXT NOT NULL DEFAULT '',
+    comment     TEXT NOT NULL DEFAULT '',
+    file_id     TEXT NOT NULL,
+    file_name   TEXT NOT NULL DEFAULT '',
+    file_size   BIGINT NOT NULL DEFAULT 0,
+    mime        TEXT NOT NULL DEFAULT '',
+    created_by  BIGINT NOT NULL DEFAULT 0,
+    downloads   INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 

@@ -137,6 +137,9 @@
       paid: "Оплата получена, спасибо!", pay_failed: "Оплата не прошла", already_owned: "Уже куплено",
       added: "Добавлено", limit_reached: "Достигнут предел",
       tab_profile: "Профиль", profile_title: "Профиль",
+      leaks: "Сливы", leaks_title: "🗂 Сливы", leaks_hint: "Файлы и материалы от админов",
+      leaks_empty: "Пока ничего не выложили.", leak_download: "Скачать",
+      leak_downloading: "Скачиваю…", leak_failed: "Не удалось скачать файл",
       level: "Уровень {n}", rank: "Ранг", xp: "Опыт", total_xp: "Всего XP",
       xp_left: "До уровня {n} осталось {x} XP", xp_max: "Максимальный уровень",
       achievements: "Достижения", ach_progress: "{a} из {b}", ach_locked: "Закрыто",
@@ -218,6 +221,9 @@
       paid: "Оплату отримано, дякую!", pay_failed: "Оплата не пройшла", already_owned: "Уже куплено",
       added: "Додано", limit_reached: "Досягнуто межі",
       tab_profile: "Профіль", profile_title: "Профіль",
+      leaks: "Зливи", leaks_title: "🗂 Зливи", leaks_hint: "Файли й матеріали від адмінів",
+      leaks_empty: "Поки нічого не виклали.", leak_download: "Завантажити",
+      leak_downloading: "Завантажую…", leak_failed: "Не вдалося завантажити файл",
       level: "Рівень {n}", rank: "Ранг", xp: "Досвід", total_xp: "Усього XP",
       xp_left: "До рівня {n} залишилось {x} XP", xp_max: "Максимальний рівень",
       achievements: "Досягнення", ach_progress: "{a} з {b}", ach_locked: "Закрито",
@@ -299,6 +305,9 @@
       paid: "Аплату атрымана, дзякуй!", pay_failed: "Аплата не прайшла", already_owned: "Ужо куплена",
       added: "Дададзена", limit_reached: "Дасягнута мяжа",
       tab_profile: "Профіль", profile_title: "Профіль",
+      leaks: "Злівы", leaks_title: "🗂 Злівы", leaks_hint: "Файлы і матэрыялы ад адмінаў",
+      leaks_empty: "Пакуль нічога не выклалі.", leak_download: "Спампаваць",
+      leak_downloading: "Спампоўваю…", leak_failed: "Не ўдалося спампаваць файл",
       level: "Узровень {n}", rank: "Ранг", xp: "Вопыт", total_xp: "Усяго XP",
       xp_left: "Да ўзроўню {n} засталося {x} XP", xp_max: "Максімальны ўзровень",
       achievements: "Дасягненні", ach_progress: "{a} з {b}", ach_locked: "Закрыта",
@@ -380,6 +389,9 @@
       paid: "Payment received, thank you!", pay_failed: "Payment failed", already_owned: "Already owned",
       added: "Added", limit_reached: "Limit reached",
       tab_profile: "Profile", profile_title: "Profile",
+      leaks: "Leaks", leaks_title: "🗂 Leaks", leaks_hint: "Files and materials from admins",
+      leaks_empty: "Nothing posted yet.", leak_download: "Download",
+      leak_downloading: "Downloading…", leak_failed: "Could not download the file",
       level: "Level {n}", rank: "Rank", xp: "XP", total_xp: "Total XP",
       xp_left: "{x} XP to level {n}", xp_max: "Max level",
       achievements: "Achievements", ach_progress: "{a} of {b}", ach_locked: "Locked",
@@ -432,9 +444,14 @@
     adminError: null,
     adminEdit: null,
     adminBcastConfirm: false,
+    adminLeakEdit: null,
+    adminLeakUploading: false,
     adminChannel: null,
     adminUsersOffset: 0,
     adminTicketsOffset: 0,
+    leaks: null,
+    leaksError: null,
+    leakBusy: 0,
     _langReady: false
   };
 
@@ -592,15 +609,16 @@
     // friends/settings живут как подэкраны профиля, поэтому подсвечиваем «Профиль»
     var activeKey = state.tab;
     if (state.screen === "friends" || state.screen === "settings") activeKey = "profile";
-    var keys = ["home", "stats", "tasks", "games", "profile"];
+    var keys = ["home", "stats", "tasks", "games", "leaks", "profile"];
     if (state.me && (state.me.is_admin || state.me.is_staff)) keys.push("admin");
     if (keys.indexOf(activeKey) === -1) activeKey = "home";
-    var icons = { home: "🏠", stats: "📈", tasks: "🎯", games: "🎲", profile: "👤", admin: "🛠" };
+    var icons = { home: "🏠", stats: "📈", tasks: "🎯", games: "🎲", leaks: "🗂", profile: "👤", admin: "🛠" };
 
-    // Пересобираем док только при смене языка — иначе сохраняем «пилюлю» живой,
-    // чтобы её позиция плавно перетекала между вкладками.
+    // Пересобираем док только при смене языка или состава вкладок — иначе сохраняем
+    // «пилюлю» живой, чтобы её позиция плавно перетекала между вкладками.
+    var sig = keys.join(",") + "|" + state.lang;
     var hadTabs = !!tabsEl.querySelector(".tab");
-    if (!hadTabs || state._dockLang !== state.lang || state._dockAdmin !== (keys.length > 5)) {
+    if (!hadTabs || state._dockSig !== sig) {
       tabsEl.innerHTML = keys.map(function (key) {
         var label = key === "profile" ? t("tab_profile") : (key === "admin" ? "Админ" : t(key));
         return '<button class="tab" data-action="tab" data-value="' + key +
@@ -608,8 +626,10 @@
           '<span class="tab-icon">' + icons[key] + '</span>' +
           '<span class="tab-label">' + esc(label) + "</span></button>";
       }).join("") + '<span class="dock-pill" aria-hidden="true"></span>';
+      state._dockSig = sig;
       state._dockLang = state.lang;
-      state._dockAdmin = keys.length > 5;
+      state._dockAdmin = keys.length > 6;
+      tabsEl.setAttribute("data-count", String(keys.length));
       hadTabs = false;
     }
 
@@ -1521,6 +1541,101 @@
       "</div>";
   }
 
+  function humanSize(n) {
+    n = Number(n) || 0;
+    if (n >= 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(2) + " ГБ";
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " МБ";
+    if (n >= 1024) return Math.round(n / 1024) + " КБ";
+    return n + " Б";
+  }
+
+  function renderLeaks() {
+    var head = '<h1>' + esc(t("leaks_title")) + "</h1>";
+    if (state.leaksError) {
+      view.innerHTML = head + '<div class="card"><div class="muted">' + esc(state.leaksError) +
+        '</div><button class="btn secondary" data-action="leaks-reload">↻ ' + esc(t("retry")) + "</button></div>";
+      return;
+    }
+    if (!state.leaks) {
+      view.innerHTML = head + '<div class="skeleton"></div><div class="skeleton"></div>';
+      return;
+    }
+    var items = state.leaks.items || [];
+    if (!items.length) {
+      view.innerHTML = head + '<div class="card center"><div style="font-size:36px">🗂</div>' +
+        '<div class="muted">' + esc(t("leaks_empty")) + "</div></div>";
+      return;
+    }
+    var cards = items.map(function (it) {
+      var busy = state.leakBusy === it.id;
+      var meta = [humanSize(it.file_size), when(it.created_at)];
+      if (it.downloads) meta.push("⬇ " + it.downloads);
+      return '<div class="card leak-card">' +
+        '<div class="row-title">' + esc(it.title || it.file_name || ("#" + it.id)) + "</div>" +
+        '<div class="row-sub">' + esc(meta.filter(Boolean).join(" · ")) + "</div>" +
+        (it.comment ? '<div class="leak-comment">' + esc(it.comment) + "</div>" : "") +
+        '<button class="btn small' + (busy ? "" : "") + '" data-action="leak-download" data-value="' + it.id + '"' +
+        (busy ? ' disabled' : "") + ">" +
+        (busy ? "⏳ " + esc(t("leak_downloading")) : "⬇ " + esc(t("leak_download"))) + "</button>" +
+        "</div>";
+    }).join("");
+    view.innerHTML = head +
+      '<div class="muted leaks-hint">' + esc(t("leaks_hint")) + "</div>" +
+      '<div class="leaks-list">' + cards + "</div>";
+  }
+
+  function loadLeaks(force) {
+    if (state.leaks && !force) return Promise.resolve(state.leaks);
+    state.leaksError = null;
+    if (force) { state.leaks = null; if (state.tab === "leaks") render(); }
+    return api("leaks").then(function (data) {
+      state.leaks = data;
+      if (state.tab === "leaks") render();
+      return data;
+    }).catch(function (err) {
+      if (err.status === 403 && err.data && err.data.error === "subscription") {
+        state.paywall = err.data;
+        render();
+        return null;
+      }
+      state.leaksError = err.message || t("error_text");
+      if (state.tab === "leaks") render();
+      return null;
+    });
+  }
+
+  function downloadLeak(id) {
+    if (state.leakBusy) return;
+    var list = (state.leaks && state.leaks.items) || [];
+    var item = null;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) item = list[i];
+    state.leakBusy = id;
+    render();
+    var initData = tg ? (tg.initData || "") : "";
+    fetch("/app/api/leaks/" + id + "/file", { headers: { "X-Init-Data": initData } })
+      .then(function (res) {
+        if (!res.ok) throw new Error(t("leak_failed"));
+        return res.blob();
+      })
+      .then(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = (item && item.file_name) || "leak-" + id;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+        if (item) item.downloads = (item.downloads || 0) + 1;
+        haptic("success");
+      })
+      .catch(function (err) { toast((err && err.message) || t("leak_failed")); })
+      .then(function () {
+        state.leakBusy = 0;
+        render();
+      });
+  }
+
   function renderBuy() {
     if (state.buy === null) {
       view.innerHTML = subHeader(t("buy_title")) + '<div class="skeleton"></div>';
@@ -1614,7 +1729,7 @@
     user: "Пользователь", payments: "Платежи", promos: "Промокоды",
     settings: "Настройки", roles: "Роли", broadcast: "Рассылка",
     aitest: "Проверка ИИ", tickets: "Тикеты", ticket: "Обращение",
-    channels: "Каналы", giveaways: "Розыгрыши"
+    channels: "Каналы", giveaways: "Розыгрыши", leaks: "Сливы"
   };
 
   function adminApi(op, payload) {
@@ -1745,6 +1860,7 @@
     else if (screen === "ticket") renderAdminTicket();
     else if (screen === "channels") renderAdminChannels();
     else if (screen === "giveaways") renderAdminGiveaways();
+    else if (screen === "leaks") renderAdminLeaks();
     else renderAdminDash();
   }
 
@@ -1766,6 +1882,7 @@
       if (state.me && state.me.can_manage_roles) tiles += adminTile("👑", "Роли", "roles");
       tiles += adminTile("📢", "Каналы", "channels");
       tiles += adminTile("🎉", "Розыгрыши", "giveaways");
+      tiles += adminTile("🗂", "Сливы", "leaks");
       tiles += adminTile("🧪", "Проверка ИИ", "aitest");
     }
     tiles += adminTile("🎫", "Тикеты", "tickets", (tickets.open || 0) + " открыто");
@@ -2193,6 +2310,70 @@
       '<div class="card">' + rows + "</div>";
   }
 
+  function renderAdminLeaks() {
+    var d = state.adminData || { items: [] };
+    var rows = (d.items || []).map(function (it) {
+      var editing = state.adminLeakEdit === it.id;
+      var body = editing
+        ? '<textarea class="input admin-textarea" id="admin-leak-comment-' + it.id +
+          '" placeholder="Комментарий">' + esc(it.comment || "") + "</textarea>" +
+          '<div class="row" style="gap:8px;margin-top:8px">' +
+          '<button class="btn small" data-action="admin-leak-save" data-value="' + it.id + '">Сохранить</button>' +
+          '<button class="btn small secondary" data-action="admin-leak-edit-cancel">Отмена</button></div>'
+        : (it.comment ? '<div class="admin-value">' + esc(it.comment) + "</div>" : "") +
+          '<div class="row" style="gap:8px;margin-top:8px">' +
+          '<button class="chip" data-action="admin-leak-edit" data-value="' + it.id + '">✏️ Комментарий</button>' +
+          '<button class="chip admin-danger" data-action="admin-leak-del" data-value="' + it.id + '">Удалить</button></div>';
+      return '<div class="admin-setting"><div class="row-title">' + esc(it.title) + "</div>" +
+        '<div class="admin-sub">' + esc(it.file_name) + " · " + esc(humanSize(it.file_size)) +
+        " · " + esc(when(it.created_at)) + " · ⬇ " + (it.downloads || 0) + "</div>" + body + "</div>";
+    }).join("") || '<div class="empty">Файлов пока нет</div>';
+    var upload = state.adminLeakUploading
+      ? '<div class="muted">Загружаю и сохраняю в Telegram…</div>'
+      : '<div class="field"><input class="input admin-file" id="admin-leak-file" type="file"></div>' +
+        '<div class="field"><input class="input" id="admin-leak-title" placeholder="Название (необязательно)"></div>' +
+        '<div class="field"><textarea class="input admin-textarea" id="admin-leak-comment" placeholder="Комментарий к файлу"></textarea></div>' +
+        '<button class="btn" data-action="admin-leak-upload">📤 Загрузить файл</button>' +
+        '<div class="muted" style="margin-top:8px">До 20 МБ. Файл хранится в Telegram, в чате загрузившего админа.</div>';
+    view.innerHTML = adminHead("Сливы") +
+      '<div class="card">' + upload + "</div>" +
+      '<div class="card">' + rows + "</div>";
+  }
+
+  function adminUploadLeak() {
+    if (state.adminLeakUploading) return;
+    var input = document.getElementById("admin-leak-file");
+    var file = input && input.files && input.files[0];
+    if (!file) { toast("Выбери файл"); return; }
+    var fd = new FormData();
+    fd.append("file", file);
+    fd.append("title", val("admin-leak-title").trim());
+    fd.append("comment", val("admin-leak-comment").trim());
+    var initData = tg ? (tg.initData || "") : "";
+    state.adminLeakUploading = true;
+    render();
+    fetch("/app/api/admin/leak", {
+      method: "POST",
+      headers: { "X-Init-Data": initData },
+      body: fd
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error || "Не удалось загрузить файл");
+        }
+        return data;
+      });
+    }).then(function (data) {
+      state.adminLeakUploading = false;
+      state.adminLeakEdit = null;
+      adminApply("leaks", data);
+    }).catch(function (err) {
+      state.adminLeakUploading = false;
+      render();
+      toast(err.message || "Не удалось загрузить файл");
+    });
+  }
+
   function renderError() {
     view.innerHTML =
       '<div class="card center" style="margin-top:24px">' +
@@ -2222,13 +2403,14 @@
     else if (state.tab === "stats") renderStats();
     else if (state.tab === "tasks") renderTools();
     else if (state.tab === "games") renderGames();
+    else if (state.tab === "leaks") renderLeaks();
     else if (state.tab === "profile") renderProfile();
     else renderHome();
     renderTabs();
   }
 
   // Направление анимации перехода между экранами
-  var TAB_ORDER = ["home", "stats", "tasks", "games", "profile"];
+  var TAB_ORDER = ["home", "stats", "tasks", "games", "leaks", "profile"];
   function setDir(dir) {
     view.setAttribute("data-dir", dir || "fwd");
   }
@@ -2497,6 +2679,7 @@
       state.screen = null;
       state.tab = value;
       if (value === "friends" && state.top == null) loadTop().then(render);
+      else if (value === "leaks") { render(); if (state.leaks == null) loadLeaks(); }
       else if (value === "tasks" && state.tools === null) { render(); ensureTools(); }
       else if (value === "admin") {
         if (state.adminData || state.adminUser || state.adminTicket) render();
@@ -2593,8 +2776,13 @@
           toast(t("copied")); haptic("success");
         });
       }
+    } else if (action === "leak-download") {
+      downloadLeak(parseInt(value, 10));
+    } else if (action === "leaks-reload") {
+      loadLeaks(true);
     } else if (action === "admin-nav") {
       state.adminEdit = null;
+      state.adminLeakEdit = null;
       state.adminBcastConfirm = false;
       state.adminBcastText = "";
       if (value === "broadcast") adminGo("broadcast", { op: "broadcast.count" });
@@ -2732,6 +2920,22 @@
       }, "channels");
     } else if (action === "admin-giveaway-cancel") {
       adminMutate("giveaway.cancel", { id: parseInt(value, 10) }, "giveaways");
+    } else if (action === "admin-leak-upload") {
+      adminUploadLeak();
+    } else if (action === "admin-leak-edit") {
+      state.adminLeakEdit = parseInt(value, 10);
+      render();
+    } else if (action === "admin-leak-edit-cancel") {
+      state.adminLeakEdit = null;
+      render();
+    } else if (action === "admin-leak-save") {
+      var leakId = parseInt(value, 10);
+      var leakInput = document.getElementById("admin-leak-comment-" + leakId);
+      adminMutate("leak.update", {
+        id: leakId, comment: leakInput ? leakInput.value : ""
+      }, "leaks").then(function () { state.adminLeakEdit = null; render(); });
+    } else if (action === "admin-leak-del") {
+      adminMutate("leak.delete", { id: parseInt(value, 10) }, "leaks");
     } else if (action === "admin-giftall") {
       var giftCount = parseInt(val("admin-gift-count"), 10);
       if (!giftCount || giftCount < 1) { toast("Введи число запросов"); return; }
