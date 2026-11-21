@@ -238,6 +238,7 @@ MENU_KEYS = (
     "menu.support",
     "menu.tickets",
     "menu.files",
+    "menu.leaks",
     "menu.bonus",
     "menu.promo",
     "menu.invite",
@@ -348,8 +349,8 @@ def main_menu_kb(
     if support:
         rows.append(_button_row(lang, "menu.donate"))
     rows.append(_button_row(lang, "menu.tickets", "menu.files"))
-    rows.append(_button_row(lang, "menu.promo", "menu.bonus", "menu.invite"))
-    rows.append(_button_row(lang, "menu.lang", "menu.help"))
+    rows.append(_button_row(lang, "menu.leaks", "menu.promo", "menu.bonus"))
+    rows.append(_button_row(lang, "menu.invite", "menu.lang", "menu.help"))
     if payments:
         rows.append(_button_row(lang, "menu.terms", "menu.reset"))
     else:
@@ -407,6 +408,11 @@ def menu_inline(
             InlineKeyboardButton(text=t(lang, "menu.promo"), callback_data="menu:act:promo"),
             InlineKeyboardButton(text=t(lang, "menu.bonus"), callback_data="menu:act:bonus"),
             InlineKeyboardButton(text=t(lang, "menu.invite"), callback_data="menu:act:invite"),
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(text=t(lang, "menu.leaks"), callback_data="menu:act:leaks"),
         ]
     )
     rows.append(
@@ -1419,6 +1425,87 @@ async def cmd_promo(
         return
     await state.set_state(Promo.awaiting)
     await message.answer(t(lang, "promo.ask"))
+
+
+def _leak_size(size: int) -> str:
+    size = int(size or 0)
+    if size >= 1024 * 1024:
+        return f"{size / 1024 / 1024:.1f} МБ"
+    if size >= 1024:
+        return f"{round(size / 1024)} КБ"
+    return f"{size} Б"
+
+
+async def render_leaks_menu(
+    store: Store, lang: str
+) -> tuple[str, InlineKeyboardMarkup | None]:
+    """Список файлов «Сливов» кнопками: тап присылает документ."""
+    items = await store.list_leaks(20)
+    if not items:
+        return t(lang, "leaks.empty"), None
+    rows: list[list[InlineKeyboardButton]] = []
+    for row in items:
+        title = str(row.get("title") or row.get("file_name") or "").strip()
+        title = title[:48] or "Файл"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{title} · {_leak_size(row.get('file_size'))}",
+                    callback_data=f"lk:{int(row.get('id') or 0)}",
+                )
+            ]
+        )
+    return t(lang, "leaks.title"), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.message(Command("leaks", "сливы"))
+async def cmd_leaks(message: Message, store: Store, settings: Settings) -> None:
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    if message.chat.type != "private":
+        me = await message.bot.me()
+        await message.answer(t(lang, "leaks.private", username=me.username or settings.bot_name))
+        return
+    await store.ensure_user(user.id, user.username, user.first_name)
+    text, kb = await render_leaks_menu(store, lang)
+    await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("lk:"))
+async def cb_leak_send(
+    call: CallbackQuery, bot: Bot, store: Store, settings: Settings
+) -> None:
+    user = call.from_user
+    if user is None:
+        await call.answer()
+        return
+    lang = await user_lang(store, settings, user.id)
+    try:
+        leak_id = int((call.data or "").split(":", 1)[1])
+    except (IndexError, ValueError):
+        await call.answer()
+        return
+    row = await store.get_leak(leak_id)
+    if not row or call.message is None:
+        await call.answer(t(lang, "leaks.gone"), show_alert=True)
+        return
+    title = str(row.get("title") or row.get("file_name") or "Файл")
+    comment = str(row.get("comment") or "").strip()
+    caption = title + ("\n\n" + comment if comment else "")
+    try:
+        await bot.send_document(
+            call.message.chat.id,
+            str(row.get("file_id") or ""),
+            caption=caption[:1024],
+            parse_mode=None,
+        )
+    except TelegramAPIError:
+        await call.answer(t(lang, "leaks.gone"), show_alert=True)
+        return
+    await store.bump_leak_downloads(leak_id)
+    await call.answer(t(lang, "leaks.sent"))
 
 
 @router.message(
@@ -2694,6 +2781,9 @@ async def on_menu_button(
         )
     elif action == "menu.bonus":
         await cmd_bonus(message, store, settings)
+    elif action == "menu.leaks":
+        text, kb = await render_leaks_menu(store, lang)
+        await message.answer(text, reply_markup=kb)
     elif action == "menu.promo":
         await cmd_promo(message, store, settings, state)
     elif action == "menu.invite":
@@ -2816,6 +2906,10 @@ async def cb_menu_action(
         await store.ensure_user(user.id, user.username, user.first_name)
         await state.set_state(Promo.awaiting)
         await call.message.answer(t(lang, "promo.ask"))
+    elif action == "leaks":
+        await store.ensure_user(user.id, user.username, user.first_name)
+        text, kb = await render_leaks_menu(store, lang)
+        await call.message.answer(text, reply_markup=kb)
     elif action == "bonus":
         await store.ensure_user(user.id, user.username, user.first_name)
         text, claimed, amount = await bonus_view(store, settings, user.id, lang)

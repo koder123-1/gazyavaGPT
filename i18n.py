@@ -397,6 +397,42 @@ TR: dict[str, dict[str, str]] = {
         "be": "📎 Файлы",
         "en": "📎 Files",
     },
+    "menu.leaks": {
+        "ru": "🗂 Сливы",
+        "uk": "🗂 Зливи",
+        "be": "🗂 Злівы",
+        "en": "🗂 Leaks",
+    },
+    "leaks.title": {
+        "ru": "🗂 Сливы\n\nФайлы от админов. Выбери файл — пришлю документ с комментарием.",
+        "uk": "🗂 Зливи\n\nФайли від адмінів. Обери файл — надішлю документ із коментарем.",
+        "be": "🗂 Злівы\n\nФайлы ад адмінаў. Выберы файл — дашлю дакумент з каментаром.",
+        "en": "🗂 Leaks\n\nFiles from admins. Pick one — I'll send the document with its comment.",
+    },
+    "leaks.empty": {
+        "ru": "Пока ничего не выложили. Заглядывай позже.",
+        "uk": "Поки нічого не виклали. Зазирни пізніше.",
+        "be": "Пакуль нічого не выклалі. Заглянь пазней.",
+        "en": "Nothing posted yet. Check back later.",
+    },
+    "leaks.gone": {
+        "ru": "Файл уже удалён.",
+        "uk": "Файл уже видалено.",
+        "be": "Файл ужо выдалены.",
+        "en": "This file was deleted.",
+    },
+    "leaks.sent": {
+        "ru": "Отправляю файл…",
+        "uk": "Надсилаю файл…",
+        "be": "Дасылаю файл…",
+        "en": "Sending the file…",
+    },
+    "leaks.private": {
+        "ru": "Сливы доступны в личке с ботом: @{username}",
+        "uk": "Зливи доступні в особистих із ботом: @{username}",
+        "be": "Злівы даступныя ў асабістых з ботам: @{username}",
+        "en": "Leaks are available in the bot DM: @{username}",
+    },
     "menu.lang": {"ru": "🌍 Язык", "uk": "🌍 Мова", "be": "🌍 Мова", "en": "🌍 Language"},
     "menu.help": {"ru": "❓ Справка", "uk": "❓ Довідка", "be": "❓ Даведка", "en": "❓ Help"},
     "menu.check": {
