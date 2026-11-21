@@ -76,8 +76,37 @@ DEFAULT_RULES = (
     "3. Домашку спрашивай у меня через <code>/ai</code> или фото — не засоряй чат "
     "одинаковыми сообщениями.\n"
     "4. Не публикуй чужие личные данные и скриншоты переписок.\n"
-    "5. Флуд и капс → мут на {mute} минут.\n\n"
+    "5. Флуд и капс → мут на {mute} минут.\n"
+    "6. Мат, оскорбления и спам-ссылки удаляются, за повтор — бан.\n\n"
     "Нарушения — бан без предупреждения."
+)
+
+# Корни мата для «антимата». Ищем подстрокой в нормализованном тексте
+# (без пробелов, пунктуации и leet-подстановок), поэтому хватает корней.
+DEFAULT_ANTIMAT_WORDS = (
+    "хуй",
+    "хуя",
+    "хуе",
+    "хуи",
+    "пизд",
+    "бляд",
+    "блят",
+    "ебал",
+    "ебет",
+    "ебут",
+    "ебан",
+    "ебат",
+    "заеб",
+    "наеб",
+    "уеб",
+    "отъеб",
+    "долбоеб",
+    "пидор",
+    "пидар",
+    "мудак",
+    "мудил",
+    "гандон",
+    "шлюх",
 )
 
 # Пары «сколько запросов : сколько звёзд». Меняются из /admin без рестарта.
@@ -207,6 +236,12 @@ class Settings:
     antispam_action: str = "mute"
     strike_limit: int = 3
     strike_window: int = 3600
+    antimat_enabled: bool = True
+    antimat_words: tuple[str, ...] = DEFAULT_ANTIMAT_WORDS
+
+    # Капча для новых участников: кнопка, мут до проверки, кик по таймауту.
+    captcha_enabled: bool = True
+    captcha_timeout: int = 180
 
     image_provider: str = "pollinations"
     image_model: str = "flux"
@@ -460,6 +495,10 @@ def load_settings() -> Settings:
         antispam_action=_action_env("ANTISPAM_ACTION", "mute"),
         strike_limit=_int_env("STRIKE_LIMIT", 3),
         strike_window=_int_env("STRIKE_WINDOW", 3600),
+        antimat_enabled=_bool_env("ANTIMAT_ENABLED", True),
+        antimat_words=_list_env("ANTIMAT_WORDS", ",".join(DEFAULT_ANTIMAT_WORDS)),
+        captcha_enabled=_bool_env("CAPTCHA_ENABLED", True),
+        captcha_timeout=_int_env("CAPTCHA_TIMEOUT", 180, minimum=30, maximum=3600),
         image_provider=image_provider,
         image_model=(os.getenv("IMAGE_MODEL", "").strip() or "flux"),
         image_models=_list_env("IMAGE_MODELS", ""),

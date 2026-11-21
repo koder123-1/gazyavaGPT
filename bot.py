@@ -27,6 +27,7 @@ from aiohttp import web
 
 from ai import AIClient
 from admin import router as admin_router
+from captcha import CaptchaMiddleware
 from config import Settings, load_settings
 from groupadmin import MutedMiddleware
 from groupadmin import router as group_router
@@ -42,8 +43,10 @@ from subscription import router as subscription_router
 from tickets import router as tickets_router
 from toolbox import router as toolbox_router
 import autopost
+import captcha
 import channelkit
 import giveaways
+import inline
 import keepalive
 import miniapp
 import reminders
@@ -135,6 +138,8 @@ GROUP_COMMANDS = [
     BotCommand(command="card", description="Карточки: /card add Вопрос | Ответ"),
     BotCommand(command="cards", description="Все карточки"),
     BotCommand(command="rules", description="Правила чата"),
+    BotCommand(command="captcha", description="Капча для новичков: on/off"),
+    BotCommand(command="antimat", description="Фильтр мата: on/off"),
     BotCommand(command="help", description="Справка"),
     BotCommand(command="group", description="Управление чатом"),
     BotCommand(command="giveaway", description="Розыгрыш в этом чате"),
@@ -170,6 +175,7 @@ async def on_startup(
     autopost.start_loop(bot, store, settings)
     channelkit.start_loop(bot, store)
     reminders.start_loop(bot, store, settings)
+    captcha.start_loop(bot, store)
     keepalive.start_loop(settings)
     await bot.set_my_commands(COMMANDS)
     with contextlib.suppress(TelegramAPIError):
@@ -238,6 +244,7 @@ async def on_shutdown(bot: Bot, store: Store, ai: AIClient, images: ImageClient)
     await autopost.stop_loop()
     await channelkit.stop_loop()
     await reminders.stop_loop()
+    await captcha.stop_loop()
     await keepalive.stop_loop()
     await ai.close()
     await images.close()
@@ -294,6 +301,8 @@ def create_dispatcher(
     dispatcher.include_router(moderation_router)
     dispatcher.include_router(payments_router)
     dispatcher.include_router(reminders.router)
+    dispatcher.include_router(captcha.router)
+    dispatcher.include_router(inline.router)
     dispatcher.include_router(toolbox_router)
     dispatcher.include_router(user_router)
     # Спам, антифлуд и «личные» команды — до всех хендлеров.
@@ -302,6 +311,7 @@ def create_dispatcher(
     dispatcher.message.outer_middleware(SubscriptionMiddleware())
     dispatcher.callback_query.outer_middleware(SubscriptionMiddleware())
     dispatcher.message.outer_middleware(PrivateOnlyMiddleware(settings))
+    dispatcher.message.outer_middleware(CaptchaMiddleware())
     dispatcher.message.outer_middleware(MutedMiddleware())
     dispatcher.message.outer_middleware(FloodMiddleware(settings))
     dispatcher.message.outer_middleware(SpamMiddleware(settings))

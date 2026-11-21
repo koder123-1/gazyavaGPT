@@ -25,6 +25,7 @@ from aiogram.types import (
 from config import Settings
 from i18n import normalize_lang, t
 from roles import has_admin_access, resolve_role
+from store import Store
 
 log = logging.getLogger("moderation")
 router = Router(name="moderation")
@@ -99,6 +100,50 @@ async def on_member_joined(event: ChatMemberUpdated, bot: Bot, settings: Setting
 @router.message(Command("rules"))
 async def cmd_rules(message: Message, settings: Settings) -> None:
     await message.answer(render_template(settings.rules_text, settings=settings))
+
+
+MAT_OFF_PREFIX = "mat:"
+
+
+async def _antimat_off(store: Store, chat_id: int) -> bool:
+    return await store.get_setting(f"{MAT_OFF_PREFIX}{chat_id}") is not None
+
+
+@router.message(Command("antimat", "антимат"))
+async def cmd_antimat(
+    message: Message, bot: Bot, store: Store, settings: Settings
+) -> None:
+    """Включение и выключение антимата для конкретного чата."""
+    lang = normalize_lang(settings.default_lang)
+    if message.chat.type not in {"group", "supergroup"}:
+        await message.answer(t(lang, "antimat.private"))
+        return
+    user = message.from_user
+    if user is None:
+        return
+    try:
+        member = await bot.get_chat_member(message.chat.id, user.id)
+    except TelegramAPIError:
+        member = None
+    if member is None or getattr(member, "status", "") not in {"administrator", "creator"}:
+        await message.answer(t(lang, "antimat.admin_only"))
+        return
+    arg = (message.text or "").split(maxsplit=1)
+    value = arg[1].strip().lower() if len(arg) > 1 else ""
+    key = f"{MAT_OFF_PREFIX}{message.chat.id}"
+    if value in {"on", "вкл", "включить", "увімк", "уключыць"}:
+        await store.delete_setting(key)
+        await message.answer(t(lang, "antimat.enabled"))
+    elif value in {"off", "выкл", "выключить", "выключиць"}:
+        await store.set_setting(key, "1")
+        await message.answer(t(lang, "antimat.disabled"))
+    else:
+        state = (
+            t(lang, "antimat.state_off")
+            if await _antimat_off(store, message.chat.id)
+            else t(lang, "antimat.state_on")
+        )
+        await message.answer(t(lang, "antimat.status", state=state))
 
 
 # --------------------------------------------------------------------------- антифлуд
@@ -263,6 +308,24 @@ _LINK_RE = re.compile(
 )
 _MENTION_RE = re.compile(r"@[A-Za-z0-9_]{4,}")
 
+# «Антимат»: текст схлопываем в буквы, чтобы ловить х*у*й и xуй, и ищем корни.
+_LEET_MAP = str.maketrans(
+    {"@": "а", "0": "о", "3": "з", "$": "с", "4": "ч", "1": "и", "ё": "е", "€": "е"}
+)
+_NON_WORD_RE = re.compile(r"[^a-zа-я]+")
+
+
+def normalize_mat_text(text: str) -> str:
+    """Нижний регистр, leet-замены и удаление всего, кроме букв."""
+    return _NON_WORD_RE.sub("", text.lower().translate(_LEET_MAP))
+
+
+def contains_mat(text: str, words: tuple[str, ...]) -> bool:
+    if not words:
+        return False
+    flat = normalize_mat_text(text)
+    return any(word in flat for word in words)
+
 
 class SpamGuard:
     """Повторы, капс и массовые упоминания — то, что не ловится счётчиком частоты."""
@@ -340,6 +403,12 @@ class SpamMiddleware(BaseMiddleware):
         reason = None
         if self.settings.antispam_links and _LINK_RE.search(text):
             reason = "group.reason_links"
+        elif (
+            self.settings.antimat_enabled
+            and contains_mat(text, self.settings.antimat_words)
+            and (store is None or not await _antimat_off(store, chat.id))
+        ):
+            reason = "group.reason_mat"
         elif (
             self.settings.antispam_mentions > 0
             and len(_MENTION_RE.findall(text)) >= self.settings.antispam_mentions
