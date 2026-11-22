@@ -2668,9 +2668,6 @@
   function claimBonus() {
     if (state.busy) return;
     state.busy = true;
-    var beforeXp = xpOf(state.me);
-    var beforeLvl = levelInfo(beforeXp).level;
-    var hadBonusAch = !!(state.me && state.me.bonus_claimed_today);
     render();
     api("bonus").then(function (data) {
       if (state.me) {
@@ -2678,17 +2675,26 @@
         state.me.bonus_requests = data.bonus_requests;
         state.me.bonus_streak = data.streak;
         state.me.bonus_claimed_today = true;
+        if (data.gamification) state.me.gamification = data.gamification;
       }
       toast(data.claimed ? t("bonus_claimed", { amount: data.amount }) : t("bonus_already"));
       haptic(data.claimed ? "success" : "warning");
       if (data.claimed) confetti(window.innerWidth/2, window.innerHeight/3);
 
-      // «Второй тост»: достижение / новый уровень
+      // «Второй тост»: новый уровень или достижение — по данным сервера.
       if (data.claimed) {
-        var afterLvl = levelInfo(xpOf(state.me)).level;
+        var ev = data.event || {};
         var notice = "";
-        if (afterLvl > beforeLvl) notice = t("level_up", { n: afterLvl });
-        else if (!hadBonusAch) notice = t("ach_unlocked", { name: (dict().ach || {}).bonus || "" });
+        if (ev.level_up) {
+          notice = t("level_up", { n: ev.level });
+        } else if (ev.unlocks && ev.unlocks.length) {
+          var byId = {};
+          ((data.gamification || {}).achievements || []).forEach(function (a) {
+            byId[a.id] = a;
+          });
+          var first = byId[ev.unlocks[0]];
+          if (first) notice = t("ach_unlocked", { name: first.title });
+        }
         if (notice) setTimeout(function () { toast(notice); haptic("success"); }, 2100);
       }
     }).catch(function () {

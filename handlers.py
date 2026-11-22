@@ -1380,20 +1380,21 @@ async def cmd_bonus(message: Message, store: Store, settings: Settings) -> None:
         )
         return
     await store.ensure_user(user.id, user.username, user.first_name)
-    text, _, _ = await bonus_view(store, settings, user.id, lang)
+    text, *_ = await bonus_view(store, settings, user.id, lang)
     await message.answer(text)
 
 
 async def bonus_view(
     store: Store, settings: Settings, user_id: int, lang: str
-) -> tuple[str, bool, int]:
-    """Текст про бонус дня + признак «только что получен» и сумма."""
+) -> tuple[str, bool, int, dict]:
+    """Текст про бонус дня, признак «только что получен», сумма и события XP."""
     claimed_before = await store.bonus_claimed_today(user_id)
     # Пропущен ровно один день и есть заморозка — тратим её, серия выживает.
     freeze_used = await store.use_freeze(user_id) if not claimed_before else False
     result = await store.daily_bonus(user_id, settings.bonus_base, settings.bonus_max)
     runtime = await load_runtime(store, settings)
     left = await store.remaining(user_id, runtime.daily_limit)
+    events: dict = {}
     if result["claimed"]:
         text = t(
             lang,
@@ -1416,7 +1417,7 @@ async def bonus_view(
                 text = text.rstrip() + "\n\n" + part
     else:
         text = t(lang, "bonus.already", streak=result["streak"], left=left)
-    return text, bool(result["claimed"]), int(result["amount"])
+    return text, bool(result["claimed"]), int(result["amount"]), events
 
 
 async def redeem_promo(
@@ -1657,7 +1658,7 @@ async def cb_bonus_claim(call: CallbackQuery, store: Store, settings: Settings) 
     await store.ensure_user(
         call.from_user.id, call.from_user.username, call.from_user.first_name
     )
-    text, claimed, amount = await bonus_view(
+    text, claimed, amount, _ = await bonus_view(
         store, settings, call.from_user.id, lang
     )
     with contextlib.suppress(TelegramAPIError):
@@ -3137,7 +3138,7 @@ async def cb_menu_action(
         await call.message.answer(text, reply_markup=kb)
     elif action == "bonus":
         await store.ensure_user(user.id, user.username, user.first_name)
-        text, claimed, amount = await bonus_view(store, settings, user.id, lang)
+        text, claimed, amount, _ = await bonus_view(store, settings, user.id, lang)
         await call.message.answer(text)
         await call.answer(
             t(lang, "bonus.ok_short", amount=amount)

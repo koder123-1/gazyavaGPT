@@ -281,18 +281,28 @@ async def api_bonus(request: web.Request) -> web.Response:
         return gate
 
     await store.ensure_user(user_id, user.get("username"), user.get("first_name"))
-    result = await store.daily_bonus(user_id, settings.bonus_base, settings.bonus_max)
+    lang = _lang_of(await store.get_lang(user_id), settings)
+    # Тот же путь, что и в боте: бонус дня, заморозка серии, XP и достижения.
+    # Локальный импорт — `handlers` тянет много модулей и импортируется позже.
+    from handlers import bonus_view
+
+    text, claimed, amount, events = await bonus_view(
+        store, settings, user_id, lang
+    )
     runtime = await load_runtime(store, settings)
     unlimited = runtime.daily_limit <= 0
     left = await store.remaining(user_id, runtime.daily_limit)
     return web.json_response(
         {
-            "claimed": bool(result["claimed"]),
-            "amount": int(result["amount"]),
-            "streak": int(result["streak"]),
+            "claimed": claimed,
+            "amount": amount,
+            "streak": await store.bonus_streak(user_id),
             "bonus_requests": await store.bonus_requests(user_id),
             "remaining": None if unlimited else int(left),
             "bonus_max": settings.bonus_max,
+            "message": text,
+            "event": events,
+            "gamification": await gamification.profile_payload(store, user_id, lang),
         }
     )
 
