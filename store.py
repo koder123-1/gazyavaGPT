@@ -51,6 +51,7 @@ class Store(Protocol):
 
     # Геймификация: XP, уровни, достижения, сезонный лидерборд и заморозки серии.
     async def add_xp(self, user_id: int, amount: int, season: str) -> dict: ...
+    async def ensure_xp(self, user_id: int, value: int) -> int: ...
     async def xp(self, user_id: int) -> int: ...
     async def season_xp(self, user_id: int, season: str) -> int: ...
     async def season_rank(self, user_id: int, season: str) -> int: ...
@@ -453,6 +454,20 @@ class MemoryStore:
         value = max(0, int(bucket.get(user_id, 0)) + int(amount))
         bucket[user_id] = value
         return {"xp": total, "season_xp": value}
+
+    async def ensure_xp(self, user_id: int, value: int) -> int:
+        """Поднимает XP до значения (не опускает и не трогает сезон).
+
+        Нужно один раз после появления геймификации: XP старых пользователей
+        восстанавливается из накопленной статистики, а не начинается с нуля.
+        """
+        user = self._users.setdefault(user_id, {})
+        current = int(user.get("xp", 0))
+        target = max(0, int(value))
+        if target > current:
+            user["xp"] = target
+            return target
+        return current
 
     async def xp(self, user_id: int) -> int:
         return int(self._users.get(user_id, {}).get("xp", 0))
@@ -1694,6 +1709,16 @@ class PostgresStore:
             amount,
         )
         return {"xp": int(total), "season_xp": int(value or 0)}
+
+    async def ensure_xp(self, user_id: int, value: int) -> int:
+        """Поднимает XP до значения (не опускает и не трогает сезон)."""
+        assert self._pool is not None
+        result = await self._pool.fetchval(
+            "UPDATE users SET xp = GREATEST(xp, $2) WHERE user_id = $1 RETURNING xp",
+            user_id,
+            max(0, int(value)),
+        )
+        return int(result or 0)
 
     async def xp(self, user_id: int) -> int:
         assert self._pool is not None

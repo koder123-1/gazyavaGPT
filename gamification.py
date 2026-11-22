@@ -332,10 +332,41 @@ async def on_referral_invited(store: Store, user_id: int, lang: str) -> dict:
     return await _award(store, user_id, XP_INVITED, lang)
 
 
+def legacy_xp(
+    *, requests: int, bonus_requests: int, invites: int, streak: int
+) -> int:
+    """Прежняя формула XP из Mini App — нужна, чтобы уровни не обнулились."""
+    return max(
+        0,
+        int(requests) * 10
+        + int(bonus_requests) * 5
+        + int(invites) * 40
+        + int(streak) * 20,
+    )
+
+
+async def backfill_xp(store: Store, user_id: int) -> int:
+    """Поднимает XP до прежнего расчётного значения. Безопасно вызывать часто."""
+    try:
+        baseline = legacy_xp(
+            requests=await store.requests_total(user_id),
+            bonus_requests=await store.bonus_requests(user_id),
+            invites=await store.referral_count(user_id),
+            streak=await store.bonus_streak(user_id),
+        )
+        if baseline <= 0:
+            return await store.xp(user_id)
+        return await store.ensure_xp(user_id, baseline)
+    except Exception:  # noqa: BLE001 — перенос XP не должен ломать профиль
+        log.exception("Не удалось перенести XP из старой статистики")
+        return 0
+
+
 async def profile_payload(store: Store, user_id: int, lang: str) -> dict:
     """Всё для профиля: XP, уровень, достижения и текущий сезон."""
-    # Догоняем достижения, заработанные до появления геймификации.
+    # Догоняем достижения и XP, заработанные до появления геймификации.
     await check_milestones(store, user_id)
+    await backfill_xp(store, user_id)
     total = await store.xp(user_id)
     info = level_info(total)
     unlocked = await store.achievements(user_id)
