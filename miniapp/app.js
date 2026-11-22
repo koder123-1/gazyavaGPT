@@ -6,6 +6,31 @@
 
   var THEME_BG = { dark: "#05060b", light: "#eef1ff" };
 
+  // 13 тем оформления. dot — мини-градиент для свотча в настройках.
+  var THEMES = [
+    { id: "aurora", dot: "linear-gradient(135deg,#6366f1,#22d3ee)" },
+    { id: "sunset", dot: "linear-gradient(135deg,#f97316,#ec4899)" },
+    { id: "ocean", dot: "linear-gradient(135deg,#0ea5e9,#14b8a6)" },
+    { id: "forest", dot: "linear-gradient(135deg,#10b981,#84cc16)" },
+    { id: "candy", dot: "linear-gradient(135deg,#ec4899,#a855f7)" },
+    { id: "midnight", dot: "linear-gradient(135deg,#1d4ed8,#6366f1)" },
+    { id: "gold", dot: "linear-gradient(135deg,#f59e0b,#fbbf24)" },
+    { id: "cherry", dot: "linear-gradient(135deg,#ef4444,#ec4899)" },
+    { id: "mint", dot: "linear-gradient(135deg,#2dd4bf,#34d399)" },
+    { id: "lavender", dot: "linear-gradient(135deg,#a78bfa,#f0abfc)" },
+    { id: "matrix", dot: "linear-gradient(135deg,#15803d,#4ade80)" },
+    { id: "ice", dot: "linear-gradient(135deg,#38bdf8,#a5f3fc)" },
+    { id: "mono", dot: "linear-gradient(135deg,#64748b,#cbd5e1)" }
+  ];
+
+  function prefGet(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  function prefSet(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
   function currentScheme() {
     var scheme = "";
     try { scheme = (tg && tg.colorScheme) || ""; } catch (e) {}
@@ -21,8 +46,10 @@
   function applyTheme() {
     var over = state && state._themeOverride;
     var light = over === "light" || (over !== "dark" && currentScheme() === "light");
+    var skin = (state && state._skin) || "aurora";
     var bg = light ? THEME_BG.light : THEME_BG.dark;
     document.documentElement.setAttribute("data-theme", light ? "light" : "dark");
+    document.documentElement.setAttribute("data-skin", skin);
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", bg);
     if (!tg) return;
@@ -103,6 +130,8 @@
       friends_top: "Топ приглашающих", friends_empty: "Пока никого — стань первым!",
       settings_title: "⚙️ Настройки", language: "Язык", style_title: "Стиль ответов",
       saved: "Сохранено", theme_switch: "Тема",
+      theme_title: "Оформление", theme_auto: "Авто", theme_light: "Светлая", theme_dark: "Тёмная",
+      themes: { aurora: "Аврора", sunset: "Закат", ocean: "Океан", forest: "Лес", candy: "Карамель", midnight: "Полночь", gold: "Золото", cherry: "Вишня", mint: "Мята", lavender: "Лаванда", matrix: "Матрица", ice: "Лёд", mono: "Монохром" },
       sub_title: "🔒 Нужна подписка", sub_text: "Чтобы открыть кабинет, подпишись на канал.",
       sub_button: "📢 Подписаться", sub_check: "Я подписался",
       error_title: "Не получилось загрузить", error_text: "Открой кабинет заново из Telegram.",
@@ -188,6 +217,8 @@
       friends_top: "Топ запрошуючих", friends_empty: "Поки нікого — стань першим!",
       settings_title: "⚙️ Налаштування", language: "Мова", style_title: "Стиль відповідей",
       saved: "Збережено", theme_switch: "Тема",
+      theme_title: "Оформлення", theme_auto: "Авто", theme_light: "Світла", theme_dark: "Темна",
+      themes: { aurora: "Аврора", sunset: "Захід", ocean: "Океан", forest: "Ліс", candy: "Карамель", midnight: "Опівніч", gold: "Золото", cherry: "Вишня", mint: "М'ята", lavender: "Лаванда", matrix: "Матриця", ice: "Лід", mono: "Монохром" },
       sub_title: "🔒 Потрібна підписка", sub_text: "Щоб відкрити кабінет, підпишись на канал.",
       sub_button: "📢 Підписатися", sub_check: "Я підписався",
       error_title: "Не вдалося завантажити", error_text: "Відкрий кабінет заново з Telegram.",
@@ -273,6 +304,8 @@
       friends_top: "Топ запрашальнікаў", friends_empty: "Пакуль нікога — стань першым!",
       settings_title: "⚙️ Налады", language: "Мова", style_title: "Стыль адказаў",
       saved: "Захавана", theme_switch: "Тэма",
+      theme_title: "Афармленне", theme_auto: "Аўта", theme_light: "Светлая", theme_dark: "Цёмная",
+      themes: { aurora: "Аўрора", sunset: "Закат", ocean: "Акіян", forest: "Лес", candy: "Карамель", midnight: "Поўнач", gold: "Золата", cherry: "Вішня", mint: "Мята", lavender: "Лаванда", matrix: "Матрыца", ice: "Лёд", mono: "Манахром" },
       sub_title: "🔒 Патрэбна падпіска", sub_text: "Каб адкрыць кабінет, падпішыся на канал.",
       sub_button: "📢 Падпісацца", sub_check: "Я падпісаўся",
       error_title: "Не ўдалося загрузіць", error_text: "Адкрый кабінет зноў з Telegram.",
@@ -358,6 +391,8 @@
       friends_top: "Top inviters", friends_empty: "Nobody yet — be the first!",
       settings_title: "⚙️ Settings", language: "Language", style_title: "Answer style",
       saved: "Saved", theme_switch: "Theme",
+      theme_title: "Appearance", theme_auto: "Auto", theme_light: "Light", theme_dark: "Dark",
+      themes: { aurora: "Aurora", sunset: "Sunset", ocean: "Ocean", forest: "Forest", candy: "Candy", midnight: "Midnight", gold: "Gold", cherry: "Cherry", mint: "Mint", lavender: "Lavender", matrix: "Matrix", ice: "Ice", mono: "Mono" },
       sub_title: "🔒 Subscription required", sub_text: "Subscribe to the channel to open the dashboard.",
       sub_button: "📢 Subscribe", sub_check: "I subscribed",
       error_title: "Failed to load", error_text: "Open the dashboard again from Telegram.",
@@ -456,8 +491,21 @@
     leaks: null,
     leaksError: null,
     leakBusy: 0,
-    _langReady: false
+    _langReady: false,
+    _skin: "aurora"
   };
+
+  // применяем сохранённые тему и скин до первого рендера
+  (function loadPrefs() {
+    var skin = prefGet("gz_skin");
+    if (skin) {
+      for (var i = 0; i < THEMES.length; i++) {
+        if (THEMES[i].id === skin) { state._skin = skin; break; }
+      }
+    }
+    var mode = prefGet("gz_mode");
+    if (mode === "light" || mode === "dark") state._themeOverride = mode;
+  })();
 
   var view = document.getElementById("view");
   var tabsEl = document.getElementById("tabs");
@@ -978,19 +1026,38 @@
           '" data-action="set-model" data-value="' + esc(m.id) + '">' + esc(m.title) + "</button>";
       }).join("");
 
-      // тема — переключатель
-      var themeLabel = (state._themeOverride === "light" ? "☀️" : state._themeOverride === "dark" ? "🌙" : "🔄");
-      var themeBtn = '<button class="btn secondary" data-action="toggle-theme" style="margin-top:8px">' +
-        themeLabel + " " + esc(t("theme_switch") || "Theme: auto") + "</button>";
+      // оформление — 13 тем + режим светлая/тёмная/авто
+      var themeNames = dict().themes || {};
+      var themeChips = THEMES.map(function (th) {
+        var name = themeNames[th.id] || th.id;
+        return '<button class="chip' + (th.id === (state._skin || "aurora") ? " active" : "") +
+          '" data-action="set-skin" data-value="' + th.id + '">' +
+          '<span class="theme-dot" style="background:' + th.dot + '"></span>' +
+          '<span class="chip-name">' + esc(name) + "</span></button>";
+      }).join("");
+
+      var modeChips = [
+        { v: "auto", icon: "🔄", key: "theme_auto" },
+        { v: "light", icon: "☀️", key: "theme_light" },
+        { v: "dark", icon: "🌙", key: "theme_dark" }
+      ].map(function (m) {
+        var active = m.v === "auto" ? !state._themeOverride : state._themeOverride === m.v;
+        return '<button class="chip' + (active ? " active" : "") +
+          '" data-action="set-mode" data-value="' + m.v + '">' +
+          m.icon + " " + esc(t(m.key)) + "</button>";
+      }).join("");
 
       view.innerHTML =
         (withBack ? subHeader(t("settings_title")) : "<h1>" + esc(t("settings_title")) + "</h1>") +
         "<h2>" + esc(t("language")) + "</h2>" +
         '<div class="card"><div class="chips">' + langs + "</div></div>" +
+        "<h2>" + esc(t("theme_title")) + "</h2>" +
+        '<div class="card"><div class="theme-grid">' + themeChips +
+        '</div><div class="seg">' + modeChips + "</div></div>" +
         "<h2>" + esc(t("style_title")) + "</h2>" +
         '<div class="card">' + styles + "</div>" +
         "<h2>" + esc(t("model")) + "</h2>" +
-        '<div class="card"><div class="chips">' + models + "</div>" + themeBtn + "</div>";
+        '<div class="card"><div class="chips">' + models + "</div></div>";
     }
 
   // ---------------------------------------------------------------- игры
@@ -2794,6 +2861,18 @@
       submitGuess();
     } else if (action === "set-model") {
       saveSettings({ model: value });
+    } else if (action === "set-skin") {
+      state._skin = value || "aurora";
+      prefSet("gz_skin", state._skin);
+      applyTheme();
+      haptic("select");
+      render();
+    } else if (action === "set-mode") {
+      state._themeOverride = value === "auto" ? null : value;
+      prefSet("gz_mode", state._themeOverride || "auto");
+      applyTheme();
+      haptic("select");
+      render();
     } else if (action === "toggle-theme") {
       if (!state._themeOverride) state._themeOverride = "light";
       else if (state._themeOverride === "light") state._themeOverride = "dark";

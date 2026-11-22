@@ -7,6 +7,8 @@
   --acc:#6366f1;--acc2:#8b5cf6;--acc3:#22d3ee;--acc4:#f59e0b;--acc5:#ec4899;
   --acc-rgb:99,102,241;
   --hero:linear-gradient(135deg,#6366f1 0%,#7c3aed 30%,#a855f7 60%,#22d3ee 120%);
+  --o1:rgba(99,102,241,.55);--o2:rgba(168,85,247,.45);
+  --o3:rgba(34,211,238,.38);--o4:rgba(236,72,153,.22);
   --ease:cubic-bezier(.22,.85,.36,1);
   --spring:cubic-bezier(.34,1.56,.64,1);
   --out:cubic-bezier(.16,1,.3,1);
@@ -41,6 +43,34 @@ html[data-theme="light"]{
   --sheen:rgba(255,255,255,.7);
 }
 
+/* ─── 13 скинов (data-skin) ───────────────────────────────────────
+   Скин меняет акценты, hero-градиент и цвет фоновых орбов.
+   Светлая/тёмная основа остаётся в data-theme. */
+html[data-skin="aurora"]{--acc:#6366f1;--acc2:#8b5cf6;--acc3:#22d3ee;--acc4:#f59e0b;--acc5:#ec4899;--acc-rgb:99,102,241;--hero:linear-gradient(135deg,#6366f1 0%,#7c3aed 30%,#a855f7 60%,#22d3ee 120%);--o1:rgba(99,102,241,.55);--o2:rgba(168,85,247,.45);--o3:rgba(34,211,238,.38);--o4:rgba(236,72,153,.22)}
+html[data-skin="sunset"]{--acc:#f97316;--acc2:#f43f5e;--acc3:#fbbf24;--acc4:#ec4899;--acc5:#fb7185;--acc-rgb:249,115,22;--hero:linear-gradient(135deg,#fb923c 0%,#f97316 35%,#f43f5e 70%,#ec4899 120%);--o1:rgba(249,115,22,.52);--o2:rgba(244,63,94,.45);--o3:rgba(251,191,36,.36);--o4:rgba(236,72,153,.24)}
+html[data-skin="ocean"]{--acc:#0ea5e9;--acc2:#06b6d4;--acc3:#14b8a6;--acc4:#3b82f6;--acc5:#22d3ee;--acc-rgb:14,165,233;--hero:linear-gradient(135deg,#38bdf8 0%,#0ea5e9 35%,#06b6d4 68%,#14b8a6 120%);--o1:rgba(14,165,233,.55);--o2:rgba(6,182,212,.44);--o3:rgba(20,184,166,.38);--o4:rgba(59,130,246,.24)}
+html[data-skin="forest"]{--acc:#10b981;--acc2:#22c55e;--acc3:#84cc16;--acc4:#14b8a6;--acc5:#a3e635;--acc-rgb:16,185,129;--hero:linear-gradient(135deg,#34d399 0%,#10b981 35%,#22c55e 68%,#84cc16 120%);--o1:rgba(16,185,129,.52);--o2:rgba(34,197,94,.42);--o3:rgba(132,204,22,.34);--o4:rgba(20,184,166,.28)}
+html[data-skin="candy"]{--acc:#ec4899;--acc2:#a855f7;--acc3:#f472b6;--acc4:#f59e0b;--acc5:#fb7185;--acc-rgb:236,72,153;--hero:linear-gradient(135deg,#f472b6 0%,#ec4899 35%,#a855f7 72%,#8b5cf6 120%);--o1:rgba(236,72,153,.52);--o2:rgba(168,85,247,.45);--o3:rgba(244,114,182,.36);--o4:rgba(251,113,133,.26)}
+html[data-skin="midnight"]{--acc:#3b82f6;--acc2:#6366f1;--acc3:#0ea5e9;--acc4:#1d4ed8;--acc5:#818cf8;--acc-rgb:59,130,246;--hero:linear-gradient(135deg,#1e3a8a 0%,#1d4ed8 35%,#3b82f6 70%,#6366f1 120%);--o1:rgba(59,130,246,.52);--o2:rgba(99,102,241,.42);--o3:rgba(14,165,233,.34);--o4:rgba(129,140,248,.24)}
+html[data-skin="gold"]{--acc:#f59e0b;--acc2:#eab308;--acc3:#fbbf24;--acc4:#f97316;--acc5:#facc15;--acc-rgb:245,158,11;--hero:linear-gradient(135deg,#fbbf24 0%,#f59e0b 38%,#eab308 70%,#f97316 120%);--o1:rgba(245,158,11,.52);--o2:rgba(234,179,8,.42);--o3:rgba(251,191,36,.36);--o4:rgba(249,115,22,.26)}
+html[data-skin="cherry"]{--acc:#ef4444;--acc2:#f43f5e;--acc3:#fb7185;--acc4:#ec4899;--acc5:#dc2626;--acc-rgb:239,68,68;--hero:linear-gradient(135deg,#f87171 0%,#ef4444 38%,#e11d48 70%,#ec4899 120%);--o1:rgba(239,68,68,.52);--o2:rgba(244,63,94,.44);--o3:rgba(251,113,133,.34);--o4:rgba(236,72,153,.24)}
+html[data-skin="mint"]{--acc:#2dd4bf;--acc2:#34d399;--acc3:#22d3ee;--acc4:#10b981;--acc5:#a7f3d0;--acc-rgb:45,212,191;--hero:linear-gradient(135deg,#5eead4 0%,#2dd4bf 38%,#34d399 72%,#22d3ee 120%);--o1:rgba(45,212,191,.5);--o2:rgba(52,211,153,.42);--o3:rgba(34,211,238,.34);--o4:rgba(16,185,129,.24)}
+html[data-skin="lavender"]{--acc:#a78bfa;--acc2:#c084fc;--acc3:#818cf8;--acc4:#f0abfc;--acc5:#8b5cf6;--acc-rgb:167,139,250;--hero:linear-gradient(135deg,#c4b5fd 0%,#a78bfa 35%,#c084fc 68%,#f0abfc 120%);--o1:rgba(167,139,250,.52);--o2:rgba(192,132,252,.44);--o3:rgba(129,140,248,.36);--o4:rgba(240,171,252,.28)}
+html[data-skin="matrix"]{--acc:#22c55e;--acc2:#16a34a;--acc3:#4ade80;--acc4:#84cc16;--acc5:#15803d;--acc-rgb:34,197,94;--hero:linear-gradient(135deg,#16a34a 0%,#15803d 38%,#22c55e 72%,#4ade80 120%);--o1:rgba(34,197,94,.5);--o2:rgba(22,163,74,.42);--o3:rgba(74,222,128,.34);--o4:rgba(132,204,22,.24)}
+html[data-skin="ice"]{--acc:#38bdf8;--acc2:#7dd3fc;--acc3:#22d3ee;--acc4:#60a5fa;--acc5:#bae6fd;--acc-rgb:56,189,248;--hero:linear-gradient(135deg,#7dd3fc 0%,#38bdf8 38%,#60a5fa 70%,#a5f3fc 120%);--o1:rgba(56,189,248,.5);--o2:rgba(125,211,252,.44);--o3:rgba(34,211,238,.34);--o4:rgba(96,165,250,.26)}
+html[data-skin="mono"]{--acc:#94a3b8;--acc2:#64748b;--acc3:#cbd5e1;--acc4:#475569;--acc5:#e2e8f0;--acc-rgb:148,163,184;--hero:linear-gradient(135deg,#cbd5e1 0%,#94a3b8 38%,#64748b 72%,#475569 120%);--o1:rgba(148,163,184,.46);--o2:rgba(100,116,139,.38);--o3:rgba(203,213,225,.30);--o4:rgba(71,85,105,.24)}
+/* приглушаем цветные орбы в светлой теме, чтобы фон не «грязнился» */
+html[data-theme="light"][data-skin] .bg-fx .orb{opacity:.28}
+
+/* выбор темы в настройках */
+.theme-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.theme-grid .chip{display:flex;align-items:center;gap:9px;justify-content:flex-start;padding:10px 12px;border-radius:14px;font-size:13px;text-align:left;min-width:0}
+.theme-grid .chip-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.theme-dot{width:15px;height:15px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 2px rgba(255,255,255,.18) inset,0 0 12px rgba(var(--acc-rgb),.7)}
+.theme-grid .chip.active .theme-dot{box-shadow:0 0 0 2px #fff inset,0 0 16px rgba(var(--acc-rgb),.9)}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.seg .chip{flex:1 1 auto;justify-content:center;text-align:center}
+
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Inter,Roboto,sans-serif;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 body{overflow-x:hidden}
@@ -51,10 +81,10 @@ a{color:inherit}
 .bg-fx{position:fixed;inset:0;z-index:-3;overflow:hidden;pointer-events:none;background:var(--bg)}
 .bg-fx .orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.55;mix-blend-mode:screen;will-change:transform}
 html[data-theme="light"] .bg-fx .orb{mix-blend-mode:multiply;opacity:.35;filter:blur(90px)}
-.bg-fx .o1{width:70vmax;height:70vmax;left:-20vmax;top:-25vmax;background:radial-gradient(circle,rgba(99,102,241,.55),transparent 60%);animation:float1 22s ease-in-out infinite alternate}
-.bg-fx .o2{width:60vmax;height:60vmax;right:-20vmax;top:-10vmax;background:radial-gradient(circle,rgba(168,85,247,.45),transparent 60%);animation:float2 26s ease-in-out infinite alternate}
-.bg-fx .o3{width:65vmax;height:55vmax;left:10vmax;bottom:-25vmax;background:radial-gradient(circle,rgba(34,211,238,.38),transparent 60%);animation:float3 24s ease-in-out infinite alternate}
-.bg-fx .o4{width:45vmax;height:45vmax;right:5vmax;bottom:10vmax;background:radial-gradient(circle,rgba(236,72,153,.22),transparent 60%);animation:float4 30s ease-in-out infinite alternate}
+.bg-fx .o1{width:70vmax;height:70vmax;left:-20vmax;top:-25vmax;background:radial-gradient(circle,var(--o1),transparent 60%);animation:float1 22s ease-in-out infinite alternate}
+.bg-fx .o2{width:60vmax;height:60vmax;right:-20vmax;top:-10vmax;background:radial-gradient(circle,var(--o2),transparent 60%);animation:float2 26s ease-in-out infinite alternate}
+.bg-fx .o3{width:65vmax;height:55vmax;left:10vmax;bottom:-25vmax;background:radial-gradient(circle,var(--o3),transparent 60%);animation:float3 24s ease-in-out infinite alternate}
+.bg-fx .o4{width:45vmax;height:45vmax;right:5vmax;bottom:10vmax;background:radial-gradient(circle,var(--o4),transparent 60%);animation:float4 30s ease-in-out infinite alternate}
 @keyframes float1{0%{transform:translate(0,0) scale(1)}100%{transform:translate(8vmax,6vmax) scale(1.15)}}
 @keyframes float2{0%{transform:translate(0,0) scale(1)}100%{transform:translate(-10vmax,8vmax) scale(1.1)}}
 @keyframes float3{0%{transform:translate(0,0) scale(1)}100%{transform:translate(6vmax,-8vmax) scale(1.12)}}
@@ -105,7 +135,7 @@ h2::before{content:"";width:7px;height:7px;border-radius:50%;background:linear-g
 .card:active::after{transform:translateX(260%) rotate(8deg)}
 
 .hero{position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.22);border-radius:26px;padding:26px 24px;margin-bottom:18px;background:var(--hero);color:#fff;box-shadow:0 24px 60px -20px rgba(var(--acc-rgb),.65),0 0 0 1px rgba(255,255,255,.12) inset;isolation:isolate}
-.hero::before{content:"";position:absolute;inset:-40%;background:conic-gradient(from 0deg,transparent,rgba(255,255,255,.18),transparent 30%,rgba(34,211,238,.18),transparent 60%,rgba(255,255,255,.12),transparent);animation:spin 14s linear infinite;z-index:0}
+.hero::before{content:"";position:absolute;inset:-40%;background:conic-gradient(from 0deg,transparent,rgba(255,255,255,.18),transparent 30%,rgba(255,255,255,.10),transparent 60%,rgba(255,255,255,.12),transparent);animation:spin 14s linear infinite;z-index:0}
 .hero::after{content:"";position:absolute;top:-50%;left:-60%;width:50%;height:220%;background:linear-gradient(110deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-12deg);animation:hero-sheen 5.5s ease-in-out infinite;z-index:1;pointer-events:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes hero-sheen{0%{left:-60%;opacity:0}15%{opacity:1}45%{left:140%;opacity:0}100%{left:140%;opacity:0}}
@@ -139,7 +169,7 @@ h2::before{content:"";width:7px;height:7px;border-radius:50%;background:linear-g
 
 .chip{border:1px solid var(--st);background:var(--glass);color:var(--tx2);border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .25s var(--spring);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .chip:active{transform:scale(.94)}
-.chip.active{border-color:rgba(var(--acc-rgb),.5);background:linear-gradient(135deg,rgba(var(--acc-rgb),.22),rgba(168,85,247,.18));color:var(--ink);box-shadow:0 0 0 1px rgba(var(--acc-rgb),.18),0 8px 20px -10px rgba(var(--acc-rgb),.5)}
+.chip.active{border-color:rgba(var(--acc-rgb),.5);background:linear-gradient(135deg,rgba(var(--acc-rgb),.22),rgba(var(--acc-rgb),.10));color:var(--ink);box-shadow:0 0 0 1px rgba(var(--acc-rgb),.18),0 8px 20px -10px rgba(var(--acc-rgb),.5)}
 
 .icon-btn,.btn,.chip,.tile,.tab,.game-card,.pkg,.item{user-select:none;-webkit-user-select:none}
 .back{border:0;background:var(--glass);color:var(--hint);font-size:14px;font-weight:600;padding:8px 14px;border-radius:12px;cursor:pointer;font-family:inherit;transition:all .2s var(--spring);border:1px solid var(--st);backdrop-filter:blur(10px)}
