@@ -48,6 +48,20 @@ class Store(Protocol):
     ) -> dict[str, int | bool]: ...
     async def bonus_streak(self, user_id: int) -> int: ...
     async def bonus_claimed_today(self, user_id: int) -> bool: ...
+
+    # Геймификация: XP, уровни, достижения, сезонный лидерборд и заморозки серии.
+    async def add_xp(self, user_id: int, amount: int, season: str) -> dict: ...
+    async def xp(self, user_id: int) -> int: ...
+    async def season_xp(self, user_id: int, season: str) -> int: ...
+    async def season_rank(self, user_id: int, season: str) -> int: ...
+    async def season_top(self, season: str, limit: int = 10) -> list[dict]: ...
+    async def unlock_achievement(self, user_id: int, code: str) -> bool: ...
+    async def achievements(self, user_id: int) -> set[str]: ...
+    async def freezes(self, user_id: int) -> int: ...
+    async def add_freezes(self, user_id: int, count: int) -> int: ...
+    async def use_freeze(self, user_id: int) -> bool: ...
+    async def requests_total(self, user_id: int) -> int: ...
+    async def images_total(self, user_id: int) -> int: ...
     async def claim_referral(
         self, referrer_id: int, invited_id: int, window_seconds: int = 900
     ) -> bool: ...
@@ -219,6 +233,7 @@ class MemoryStore:
         self._styles: dict[int, str] = {}
         self._image_credits: dict[int, int] = {}
         self._image_usage: dict[int, tuple[date, int]] = {}
+        self._image_totals: dict[int, int] = defaultdict(int)
         self._payments: dict[str, dict] = {}
         self._model_access: dict[int, set[str]] = {}
         self._roles: dict[int, str] = {}
@@ -230,6 +245,8 @@ class MemoryStore:
         self._promo_uses: dict[str, set[int]] = {}
         self._leaks: dict[int, dict] = {}
         self._referrals: dict[int, dict] = {}
+        self._season_xp: dict[str, dict[int, int]] = {}
+        self._achievements: dict[int, set[str]] = defaultdict(set)
         self._seq = 0
         self._exchange_seq = 0
         self._payment_seq = 0
@@ -253,6 +270,8 @@ class MemoryStore:
         )
         user.setdefault("bonus_requests", 0)
         user.setdefault("lang", None)
+        user.setdefault("xp", 0)
+        user.setdefault("freezes", 0)
         user.setdefault("created_at", datetime.now(UTC))
         self._seq += 1
         user.update({"username": username, "first_name": first_name, "seen": self._seq})
@@ -425,6 +444,79 @@ class MemoryStore:
     async def bonus_claimed_today(self, user_id: int) -> bool:
         return self._users.get(user_id, {}).get("bonus_day") == date.today()
 
+    # ---------------------------------------------------------- геймификация
+    async def add_xp(self, user_id: int, amount: int, season: str) -> dict:
+        user = self._users.setdefault(user_id, {})
+        total = max(0, int(user.get("xp", 0)) + int(amount))
+        user["xp"] = total
+        bucket = self._season_xp.setdefault(season, {})
+        value = max(0, int(bucket.get(user_id, 0)) + int(amount))
+        bucket[user_id] = value
+        return {"xp": total, "season_xp": value}
+
+    async def xp(self, user_id: int) -> int:
+        return int(self._users.get(user_id, {}).get("xp", 0))
+
+    async def season_xp(self, user_id: int, season: str) -> int:
+        return int(self._season_xp.get(season, {}).get(user_id, 0))
+
+    async def season_rank(self, user_id: int, season: str) -> int:
+        mine = self.season_xp_sync(user_id, season)
+        better = sum(1 for value in self._season_xp.get(season, {}).values() if value > mine)
+        return better + 1
+
+    def season_xp_sync(self, user_id: int, season: str) -> int:
+        return int(self._season_xp.get(season, {}).get(user_id, 0))
+
+    async def season_top(self, season: str, limit: int = 10) -> list[dict]:
+        bucket = self._season_xp.get(season, {})
+        ranked = sorted(bucket.items(), key=lambda item: (-item[1], item[0]))
+        rows = []
+        for user_id, value in ranked[: max(1, int(limit))]:
+            user = self._users.get(user_id, {})
+            name = user.get("first_name") or (
+                f"@{user['username']}" if user.get("username") else f"id {user_id}"
+            )
+            rows.append({"user_id": user_id, "name": name, "xp": int(value)})
+        return rows
+
+    async def unlock_achievement(self, user_id: int, code: str) -> bool:
+        unlocked = self._achievements[user_id]
+        if code in unlocked:
+            return False
+        unlocked.add(code)
+        return True
+
+    async def achievements(self, user_id: int) -> set[str]:
+        return set(self._achievements.get(user_id, set()))
+
+    async def freezes(self, user_id: int) -> int:
+        return int(self._users.get(user_id, {}).get("freezes", 0))
+
+    async def add_freezes(self, user_id: int, count: int) -> int:
+        user = self._users.setdefault(user_id, {})
+        value = max(0, int(user.get("freezes", 0)) + int(count))
+        user["freezes"] = value
+        return value
+
+    async def use_freeze(self, user_id: int) -> bool:
+        user = self._users.get(user_id)
+        if not user:
+            return False
+        if int(user.get("freezes", 0)) <= 0:
+            return False
+        if user.get("bonus_day") != date.today() - timedelta(days=2):
+            return False
+        user["freezes"] = int(user["freezes"]) - 1
+        user["bonus_day"] = date.today() - timedelta(days=1)
+        return True
+
+    async def requests_total(self, user_id: int) -> int:
+        return int(self._total_requests.get(user_id, 0))
+
+    async def images_total(self, user_id: int) -> int:
+        return int(self._image_totals.get(user_id, 0))
+
     async def claim_referral(
         self, referrer_id: int, invited_id: int, window_seconds: int = 900
     ) -> bool:
@@ -491,6 +583,7 @@ class MemoryStore:
         used = await self.image_used_today(user_id)
         used += 1
         self._image_usage[user_id] = (date.today(), used)
+        self._image_totals[user_id] += 1
         return used
 
     async def spend_image(self, user_id: int, daily_limit: int = 0) -> str | None:
@@ -498,10 +591,12 @@ class MemoryStore:
         used = await self.image_used_today(user_id)
         if daily_limit <= 0 or used < daily_limit:
             self._image_usage[user_id] = (date.today(), used + 1)
+            self._image_totals[user_id] += 1
             return "free"
         credits = int(self._image_credits.get(user_id, 0))
         if credits > 0:
             self._image_credits[user_id] = credits - 1
+            self._image_totals[user_id] += 1
             return "credit"
         return None
 
@@ -1575,6 +1670,145 @@ class PostgresStore:
             user_id,
         )
         return bool(value)
+
+    # ---------------------------------------------------------- геймификация
+    async def add_xp(self, user_id: int, amount: int, season: str) -> dict:
+        assert self._pool is not None
+        amount = int(amount)
+        total = await self._pool.fetchval(
+            "UPDATE users SET xp = GREATEST(0, xp + $2) WHERE user_id = $1 RETURNING xp",
+            user_id,
+            amount,
+        )
+        if total is None:
+            return {"xp": 0, "season_xp": 0}
+        value = await self._pool.fetchval(
+            """
+            INSERT INTO season_xp (season, user_id, xp) VALUES ($1, $2, $3)
+            ON CONFLICT (season, user_id)
+            DO UPDATE SET xp = GREATEST(0, season_xp.xp + $3)
+            RETURNING xp
+            """,
+            season,
+            user_id,
+            amount,
+        )
+        return {"xp": int(total), "season_xp": int(value or 0)}
+
+    async def xp(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT xp FROM users WHERE user_id = $1", user_id
+        )
+        return int(value or 0)
+
+    async def season_xp(self, user_id: int, season: str) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT xp FROM season_xp WHERE season = $1 AND user_id = $2",
+            season,
+            user_id,
+        )
+        return int(value or 0)
+
+    async def season_rank(self, user_id: int, season: str) -> int:
+        assert self._pool is not None
+        mine = await self.season_xp(user_id, season)
+        better = await self._pool.fetchval(
+            "SELECT COUNT(*) FROM season_xp WHERE season = $1 AND xp > $2",
+            season,
+            mine,
+        )
+        return int(better or 0) + 1
+
+    async def season_top(self, season: str, limit: int = 10) -> list[dict]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            """
+            SELECT s.user_id, s.xp, u.first_name, u.username
+            FROM season_xp s
+            LEFT JOIN users u ON u.user_id = s.user_id
+            WHERE s.season = $1
+            ORDER BY s.xp DESC, s.user_id ASC
+            LIMIT $2
+            """,
+            season,
+            max(1, int(limit)),
+        )
+        result = []
+        for row in rows:
+            name = row["first_name"] or (
+                f"@{row['username']}" if row["username"] else f"id {row['user_id']}"
+            )
+            result.append(
+                {"user_id": int(row["user_id"]), "name": name, "xp": int(row["xp"])}
+            )
+        return result
+
+    async def unlock_achievement(self, user_id: int, code: str) -> bool:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            """
+            INSERT INTO achievements (user_id, code) VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+            RETURNING code
+            """,
+            user_id,
+            code,
+        )
+        return bool(value)
+
+    async def achievements(self, user_id: int) -> set[str]:
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            "SELECT code FROM achievements WHERE user_id = $1", user_id
+        )
+        return {str(row["code"]) for row in rows}
+
+    async def freezes(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT freezes FROM users WHERE user_id = $1", user_id
+        )
+        return int(value or 0)
+
+    async def add_freezes(self, user_id: int, count: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "UPDATE users SET freezes = GREATEST(0, freezes + $2) "
+            "WHERE user_id = $1 RETURNING freezes",
+            user_id,
+            int(count),
+        )
+        return int(value or 0)
+
+    async def use_freeze(self, user_id: int) -> bool:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            """
+            UPDATE users
+            SET freezes = freezes - 1, bonus_day = CURRENT_DATE - 1
+            WHERE user_id = $1 AND freezes > 0 AND bonus_day = CURRENT_DATE - 2
+            RETURNING TRUE
+            """,
+            user_id,
+        )
+        return bool(value)
+
+    async def requests_total(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT COALESCE(SUM(count), 0) FROM usage WHERE user_id = $1", user_id
+        )
+        return int(value or 0)
+
+    async def images_total(self, user_id: int) -> int:
+        assert self._pool is not None
+        value = await self._pool.fetchval(
+            "SELECT COALESCE(SUM(count), 0) FROM image_usage WHERE user_id = $1",
+            user_id,
+        )
+        return int(value or 0)
 
     async def claim_referral(
         self, referrer_id: int, invited_id: int, window_seconds: int = 900
@@ -2730,6 +2964,24 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS model TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS style TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_streak INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_day DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS xp BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS freezes INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS achievements (
+    user_id     BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    code        TEXT NOT NULL,
+    unlocked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, code)
+);
+
+CREATE TABLE IF NOT EXISTS season_xp (
+    season   TEXT NOT NULL,
+    user_id  BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    xp       BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (season, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS season_xp_top_idx ON season_xp (season, xp DESC);
 
 CREATE TABLE IF NOT EXISTS referrals (
     invited_id  BIGINT PRIMARY KEY,

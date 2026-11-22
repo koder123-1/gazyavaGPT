@@ -422,6 +422,24 @@ html[data-theme="light"] .lv-initial{color:var(--ink)}
 .sd{width:9px;height:9px;border-radius:50%;background:var(--st2);transition:all .35s var(--spring)}
 .sd.on{background:linear-gradient(135deg,#f97316,#fbbf24);box-shadow:0 0 10px rgba(249,115,22,.9);transform:scale(1.1)}
 
+/* ─── Сезон ─── */
+.season-card{cursor:pointer;transition:transform .25s var(--spring),border-color .25s}
+.season-card:active{transform:scale(.98);border-color:rgba(var(--acc-rgb),.45)}
+.season-go{font-size:20px;font-weight:800;color:var(--ink);flex:0 0 auto}
+.season-hero{background:linear-gradient(135deg,rgba(var(--acc-rgb),.22),rgba(var(--acc-rgb),.05)),var(--glass);border-color:rgba(var(--acc-rgb),.3)}
+.season-hero .hero-label{font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--hint)}
+.season-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.season-row{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--st)}
+.season-row:first-child{border-top:0;padding-top:0}
+.season-row.me{background:linear-gradient(90deg,rgba(var(--acc-rgb),.16),transparent);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:12px}
+.season-place{width:27px;height:27px;flex:0 0 auto;border-radius:9px;display:grid;place-items:center;font-weight:900;font-size:12.5px;background:var(--s3);border:1px solid var(--st);font-variant-numeric:tabular-nums}
+.season-row:nth-child(1) .season-place{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#1a1206;border-color:transparent}
+.season-row:nth-child(2) .season-place{background:linear-gradient(135deg,#e2e8f0,#94a3b8);color:#111827;border-color:transparent}
+.season-row:nth-child(3) .season-place{background:linear-gradient(135deg,#fb923c,#c2410c);color:#fff;border-color:transparent}
+.season-name{flex:1;min-width:0;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.season-xp{font-weight:800;font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.you-badge{display:inline-block;margin-left:2px;padding:1px 7px;border-radius:999px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:rgba(var(--acc-rgb),.22);color:var(--ink);border:1px solid rgba(var(--acc-rgb),.35)}
+
 /* ─── Achievements ─── */
 .ach-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
 .ach{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:5px;padding:12px 4px 9px;border-radius:16px;border:1px solid var(--st);background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);text-align:center;opacity:.45;filter:saturate(.15);transition:transform .3s var(--spring),opacity .35s,filter .35s,box-shadow .35s}

@@ -32,6 +32,7 @@ from aiogram.types import BufferedInputFile, LabeledPrice
 from aiogram.utils.web_app import check_webapp_signature
 from aiohttp import web
 
+import gamification
 import models as model_catalog
 import payments
 import reminders
@@ -243,6 +244,7 @@ async def api_me(request: web.Request) -> web.Response:
             "bonus_requests": await store.bonus_requests(user_id),
             "bonus_streak": await store.bonus_streak(user_id),
             "bonus_claimed_today": await store.bonus_claimed_today(user_id),
+            "gamification": await gamification.profile_payload(store, user_id, lang),
             "bonus_base": settings.bonus_base,
             "bonus_max": settings.bonus_max,
             "invites": await store.referral_count(user_id),

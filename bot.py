@@ -85,6 +85,8 @@ COMMANDS = [
     BotCommand(command="leaks", description="Файлы от админов (сливы)"),
     BotCommand(command="invite", description="Пригласить друга и получить запросы"),
     BotCommand(command="me", description="Мой ID и остаток лимита"),
+    BotCommand(command="season", description="Топ сезона и моё место"),
+    BotCommand(command="voice", description="Озвучка ответов: вкл/выкл"),
     BotCommand(command="tools", description="Все быстрые команды"),
     BotCommand(command="calc", description="Калькулятор: /calc 2+2*2"),
     BotCommand(command="random", description="Случайное число или выбор"),

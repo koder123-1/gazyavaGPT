@@ -25,7 +25,7 @@ DEFAULT_SYSTEM_PROMPT = (
 # Прозвища, на которые бот отзывается в группе (через запятую).
 DEFAULT_ALIASES = "gazyava,газява,газик,газировка,газяваgpt,газикgpt"
 # Команды, которые в группах молчат: их место — только в личке.
-DEFAULT_PRIVATE_ONLY_COMMANDS = "buy,terms,paysupport,check,style,lang,tickets,me"
+DEFAULT_PRIVATE_ONLY_COMMANDS = "buy,terms,paysupport,check,style,lang,tickets,me,season,voice"
 
 COARENA_MODELS = (
     "deepseek-v4-1-flash-1017,gemini-3-8-flash,gemini-4-argon,gemini-4-carbon,"
@@ -254,6 +254,13 @@ class Settings:
     alerts_enabled: bool = True
     alert_chat_id: int = 0
     alert_cooldown: int = 600
+
+    # Голос: распознавание речи (STT) и озвучка ответов (TTS).
+    voice_enabled: bool = True
+    tts_enabled: bool = True
+    stt_api_key: str = ""
+    stt_base_url: str = "https://api.openai.com/v1"
+    stt_model: str = "whisper-1"
 
     image_provider: str = "pollinations"
     image_model: str = "flux"
@@ -519,6 +526,17 @@ def load_settings() -> Settings:
         alerts_enabled=_bool_env("ALERTS_ENABLED", True),
         alert_chat_id=_int_env("ALERT_CHAT_ID", 0),
         alert_cooldown=_int_env("ALERT_COOLDOWN", 600, minimum=30, maximum=86400),
+        voice_enabled=_bool_env("VOICE_ENABLED", True),
+        tts_enabled=_bool_env("TTS_ENABLED", True),
+        stt_api_key=(
+            os.getenv("STT_API_KEY", "").strip()
+            or os.getenv("OPENAI_API_KEY", "").strip()
+        ),
+        stt_base_url=(
+            os.getenv("STT_BASE_URL", "").strip().rstrip("/")
+            or "https://api.openai.com/v1"
+        ),
+        stt_model=(os.getenv("STT_MODEL", "").strip() or "whisper-1"),
         image_provider=image_provider,
         image_model=(os.getenv("IMAGE_MODEL", "").strip() or "flux"),
         image_models=_list_env("IMAGE_MODELS", ""),

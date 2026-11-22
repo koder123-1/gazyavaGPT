@@ -16,6 +16,7 @@ from aiogram.exceptions import TelegramAPIError
 from config import Settings
 from i18n import normalize_lang, t
 from store import Store
+import gamification
 
 log = logging.getLogger("growth")
 
@@ -69,17 +70,32 @@ async def accept_referral(
     ref_lang = normalize_lang(await store.get_lang(referrer_id) or settings.default_lang)
     count = await store.referral_count(referrer_id)
     display = name or f"id {invited_id}"
-    with contextlib.suppress(TelegramAPIError):
-        await bot.send_message(
-            referrer_id,
-            t(
-                ref_lang,
-                "invite.joined",
-                name=display,
-                amount=settings.invite_reward,
-                count=count,
-            ),
+    extra = ""
+    try:
+        events = await gamification.on_referral(
+            store, referrer_id, ref_lang, invites=count
         )
+        extra = gamification.format_events(events, ref_lang)
+    except Exception:  # noqa: BLE001 — награда не должна ломать приглашение
+        log.exception("Не удалось начислить XP за приглашение")
+    try:
+        invited_lang = normalize_lang(
+            await store.get_lang(invited_id) or settings.default_lang
+        )
+        await gamification.on_referral_invited(store, invited_id, invited_lang)
+    except Exception:  # noqa: BLE001
+        log.exception("Не удалось начислить XP приглашённому")
+    text = t(
+        ref_lang,
+        "invite.joined",
+        name=display,
+        amount=settings.invite_reward,
+        count=count,
+    )
+    if extra:
+        text += "\n\n" + extra
+    with contextlib.suppress(TelegramAPIError):
+        await bot.send_message(referrer_id, text)
     log.info("Реферал: %s пригласил %s", referrer_id, invited_id)
     return True
 

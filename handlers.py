@@ -34,10 +34,12 @@ from aiogram.types import (
 
 import files
 import debugmode
+import gamification
 import growth
 import media
 import models as model_catalog
 import share
+import speech
 from ai import AIClient, AIError
 from config import Settings
 from formatting import humanize_answer, split_big_code, to_telegram_html
@@ -863,6 +865,15 @@ async def send_generated(
                 await store.refund_image(user.id, spend)
         with contextlib.suppress(Exception):
             await status.delete()
+        if delivered and store is not None and user is not None:
+            try:
+                events = await gamification.on_image(store, user.id, lang)
+                note = gamification.format_events(events, lang)
+                if note:
+                    with contextlib.suppress(TelegramAPIError):
+                        await message.answer(note)
+            except Exception:  # noqa: BLE001 — награда не критична
+                log.exception("Не удалось начислить XP за картинку")
 
 
 @router.message(Command("imagine", "draw", "art"))
@@ -948,6 +959,8 @@ async def answer_with_ai(
     deliver: bool = True,
     store_question: str | None = None,
     task_lang: str | None = None,
+    voice_reply: bool = False,
+    voice_input: bool = False,
 ) -> str | None:
     """Ответ ИИ. При deliver=False ответ не отправляется, а возвращается."""
     question = question.strip()
@@ -1193,6 +1206,32 @@ async def answer_with_ai(
             lang=lang,
             keyboard=cabinet_webapp_kb(settings, lang, exchange_id),
         )
+
+    if deliver:
+        # Озвучка: голосовое сообщение всегда получает голосовой ответ, а при
+        # включённой автоозвучке — и обычный текст. Код и файлы не читаем.
+        try:
+            spoken = (
+                message.chat.type == "private"
+                and not out_fmt
+                and settings.voice_enabled
+                and (voice_reply or await speech.auto_voice(store, user.id))
+            )
+            if spoken:
+                await send_voice_answer(message, answer, lang, settings)
+        except Exception:  # noqa: BLE001 — озвучка не должна ломать ответ
+            log.exception("Не удалось отправить голосовой ответ")
+        # XP и достижения. Награда не должна мешать основному ответу.
+        try:
+            events = await gamification.on_answer(
+                store, user.id, lang, voice_input=voice_input
+            )
+            note = gamification.format_events(events, lang)
+            if note:
+                with contextlib.suppress(TelegramAPIError):
+                    await message.answer(note)
+        except Exception:  # noqa: BLE001
+            log.exception("Не удалось начислить XP")
     return answer
 
 
@@ -1349,6 +1388,9 @@ async def bonus_view(
     store: Store, settings: Settings, user_id: int, lang: str
 ) -> tuple[str, bool, int]:
     """Текст про бонус дня + признак «только что получен» и сумма."""
+    claimed_before = await store.bonus_claimed_today(user_id)
+    # Пропущен ровно один день и есть заморозка — тратим её, серия выживает.
+    freeze_used = await store.use_freeze(user_id) if not claimed_before else False
     result = await store.daily_bonus(user_id, settings.bonus_base, settings.bonus_max)
     runtime = await load_runtime(store, settings)
     left = await store.remaining(user_id, runtime.daily_limit)
@@ -1361,6 +1403,17 @@ async def bonus_view(
             left=left,
             top=settings.bonus_max,
         )
+        extra = t(lang, "bonus.freeze") if freeze_used else ""
+        try:
+            events = await gamification.on_bonus(
+                store, user_id, lang, streak=int(result["streak"])
+            )
+            note = gamification.format_events(events, lang)
+        except Exception:  # noqa: BLE001 — награда не критична
+            note = ""
+        for part in (extra, note):
+            if part:
+                text = text.rstrip() + "\n\n" + part
     else:
         text = t(lang, "bonus.already", streak=result["streak"], left=left)
     return text, bool(result["claimed"]), int(result["amount"])
@@ -1901,13 +1954,23 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
         if streak or invites
         else ""
     )
+    profile = await gamification.profile_payload(store, user.id, lang)
+    xp_line = t(
+        lang,
+        "me.xp_line",
+        level=profile["level"],
+        rank=escape(profile["rank"]),
+        xp=profile["xp"],
+        season_rank=profile["season"]["rank"],
+        freezes=profile["freezes"],
+    )
     await message.answer(
         t(
             lang,
             "me.body",
             user_id=user.id,
             role_line=role_line,
-            sub_line=growth_line,
+            sub_line=growth_line + xp_line,
             limit=limit_text,
             bonus=bonus,
             style=t(lang, f"styles.{style_key}"),
@@ -1916,6 +1979,65 @@ async def cmd_me(message: Message, store: Store, settings: Settings) -> None:
         ),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
+
+
+@router.message(Command("season", "сезон"))
+async def cmd_season(message: Message, store: Store, settings: Settings) -> None:
+    """Топ сезона (календарный месяц) и место пользователя."""
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    if message.chat.type != "private":
+        me = await message.bot.me()
+        await message.answer(
+            t(lang, "season.private", username=me.username or settings.bot_name)
+        )
+        return
+    await store.ensure_user(user.id, user.username, user.first_name)
+    profile = await gamification.profile_payload(store, user.id, lang)
+    season = profile["season"]
+    rows = [
+        t(lang, "season.title", season=season["key"]),
+        t(lang, "season.rank", rank=season["rank"], xp=season["xp"]),
+        "",
+    ]
+    if season["top"]:
+        for index, row in enumerate(season["top"], 1):
+            line = t(
+                lang,
+                "season.line",
+                n=index,
+                name=escape(row["name"]),
+                xp=row["xp"],
+            )
+            if row.get("me"):
+                line += t(lang, "season.me_mark")
+            rows.append(line)
+    else:
+        rows.append(t(lang, "season.empty"))
+    rows.append(t(lang, "season.footer"))
+    await message.answer("\n".join(rows))
+
+
+@router.message(Command("voice", "озвучка"))
+async def cmd_voice(message: Message, store: Store, settings: Settings) -> None:
+    """Включает/выключает автоозвучку ответов в личке."""
+    user = message.from_user
+    if user is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+    if message.chat.type != "private":
+        me = await message.bot.me()
+        await message.answer(
+            t(lang, "voice.private", username=me.username or settings.bot_name)
+        )
+        return
+    await store.ensure_user(user.id, user.username, user.first_name)
+    enabled = await speech.auto_voice(store, user.id)
+    next_state = not enabled
+    await speech.set_auto_voice(store, user.id, next_state)
+    await message.answer(t(lang, "voice.on" if next_state else "voice.off"))
 
 
 # --------------------------------------------------------------------------- режим проверки
@@ -2156,6 +2278,23 @@ async def deliver_answer(
     elif blocks and not sent_blocks:
         # Ни файл, ни текст не ушли — лучше показать код сообщением, чем молчать.
         await send_answer(message, text, keyboard=keyboard, code=code)
+
+
+async def send_voice_answer(
+    message: Message, text: str, lang: str, settings: Settings
+) -> bool:
+    """Озвучивает ответ и отправляет mp3 как голосовое. False — не вышло."""
+    audio = await speech.synthesize(text, lang, settings)
+    if not audio:
+        return False
+    try:
+        await message.reply_voice(
+            BufferedInputFile(audio, filename="gazyava-answer.mp3")
+        )
+        return True
+    except TelegramAPIError:
+        log.exception("Telegram не принял голосовое")
+        return False
 
 
 async def echo_document(
@@ -2532,6 +2671,75 @@ async def on_video(
         )
     finally:
         await drop_status()
+
+
+@router.message(F.voice | F.audio)
+async def on_voice(
+    message: Message,
+    bot: Bot,
+    store: Store,
+    settings: Settings,
+    ai: AIClient,
+) -> None:
+    """Голосовое/аудио -> расшифровка -> обычный ответ ИИ (и озвучка)."""
+    user = message.from_user
+    if user is None:
+        return
+    # В группе — только ответом на сообщение бота, в личке — всегда.
+    if await addressed_text(message, bot, settings) is None:
+        return
+    lang = await user_lang(store, settings, user.id)
+
+    if not settings.voice_enabled:
+        await message.reply(t(lang, "voice.not_configured"))
+        return
+
+    media_file = message.voice or message.audio
+    limit = max(1, min(settings.file_max_mb, 20)) * 1024 * 1024
+    status = await message.reply(t(lang, "voice.listening"))
+    try:
+        data, error = await _download_bytes(bot, media_file, limit)
+        if error == "too_big":
+            await message.reply(t(lang, "voice.too_big", mb=limit // (1024 * 1024)))
+            return
+        if error or not data:
+            await message.reply(t(lang, "voice.failed"))
+            return
+        mime = getattr(media_file, "mime_type", "") or (
+            "audio/ogg" if message.voice else "audio/mpeg"
+        )
+        name = (
+            "voice.ogg"
+            if message.voice
+            else (getattr(media_file, "file_name", "") or "audio.mp3")
+        )
+        transcript, err = await speech.transcribe(data, name, mime, lang, settings)
+    except Exception:  # noqa: BLE001 — голос не должен ронять обработчик
+        log.exception("Ошибка обработки голосового")
+        transcript, err = None, "http"
+    finally:
+        with contextlib.suppress(Exception):
+            await status.delete()
+
+    if err == "not_configured":
+        await message.reply(t(lang, "voice.not_configured"))
+        return
+    if err or not transcript:
+        await message.reply(t(lang, "voice.empty" if err == "empty_text" else "voice.failed"))
+        return
+
+    await store.ensure_user(user.id, user.username, user.first_name)
+    await answer_with_ai(
+        message,
+        bot=bot,
+        store=store,
+        settings=settings,
+        ai=ai,
+        question=transcript,
+        store_question=f"[голос] {transcript[:160]}",
+        voice_reply=True,
+        voice_input=True,
+    )
 
 
 @router.message(F.sticker)

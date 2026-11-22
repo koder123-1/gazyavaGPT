@@ -174,6 +174,10 @@
       xp_left: "До уровня {n} осталось {x} XP", xp_max: "Максимальный уровень",
       achievements: "Достижения", ach_progress: "{a} из {b}", ach_locked: "Закрыто",
       quick_access: "Быстрый доступ", streak_title: "Серия входов", streak_days: "{n} дн.",
+      season_title: "Сезон {season}", season_short: "Сезон", season_rank: "Место в сезоне",
+      season_xp: "XP за сезон", season_top: "Топ сезона", season_you: "ты",
+      season_empty: "Пока пусто — задай вопрос и стань первым.",
+      freezes: "Заморозки серии", freezes_hint: "Спасают серию при пропуске дня",
       challenge_title: "Челлендж дня", challenge_text: "Задай {n} вопросов сегодня",
       challenge_progress: "{a} / {b}", challenge_done: "Челлендж выполнен!",
       challenge_reward: "+{x} XP за выполнение", challenges_done: "Выполнено сегодня",
@@ -187,7 +191,13 @@
         streak3: "Три дня подряд", streak3_d: "Серия 3 дня",
         streak7: "Неделя силы", streak7_d: "Серия 7 дней",
         invite1: "Друг пришёл", invite1_d: "Пригласить друга",
-        bonus: "Ранняя птица", bonus_d: "Забрать бонус дня"
+        bonus: "Ранняя птица", bonus_d: "Забрать бонус дня",
+        streak30: "Месяц дисциплины", streak30_d: "Серия 30 дней",
+        invite5: "Команда", invite5_d: "Пригласить 5 друзей",
+        images10: "Художник", images10_d: "10 картинок",
+        voice: "Голос", voice_d: "Задать вопрос голосом",
+        night: "Полуночник", night_d: "Спросить после полуночи",
+        season_top: "В топе сезона", season_top_d: "Войти в топ-10 сезона"
       },
       styles: {
         auto: ["🌐 Универсальный", "сильный эксперт во всех темах"],
@@ -261,6 +271,10 @@
       xp_left: "До рівня {n} залишилось {x} XP", xp_max: "Максимальний рівень",
       achievements: "Досягнення", ach_progress: "{a} з {b}", ach_locked: "Закрито",
       quick_access: "Швидкий доступ", streak_title: "Серія входів", streak_days: "{n} дн.",
+      season_title: "Сезон {season}", season_short: "Сезон", season_rank: "Місце в сезоні",
+      season_xp: "XP за сезон", season_top: "Топ сезону", season_you: "ти",
+      season_empty: "Поки порожньо — постав питання і стань першим.",
+      freezes: "Заморозки серії", freezes_hint: "Рятують серію при пропуску дня",
       challenge_title: "Челендж дня", challenge_text: "Постав {n} питань сьогодні",
       challenge_progress: "{a} / {b}", challenge_done: "Челендж виконано!",
       challenge_reward: "+{x} XP за виконання", challenges_done: "Виконано сьогодні",
@@ -274,7 +288,13 @@
         streak3: "Три дні поспіль", streak3_d: "Серія 3 дні",
         streak7: "Тиждень сили", streak7_d: "Серія 7 днів",
         invite1: "Друг прийшов", invite1_d: "Запросити друга",
-        bonus: "Ранній птах", bonus_d: "Забрати бонус дня"
+        bonus: "Ранній птах", bonus_d: "Забрати бонус дня",
+        streak30: "Місяць дисципліни", streak30_d: "Серія 30 днів",
+        invite5: "Команда", invite5_d: "Запросити 5 друзів",
+        images10: "Художник", images10_d: "10 картинок",
+        voice: "Голос", voice_d: "Поставити питання голосом",
+        night: "Опівнічник", night_d: "Запитати після півночі",
+        season_top: "У топі сезону", season_top_d: "Увійти в топ-10 сезону"
       },
       styles: {
         auto: ["🌐 Універсальний", "сильний експерт у всіх темах"],
@@ -348,6 +368,10 @@
       xp_left: "Да ўзроўню {n} засталося {x} XP", xp_max: "Максімальны ўзровень",
       achievements: "Дасягненні", ach_progress: "{a} з {b}", ach_locked: "Закрыта",
       quick_access: "Хуткі доступ", streak_title: "Серыя ўваходаў", streak_days: "{n} дз.",
+      season_title: "Сезон {season}", season_short: "Сезон", season_rank: "Месца ў сезоне",
+      season_xp: "XP за сезон", season_top: "Топ сезона", season_you: "ты",
+      season_empty: "Пакуль пуста — задай пытанне і стань першым.",
+      freezes: "Замарожванні серыі", freezes_hint: "Ратуе серыю пры пропуску дня",
       challenge_title: "Чэлендж дня", challenge_text: "Задай {n} пытанняў сёння",
       challenge_progress: "{a} / {b}", challenge_done: "Чэлендж выкананы!",
       challenge_reward: "+{x} XP за выкананне", challenges_done: "Выканана сёння",
@@ -361,7 +385,13 @@
         streak3: "Тры дні запар", streak3_d: "Серыя 3 дні",
         streak7: "Тыдзень сілы", streak7_d: "Серыя 7 дзён",
         invite1: "Сябар прыйшоў", invite1_d: "Запрасіць сябра",
-        bonus: "Ранняя птушка", bonus_d: "Забраць бонус дня"
+        bonus: "Ранняя птушка", bonus_d: "Забраць бонус дня",
+        streak30: "Месяц дысцыпліны", streak30_d: "Серыя 30 дзён",
+        invite5: "Каманда", invite5_d: "Запрасіць 5 сяброў",
+        images10: "Мастак", images10_d: "10 малюнкаў",
+        voice: "Голас", voice_d: "Задаць пытанне голасам",
+        night: "Паўночнік", night_d: "Спытаць пасля поўначы",
+        season_top: "У топе сезона", season_top_d: "Увайсці ў топ-10 сезона"
       },
       styles: {
         auto: ["🌐 Універсальны", "моцны эксперт ва ўсіх тэмах"],
@@ -435,6 +465,10 @@
       xp_left: "{x} XP to level {n}", xp_max: "Max level",
       achievements: "Achievements", ach_progress: "{a} of {b}", ach_locked: "Locked",
       quick_access: "Quick access", streak_title: "Login streak", streak_days: "{n} d",
+      season_title: "Season {season}", season_short: "Season", season_rank: "Season rank",
+      season_xp: "Season XP", season_top: "Season top", season_you: "you",
+      season_empty: "Empty so far — ask a question and take the lead.",
+      freezes: "Streak freezes", freezes_hint: "Save your streak after a missed day",
       challenge_title: "Daily challenge", challenge_text: "Ask {n} questions today",
       challenge_progress: "{a} / {b}", challenge_done: "Challenge complete!",
       challenge_reward: "+{x} XP for completing", challenges_done: "Completed today",
@@ -448,7 +482,13 @@
         streak3: "Three in a row", streak3_d: "3-day streak",
         streak7: "Week of power", streak7_d: "7-day streak",
         invite1: "A friend joined", invite1_d: "Invite a friend",
-        bonus: "Early bird", bonus_d: "Claim the daily bonus"
+        bonus: "Early bird", bonus_d: "Claim the daily bonus",
+        streak30: "Month of discipline", streak30_d: "30-day streak",
+        invite5: "Team", invite5_d: "Invite 5 friends",
+        images10: "Artist", images10_d: "10 images",
+        voice: "Voice", voice_d: "Ask a question by voice",
+        night: "Night owl", night_d: "Ask after midnight",
+        season_top: "Season top", season_top_d: "Reach the season top 10"
       },
       styles: {
         auto: ["🌐 Universal", "a strong expert in every topic"],
@@ -660,7 +700,7 @@
   function renderTabs() {
     // friends/settings живут как подэкраны профиля, поэтому подсвечиваем «Профиль»
     var activeKey = state.tab;
-    if (state.screen === "friends" || state.screen === "settings") activeKey = "profile";
+    if (state.screen === "friends" || state.screen === "settings" || state.screen === "season") activeKey = "profile";
     var keys = ["home", "stats", "tasks", "games", "leaks", "profile"];
     if (state.me && (state.me.is_admin || state.me.is_staff)) keys.push("admin");
     if (keys.indexOf(activeKey) === -1) activeKey = "home";
@@ -727,6 +767,10 @@
   // ---------------------------------------------------------------- профиль / XP
   function xpOf(me) {
     if (!me) return 0;
+    // Серверный XP — источник истины; старый расчёт оставлен для совместимости.
+    if (me.gamification && typeof me.gamification.xp === "number") {
+      return Math.max(0, me.gamification.xp);
+    }
     var xp = (me.total_requests || 0) * 10;
     xp += (me.bonus_requests || 0) * 5;
     xp += (me.invites || 0) * 40;
@@ -753,6 +797,10 @@
   }
 
   function achievementsOf(me) {
+    if (me && me.gamification && Array.isArray(me.gamification.achievements) &&
+        me.gamification.achievements.length) {
+      return me.gamification.achievements;
+    }
     var a = dict().ach || I18N.ru.ach;
     function mk(id, icon, done) {
       return { id: id, icon: icon, done: !!done, title: a[id] || id, desc: a[id + "_d"] || "" };
@@ -882,6 +930,9 @@
     var handle = me.user.username ? "@" + me.user.username : "";
     var initials = (name || "?").slice(0, 1).toUpperCase();
     var deg = Math.round(lvl.pct * 360);
+    var g = me.gamification || {};
+    var season = g.season || {};
+    var freezes = typeof g.freezes === "number" ? g.freezes : 0;
     var photo = "";
     try {
       photo = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url) || "";
@@ -905,6 +956,7 @@
 
     var quick =
       '<div class="quick-grid">' +
+      '<button class="quick" data-action="open" data-value="season"><span>🏆</span>' + esc(t("season_short")) + "</button>" +
       '<button class="quick" data-action="open" data-value="friends"><span>👥</span>' + esc(t("friends")) + "</button>" +
       '<button class="quick" data-action="open" data-value="settings"><span>⚙️</span>' + esc(t("settings")) + "</button>" +
       '<button class="quick" data-action="open" data-value="history"><span>💬</span>' + esc(t("history_title")) + "</button>" +
@@ -935,12 +987,20 @@
       '<div class="streak-card">' +
       '<div class="streak-ico">🔥</div>' +
       '<div class="streak-body"><div class="row-title">' + esc(t("streak_title")) + "</div>" +
-      '<div class="row-sub">' + esc(t("streak_days", { n: me.bonus_streak })) + "</div></div>" +
+      '<div class="row-sub">' + esc(t("streak_days", { n: me.bonus_streak })) +
+      (freezes ? " · ❄️ " + esc(freezes) : "") + "</div></div>" +
       '<div class="streak-days">' +
       Array.apply(null, Array(7)).map(function (_, i) {
         return '<span class="sd' + (i < Math.min(7, me.bonus_streak) ? " on" : "") + '"></span>';
       }).join("") +
       "</div></div>" +
+
+      '<div class="card season-card" data-action="open" data-value="season" role="button" tabindex="0">' +
+      '<div class="row"><div><div class="row-title">🏆 ' +
+      esc(t("season_title", { season: season.key || "—" })) + "</div>" +
+      '<div class="row-sub">' + esc(t("season_rank")) + ": <b>#" +
+      esc(season.rank || "—") + "</b> · " + esc(season.xp || 0) + " XP</div></div>" +
+      '<span class="season-go">→</span></div></div>' +
 
       "<h2>🏆 " + esc(t("achievements")) + " · " + esc(t("ach_progress", { a: unlocked, b: ach.length })) + "</h2>" +
       '<div class="ach-grid">' + achHtml + "</div>" +
@@ -959,6 +1019,35 @@
       var bar = document.querySelector(".xp-bar > span");
       if (bar) bar.style.width = Math.round(lvl.pct * 100) + "%";
     }, 60);
+  }
+
+  function renderSeason() {
+    var me = state.me;
+    var g = me.gamification || {};
+    var season = g.season || {};
+    var top = season.top || [];
+    var rows = top.map(function (row, index) {
+      return '<div class="season-row' + (row.me ? " me" : "") + '">' +
+        '<div class="season-place">' + (index + 1) + "</div>" +
+        '<div class="season-name">' + esc(row.name) +
+        (row.me ? ' <span class="you-badge">' + esc(t("season_you")) + "</span>" : "") +
+        "</div>" +
+        '<div class="season-xp">' + esc(row.xp) + " XP</div></div>";
+    }).join("");
+
+    view.innerHTML =
+      subHeader(t("season_short")) +
+      '<div class="card season-hero">' +
+      '<div class="hero-label">' + esc(t("season_title", { season: season.key || "—" })) + "</div>" +
+      '<div class="season-stats">' +
+      '<div class="pmeta"><b>#' + esc(season.rank || "—") + "</b><span>" + esc(t("season_rank")) + "</span></div>" +
+      '<div class="pmeta"><b>' + esc(season.xp || 0) + "</b><span>" + esc(t("season_xp")) + "</span></div>" +
+      '<div class="pmeta"><b>' + esc(g.freezes || 0) + "</b><span>❄️ " + esc(t("freezes")) + "</span></div>" +
+      "</div></div>" +
+      "<h2>🏆 " + esc(t("season_top")) + "</h2>" +
+      '<div class="card">' +
+      (rows || '<div class="muted center">' + esc(t("season_empty")) + "</div>") +
+      "</div>";
   }
 
   function renderStats() {
@@ -2497,6 +2586,7 @@
     else if (state.screen === "buy") renderBuy();
     else if (state.screen === "friends") renderFriends(true);
     else if (state.screen === "settings") renderSettings(true);
+    else if (state.screen === "season") renderSeason();
     else if (state.tab === "admin") renderAdmin();
     else if (state.tab === "stats") renderStats();
     else if (state.tab === "tasks") renderTools();
