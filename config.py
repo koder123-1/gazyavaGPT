@@ -243,6 +243,18 @@ class Settings:
     captcha_enabled: bool = True
     captcha_timeout: int = 180
 
+    # Анти-рейд: всплеск входов закрывает чат и режет новичков.
+    raid_enabled: bool = True
+    raid_threshold: int = 10
+    raid_window: int = 60
+    raid_lock_minutes: int = 15
+    raid_kick_new: bool = True
+
+    # Алерты админам: ошибки ИИ, вебхука, БД и анти-рейд.
+    alerts_enabled: bool = True
+    alert_chat_id: int = 0
+    alert_cooldown: int = 600
+
     image_provider: str = "pollinations"
     image_model: str = "flux"
     image_models: tuple[str, ...] = ()
@@ -499,6 +511,14 @@ def load_settings() -> Settings:
         antimat_words=_list_env("ANTIMAT_WORDS", ",".join(DEFAULT_ANTIMAT_WORDS)),
         captcha_enabled=_bool_env("CAPTCHA_ENABLED", True),
         captcha_timeout=_int_env("CAPTCHA_TIMEOUT", 180, minimum=30, maximum=3600),
+        raid_enabled=_bool_env("RAID_ENABLED", True),
+        raid_threshold=_int_env("RAID_THRESHOLD", 10, minimum=2, maximum=1000),
+        raid_window=_int_env("RAID_WINDOW", 60, minimum=5, maximum=3600),
+        raid_lock_minutes=_int_env("RAID_LOCK_MINUTES", 15, minimum=1, maximum=1440),
+        raid_kick_new=_bool_env("RAID_KICK_NEW", True),
+        alerts_enabled=_bool_env("ALERTS_ENABLED", True),
+        alert_chat_id=_int_env("ALERT_CHAT_ID", 0),
+        alert_cooldown=_int_env("ALERT_COOLDOWN", 600, minimum=30, maximum=86400),
         image_provider=image_provider,
         image_model=(os.getenv("IMAGE_MODEL", "").strip() or "flux"),
         image_models=_list_env("IMAGE_MODELS", ""),

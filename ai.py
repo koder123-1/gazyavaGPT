@@ -11,6 +11,7 @@ from typing import Any
 
 import aiohttp
 
+import alerts
 from aipool import ModelPool
 from config import (
     COARENA_MODELS,
@@ -179,6 +180,7 @@ class AIClient:
         Если передан image, запрос уходит в vision-модель (с запасными вариантами).
         """
         if not self.configured:
+            await self._alert_down("ИИ не настроен: нет AI_API_KEY.")
             raise AIError("ИИ не настроен: администратору нужно добавить переменную AI_API_KEY.")
 
         settings = self._settings
@@ -329,6 +331,14 @@ class AIClient:
                 break
         return current
 
+    async def _alert_down(self, detail: object) -> None:
+        """Один алерт на падение провайдера: без текста вопроса и личных данных."""
+        await alerts.ai_failed(
+            f"Провайдер: {self._settings.ai_provider}\n"
+            f"Модель: {self._settings.ai_model}\n"
+            f"{type(detail).__name__}: {detail}"
+        )
+
     async def _fallback_reply(
         self,
         exc: AIError,
@@ -338,13 +348,20 @@ class AIClient:
     ) -> str:
         """Отвечает через резервного провайдера или поднимает исходную ошибку."""
         if self._fallback is None:
+            await self._alert_down(exc)
             raise exc
         # Имена моделей у провайдеров разные: нельзя передавать резерву чужой
         # AI_MODEL/AI_VISION_MODEL, иначе гарантированный 404.
         kwargs.pop("model", None)
         kwargs.pop("vision_model", None)
         log.warning("Основной провайдер не ответил (%s) -> резервный", exc)
-        return await self._fallback.reply(history, text, **kwargs)
+        try:
+            return await self._fallback.reply(history, text, **kwargs)
+        except AIError:
+            raise
+        except Exception as fallback_exc:  # noqa: BLE001
+            await self._alert_down(fallback_exc)
+            raise
 
     # ------------------------------------------------------------------ один запрос
     @staticmethod

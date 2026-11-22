@@ -18,6 +18,7 @@ from aiogram.types import (
     BotCommand,
     BotCommandScopeAllChatAdministrators,
     BotCommandScopeAllGroupChats,
+    ErrorEvent,
     MenuButtonWebApp,
     TelegramObject,
     WebAppInfo,
@@ -42,6 +43,8 @@ from subscription import SubscriptionMiddleware, probe_channel
 from subscription import router as subscription_router
 from tickets import router as tickets_router
 from toolbox import router as toolbox_router
+import alerts
+import antiraid
 import autopost
 import captcha
 import channelkit
@@ -140,6 +143,7 @@ GROUP_COMMANDS = [
     BotCommand(command="rules", description="Правила чата"),
     BotCommand(command="captcha", description="Капча для новичков: on/off"),
     BotCommand(command="antimat", description="Фильтр мата: on/off"),
+    BotCommand(command="raid", description="Анти-рейд: on/off/статус"),
     BotCommand(command="help", description="Справка"),
     BotCommand(command="group", description="Управление чатом"),
     BotCommand(command="giveaway", description="Розыгрыш в этом чате"),
@@ -169,6 +173,7 @@ async def on_startup(
     images: ImageClient,
 ) -> None:
     await store.start()
+    alerts.configure(bot, settings, store)
     await ai.start()
     await images.start()
     giveaways.start_loop(bot, store)
@@ -176,6 +181,7 @@ async def on_startup(
     channelkit.start_loop(bot, store)
     reminders.start_loop(bot, store, settings)
     captcha.start_loop(bot, store)
+    antiraid.start_loop(bot, store, settings)
     keepalive.start_loop(settings)
     await bot.set_my_commands(COMMANDS)
     with contextlib.suppress(TelegramAPIError):
@@ -245,6 +251,7 @@ async def on_shutdown(bot: Bot, store: Store, ai: AIClient, images: ImageClient)
     await channelkit.stop_loop()
     await reminders.stop_loop()
     await captcha.stop_loop()
+    await antiraid.stop_loop()
     await keepalive.stop_loop()
     await ai.close()
     await images.close()
@@ -272,14 +279,35 @@ class CallbackAnswerGuard(BaseMiddleware):
             return await handler(event, data)
         except TelegramAPIError:
             raise
-        except Exception:  # noqa: BLE001 — кнопка не должна «зависать»
+        except Exception as exc:  # noqa: BLE001 — кнопка не должна «зависать»
             log.exception("Ошибка обработки кнопки %s", getattr(event, "data", ""))
+            await alerts.notify(
+                "error",
+                f"callback {getattr(event, 'data', '')}: {type(exc).__name__}: {exc}",
+                key=type(exc).__name__,
+            )
             with contextlib.suppress(TelegramAPIError):
                 await event.answer("⚠️ Не получилось. Попробуй ещё раз.")
             return None
 
 
 # --------------------------------------------------------------------------- приложение
+async def on_error(event: ErrorEvent) -> None:
+    """Алерт админу на любую необработанную ошибку в обработчике."""
+    exc = event.exception
+    log.error(
+        "Необработанная ошибка: %s",
+        exc,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    await alerts.notify(
+        "error",
+        f"{type(exc).__name__}: {exc}\n"
+        f"update_id: {getattr(event.update, 'update_id', '')}",
+        key=type(exc).__name__,
+    )
+
+
 def create_dispatcher(
     settings: Settings, store: Store, ai: AIClient, images: ImageClient | None = None
 ) -> Dispatcher:
@@ -301,6 +329,7 @@ def create_dispatcher(
     dispatcher.include_router(moderation_router)
     dispatcher.include_router(payments_router)
     dispatcher.include_router(reminders.router)
+    dispatcher.include_router(antiraid.router)
     dispatcher.include_router(captcha.router)
     dispatcher.include_router(inline.router)
     dispatcher.include_router(toolbox_router)
@@ -317,7 +346,30 @@ def create_dispatcher(
     dispatcher.message.outer_middleware(SpamMiddleware(settings))
     dispatcher.startup.register(on_startup)
     dispatcher.shutdown.register(on_shutdown)
+    dispatcher.errors.register(on_error)
     return dispatcher
+
+
+@web.middleware
+async def alert_middleware(request: web.Request, handler):
+    """Ловит 5xx и падения HTTP-роутов (вебхук, Mini App, health)."""
+    try:
+        response = await handler(request)
+    except web.HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 — сначала алерт, потом обычный 500
+        await alerts.web_failed(
+            f"{request.method} {request.path}: {type(exc).__name__}: {exc}"
+        )
+        raise
+    if response.status >= 500:
+        if request.path in {"/", "/health"}:
+            await alerts.db_down(f"HTTP {response.status}: {request.method} {request.path}")
+        else:
+            await alerts.web_failed(
+                f"HTTP {response.status}: {request.method} {request.path}"
+            )
+    return response
 
 
 def create_app(
@@ -327,7 +379,10 @@ def create_app(
     store: Store,
     ai: AIClient | None = None,
 ) -> web.Application:
-    app = web.Application(client_max_size=miniapp.MAX_LEAK_SIZE + 1024 * 1024)
+    app = web.Application(
+        client_max_size=miniapp.MAX_LEAK_SIZE + 1024 * 1024,
+        middlewares=[alert_middleware],
+    )
     SimpleRequestHandler(
         dispatcher=dispatcher,
         bot=bot,
