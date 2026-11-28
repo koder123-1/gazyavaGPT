@@ -25,6 +25,9 @@ services:
         sync: false
       - key: MILIONSEEK_API_KEY
         sync: false
+      # OpenRouter — универсальный резерв: работает из большинства стран.
+      - key: OPENROUTER_API_KEY
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: OWNER_ID
@@ -46,7 +49,7 @@ services:
       - key: AI_VISION_MODELS
         value: deepseek-v4.1-flash-1017
       - key: AI_FALLBACK_PROVIDER
-        value: coarena,crowllm,unleashedapi,milionseek
+        value: openrouter,coarena,crowllm,unleashedapi,milionseek
       - key: IMAGE_PROVIDER
         value: reformboss
       - key: IMAGE_MODEL

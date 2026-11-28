@@ -89,6 +89,14 @@ PROVIDER_LABELS = {
 # «взять каталог у провайдера и ротировать модели».
 GATEWAY_PROVIDERS = frozenset({"coarena", "reformboss", "crowllm", "unleashedapi", "milionseek"})
 
+# Резерв по умолчанию, если AI_FALLBACK_PROVIDER не задан вовсе.
+# OpenRouter доступен из большинства стран и даёт бесплатные модели.
+DEFAULT_FALLBACK_PROVIDER = "openrouter"
+
+# Ключи OpenRouter всегда начинаются с этого префикса: по нему видно, что
+# общий AI_API_KEY — именно ключ OpenRouter, а не чужого шлюза.
+OPENROUTER_KEY_PREFIX = "sk-or-"
+
 
 DEFAULT_WELCOME = (
     "👋 Привет, {name}! Добро пожаловать в чат.\n\n"
@@ -451,28 +459,35 @@ def _specific_provider_key(provider: str) -> str:
     return os.getenv(f"{provider.upper()}_API_KEY", "").strip()
 
 
-def provider_key_state(provider: str) -> str:
-    """Откуда возьмётся ключ провайдера: свой, общий AI_API_KEY или никакого.
+def provider_effective_key(provider: str, main_provider: str = "") -> str:
+    """Ключ, который реально подойдёт провайдеру.
 
-    Общий AI_API_KEY подходит только основному провайдеру или тому, у кого
-    тот же адрес API: иначе ключ одного шлюза уедет на чужой хост и вернёт 401.
+    Свой <PROVIDER>_API_KEY главнее. Общий AI_API_KEY отдаём только тому, кому
+    он принадлежит: основному провайдеру, OpenRouter (по префиксу sk-or-) или
+    провайдеру с тем же адресом API. Иначе ключ одного шлюза уедет на чужой
+    хост и вернёт 401.
     """
-    if os.getenv(f"{provider.upper()}_API_KEY", "").strip():
-        return "свой ключ"
-    if not os.getenv("AI_API_KEY", "").strip():
-        return "нет ключа"
-    main = os.getenv("AI_PROVIDER", "").strip().lower()
+    specific = _specific_provider_key(provider)
+    if specific:
+        return specific
+    main = (main_provider or os.getenv("AI_PROVIDER", "")).strip().lower()
+    common = os.getenv("AI_API_KEY", "").strip()
+    if not common:
+        return ""
     if provider == main:
-        return "общий AI_API_KEY"
-    own_base = (
-        os.getenv(f"{provider.upper()}_BASE_URL", "").strip().rstrip("/")
-        or DEFAULT_BASE_URLS.get(provider, "").rstrip("/")
-    )
-    main_base = (
-        os.getenv("AI_BASE_URL", "").strip().rstrip("/")
-        or DEFAULT_BASE_URLS.get(main, "").rstrip("/")
-    )
-    if own_base and own_base == main_base:
+        return common
+    if provider == "openrouter" and common.startswith(OPENROUTER_KEY_PREFIX):
+        return common
+    own_base = (_provider_base(provider) or "").rstrip("/")
+    main_base = (_provider_base(main) or "").rstrip("/")
+    return common if own_base and own_base == main_base else ""
+
+
+def provider_key_state(provider: str) -> str:
+    """Откуда возьмётся ключ провайдера: свой, общий AI_API_KEY или никакого."""
+    if _specific_provider_key(provider):
+        return "свой ключ"
+    if provider_effective_key(provider):
         return "общий AI_API_KEY"
     return "нет ключа"
 
@@ -556,7 +571,16 @@ def load_settings() -> Settings:
         ai_vision_models=_list_env("AI_VISION_MODELS", ""),
         ai_model_rotate=_bool_env("AI_MODEL_ROTATE", True),
         ai_fallback_provider=",".join(
-            normalize_providers(os.getenv("AI_FALLBACK_PROVIDER", ""))
+            normalize_providers(
+                # Переменная не задана вовсе -> резерв по умолчанию OpenRouter.
+                # Задана пустой -> админ осознанно отключил резерв.
+                (
+                    os.getenv("AI_FALLBACK_PROVIDER")
+                    if os.getenv("AI_FALLBACK_PROVIDER") is not None
+                    else DEFAULT_FALLBACK_PROVIDER
+                )
+                or ""
+            )
         ),
         ai_auto_fallback=_bool_env("AI_AUTO_FALLBACK", True),
         ai_api_key=_provider_key(provider),

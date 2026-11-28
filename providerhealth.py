@@ -26,8 +26,7 @@ from config import (
     DEFAULT_MODELS,
     HTTP_USER_AGENT,
     Settings,
-    _provider_key,
-    _specific_provider_key,
+    provider_effective_key,
 )
 
 log = logging.getLogger("providerhealth")
@@ -378,7 +377,7 @@ def interval_seconds() -> int:
 
 
 def probe_targets(settings: Settings) -> list[str]:
-    """Провайдеры, которых есть чем проверить: свой ключ и известный адрес."""
+    """Провайдеры, которых есть чем проверить: подходящий ключ и адрес."""
     names: list[str] = []
     for name in DEFAULT_MODELS:
         if name == "gemini":
@@ -386,10 +385,7 @@ def probe_targets(settings: Settings) -> list[str]:
             continue
         if not _probe_base(name):
             continue
-        key = _specific_provider_key(name)
-        if not key and name == settings.ai_provider:
-            key = _provider_key(name)
-        if key:
+        if provider_effective_key(name, settings.ai_provider):
             names.append(name)
     return names
 
@@ -406,9 +402,7 @@ async def _probe_one(
     session: aiohttp.ClientSession, name: str, settings: Settings
 ) -> bool:
     base = _probe_base(name)
-    key = _specific_provider_key(name)
-    if not key and name == settings.ai_provider:
-        key = _provider_key(name)
+    key = provider_effective_key(name, settings.ai_provider)
     if not base or not key:
         return False
 

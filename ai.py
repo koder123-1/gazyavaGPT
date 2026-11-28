@@ -25,8 +25,8 @@ from config import (
     Settings,
     _provider_base,
     _provider_key,
-    _specific_provider_key,
     normalize_providers,
+    provider_effective_key,
 )
 from guards import build_system_prompt, sanitize_answer, strip_meta_preamble
 
@@ -58,21 +58,9 @@ CONTINUE_PROMPT = (
 def _fallback_key(name: str, settings: Settings) -> str:
     """Ключ провайдера: свой, а общий AI_API_KEY — только когда он точно его.
 
-    У каждого шлюза свой адрес, и ключ ReformBoss на api.crowllm.com — это
-    гарантированный 401. Поэтому общий ключ берём лишь для провайдера из
-    AI_PROVIDER (там он и задан) или если адреса совпадают.
+    Логика одна на весь проект: см. `provider_effective_key` в config.py.
     """
-    specific = _specific_provider_key(name)
-    if specific:
-        return specific
-    if name == settings.ai_provider:
-        return _provider_key(name)
-    common = (settings.ai_api_key or "").strip()
-    if not common:
-        return ""
-    own_base = DEFAULT_BASE_URLS.get(name, "").rstrip("/")
-    main_base = (settings.ai_base_url or "").rstrip("/")
-    return common if own_base and own_base == main_base else ""
+    return provider_effective_key(name, settings.ai_provider)
 
 
 def _merge_continuation(base: str, part: str) -> str:
