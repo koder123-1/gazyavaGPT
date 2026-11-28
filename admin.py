@@ -29,7 +29,6 @@ from config import (
     DEFAULT_MODELS,
     PROVIDER_LABELS,
     Settings,
-    _provider_key,
     _specific_provider_key,
     normalize_providers,
     provider_key_state,
@@ -427,7 +426,8 @@ async def render_model_access(
 
 
 def _provider_has_key(name: str) -> bool:
-    return bool(_provider_key(name))
+    """Ключ, который реально подойдёт этому провайдеру (не чужой общий)."""
+    return provider_key_state(name) != "нет ключа"
 
 
 def _fallback_ready(name: str) -> bool:

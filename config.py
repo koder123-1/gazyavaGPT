@@ -452,10 +452,27 @@ def _specific_provider_key(provider: str) -> str:
 
 
 def provider_key_state(provider: str) -> str:
-    """Откуда возьмётся ключ провайдера: свой, общий AI_API_KEY или никакого."""
+    """Откуда возьмётся ключ провайдера: свой, общий AI_API_KEY или никакого.
+
+    Общий AI_API_KEY подходит только основному провайдеру или тому, у кого
+    тот же адрес API: иначе ключ одного шлюза уедет на чужой хост и вернёт 401.
+    """
     if os.getenv(f"{provider.upper()}_API_KEY", "").strip():
         return "свой ключ"
-    if os.getenv("AI_API_KEY", "").strip():
+    if not os.getenv("AI_API_KEY", "").strip():
+        return "нет ключа"
+    main = os.getenv("AI_PROVIDER", "").strip().lower()
+    if provider == main:
+        return "общий AI_API_KEY"
+    own_base = (
+        os.getenv(f"{provider.upper()}_BASE_URL", "").strip().rstrip("/")
+        or DEFAULT_BASE_URLS.get(provider, "").rstrip("/")
+    )
+    main_base = (
+        os.getenv("AI_BASE_URL", "").strip().rstrip("/")
+        or DEFAULT_BASE_URLS.get(main, "").rstrip("/")
+    )
+    if own_base and own_base == main_base:
         return "общий AI_API_KEY"
     return "нет ключа"
 

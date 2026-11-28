@@ -43,7 +43,6 @@ from config import (
     DEFAULT_MODELS,
     PROVIDER_LABELS,
     Settings,
-    _provider_key,
     normalize_providers,
     provider_key_state,
 )
@@ -886,7 +885,7 @@ async def _settings_payload(store: Store, settings: Settings) -> dict[str, Any]:
             "label": label,
             "active": name == rt.provider,
             "reserve": name in normalize_providers(rt.fallback),
-            "has_key": bool(_provider_key(name)),
+            "has_key": provider_key_state(name) != "нет ключа",
             "key_state": provider_key_state(name),
             "cooling": round(health.get(name, {}).get("left", 0.0)),
             "kind": health.get(name, {}).get("kind", ""),
