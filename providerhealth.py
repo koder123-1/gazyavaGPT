@@ -383,7 +383,7 @@ def probe_targets(settings: Settings) -> list[str]:
         if name == "gemini":
             # У Gemini каталог другого формата (/v1beta/models?key=).
             continue
-        if not DEFAULT_BASE_URLS.get(name):
+        if not _probe_base(name):
             continue
         key = _specific_provider_key(name)
         if not key and name == settings.ai_provider:
@@ -393,10 +393,18 @@ def probe_targets(settings: Settings) -> list[str]:
     return names
 
 
+def _probe_base(name: str) -> str:
+    """Адрес для пробника: <PROVIDER>_BASE_URL важнее стандартного."""
+    return (
+        os.getenv(f"{name.upper()}_BASE_URL", "").strip().rstrip("/")
+        or DEFAULT_BASE_URLS.get(name, "")
+    )
+
+
 async def _probe_one(
     session: aiohttp.ClientSession, name: str, settings: Settings
 ) -> bool:
-    base = DEFAULT_BASE_URLS.get(name, "")
+    base = _probe_base(name)
     key = _specific_provider_key(name)
     if not key and name == settings.ai_provider:
         key = _provider_key(name)
