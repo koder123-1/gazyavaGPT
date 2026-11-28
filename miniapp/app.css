@@ -238,8 +238,26 @@ html[data-theme="light"] .tabs{box-shadow:0 20px 50px -24px rgba(15,23,42,.25),0
 .game-card:active{transform:scale(.93) translateY(1px);box-shadow:0 16px 30px -18px rgba(0,0,0,.5)}
 .game-card:nth-child(1){border-top-color:#6366f1}.game-card:nth-child(2){border-top-color:#22d3ee}.game-card:nth-child(3){border-top-color:#f59e0b}
 .game-card:nth-child(4){border-top-color:#ec4899}.game-card:nth-child(5){border-top-color:#a855f7}.game-card:nth-child(6){border-top-color:#10b981}
-.game-card:nth-child(7){border-top-color:#ef4444}.game-card:nth-child(8){border-top-color:#f97316}.game-card:nth-child(9){border-top-color:#14b8a6}
+.game-card:nth-child(7){border-top-color:#ef4444}.game-card:nth-child(8){border-top-color:#f97316}.game-card:nth-child(9){border-top-color:#14b8a6}.game-card:nth-child(10){border-top-color:#8b5cf6}
 .game-label{font-size:11px;color:var(--hint);margin-top:6px;font-weight:700;letter-spacing:.03em}
+/* Раскраска: верный цвет закрашивает клетку, неверный — только красная вспышка. */
+.paint-stage{height:auto;padding:2px 0}
+.paint-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;width:100%;max-width:104px}
+.paint-cell{aspect-ratio:1;padding:0;border-radius:6px;border:1px solid var(--st);
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(127,127,127,.10);cursor:pointer;transition:background .2s,transform .15s}
+.paint-num{font-size:9px;font-weight:800;color:var(--hint);opacity:.7;pointer-events:none}
+.paint-cell.done{transform:scale(.94);border-color:transparent}
+.paint-cell.done .paint-num,.paint-cell.wrong .paint-num{opacity:0}
+.paint-cell.wrong{background:rgba(239,68,68,.30)!important;border-color:#ef4444;
+  box-shadow:0 0 0 2px rgba(239,68,68,.55) inset;animation:paintWrong .45s ease}
+@keyframes paintWrong{0%{transform:scale(1)}30%{transform:scale(.82)}60%{transform:scale(1.06)}100%{transform:scale(1)}}
+.paint-row{display:flex;gap:8px;justify-content:center;margin-top:9px}
+.paint-dot{width:22px;height:22px;padding:0;border-radius:50%;background:var(--dot);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.45);
+  border:2px solid transparent;cursor:pointer;transition:transform .15s,border-color .15s}
+.paint-dot.active{border-color:var(--ink);transform:scale(1.15)}
 .rps-btn{padding:6px 10px;font-size:16px;border-radius:10px}
 
 /* ═══════════════════════════════════════════════════════════

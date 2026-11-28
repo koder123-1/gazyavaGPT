@@ -1163,6 +1163,9 @@
   var SLOT_SYMBOLS = ["🍒", "🍋", "🍊", "🍇", "⭐", "💎", "7️⃣"];
   var WHEEL_PRIZES = ["🎁 +5", "⭐ Удача", "🍀 Клевер", "💎 Алмаз", "🔥 Огонь", "🌈 Радуга", "🎯 Точка", "🍕 Пицца", "🚀 Ракета", "👑 Корона"];
   var WHEEL_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#f59e0b", "#fbbf24", "#10b981", "#14b8a6", "#22d3ee", "#3b82f6"];
+  // Раскраска: неверный цвет не закрашивает клетку, а подсвечивает её красным.
+  var PAINT_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#f59e0b"];
+  var PAINT_SIZE = 16;
 
   function diceFace(n) {
     return '<div class="cf f' + n + '">' + DICE_PIPS[n].map(function (pos) {
@@ -1242,6 +1245,8 @@
   }
 
   function renderGames() {
+    // Цели раскраски готовим до разметки: в клетках видны номера цветов.
+    resetPaint();
     view.innerHTML =
       "<h1>🎲 " + esc(t("games")) + "</h1>" +
       '<div class="games-grid">' +
@@ -1292,6 +1297,12 @@
       '<div class="guess-row"><input id="guess-input" class="input" type="number" min="1" max="100" placeholder="1–100">' +
       '<button class="chip rps-btn" data-action="guess-submit">→</button></div></div>' +
 
+      '<div class="card game-card center">' +
+      '<div class="g-stage paint-stage"><div class="paint-grid" id="paint-grid">' +
+      paintGridHtml() + "</div></div>" +
+      '<div class="game-label" id="paint-label">Раскраска</div>' +
+      '<div class="paint-row">' + paintPaletteHtml() + "</div></div>" +
+
       "</div>";
     state._guessTarget = Math.floor(Math.random() * 100) + 1;
     state._guessAttempts = 0;
@@ -1299,6 +1310,67 @@
     state._slotsBusy = false;
     state._slotK = [0, 1, 2];
     state._wheelAngle = 0;
+  }
+
+  // ---------------------------------------------------------------- раскраска
+  function resetPaint() {
+    state._paintColor = 0;
+    state._paintDone = 0;
+    state._paintTargets = [];
+    for (var i = 0; i < PAINT_SIZE; i++) {
+      state._paintTargets.push(Math.floor(Math.random() * PAINT_COLORS.length));
+    }
+  }
+
+  function paintGridHtml() {
+    var cells = "";
+    for (var i = 0; i < PAINT_SIZE; i++) {
+      // Раскраска по номерам: цифра подсказывает, каким цветом закрашивать.
+      cells += '<button class="paint-cell" data-action="paint-cell" data-value="' + i +
+        '"><span class="paint-num">' + (state._paintTargets[i] + 1) + "</span></button>";
+    }
+    return cells;
+  }
+
+  function paintPaletteHtml() {
+    return PAINT_COLORS.map(function (color, i) {
+      var active = i === state._paintColor ? " active" : "";
+      return '<button class="paint-dot' + active + '" data-action="paint-pick" data-value="' +
+        i + '" style="--dot:' + color + '" aria-label="цвет ' + (i + 1) + '">' +
+        (i + 1) + "</button>";
+    }).join("");
+  }
+
+  function pickPaint(node, index) {
+    if (!node) return;
+    state._paintColor = index;
+    var dots = node.parentNode ? node.parentNode.querySelectorAll(".paint-dot") : [];
+    for (var i = 0; i < dots.length; i++) dots[i].classList.remove("active");
+    node.classList.add("active");
+    haptic("select");
+  }
+
+  function paintCell(node, index) {
+    if (!node || node.classList.contains("done")) return;
+    var target = state._paintTargets[index];
+    if (state._paintColor === target) {
+      node.style.background = PAINT_COLORS[target];
+      node.classList.add("done");
+      state._paintDone += 1;
+      haptic("light");
+      if (state._paintDone >= PAINT_SIZE) {
+        toast("Раскрашено! 🎨");
+        haptic("success");
+        celebrate(node.closest(".game-card"), true);
+      }
+      return;
+    }
+    // Неверный цвет: клетка остаётся пустой и вспыхивает красным.
+    node.classList.remove("wrong");
+    void node.offsetWidth;
+    node.classList.add("wrong");
+    setTimeout(function () { node.classList.remove("wrong"); }, 480);
+    haptic("error");
   }
 
   function wheelGradient() {
@@ -2969,6 +3041,10 @@
       playReact();
     } else if (action === "game-wheel") {
       playWheel();
+    } else if (action === "paint-pick") {
+      pickPaint(node, parseInt(value, 10));
+    } else if (action === "paint-cell") {
+      paintCell(node, parseInt(value, 10));
     } else if (action === "guess-submit") {
       submitGuess();
     } else if (action === "set-model") {
