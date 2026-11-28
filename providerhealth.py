@@ -268,14 +268,15 @@ def mark_ok(provider: str) -> None:
 def mark_probe_ok(provider: str) -> None:
     """Пробник увидел 200 на /models.
 
-    Это подтверждает, что хост жив, но не отменяет лимит или неверный ключ:
-    каталог отдаётся и при исчерпанной квоте. Снимаем только простой.
+    Каталог отдаётся и при исчерпанной квоте, поэтому лимит и гео-блокировку
+    пробник не снимает: только простой и отклонённый ключ (200 значит, что
+    ключ принят).
     """
     if not provider:
         return
     state = _states.setdefault(provider, _State())
     state.ok_at = time.monotonic()
-    if state.kind in ("", "down"):
+    if state.kind not in ("limit", "geo"):
         state.until = 0.0
         state.reason = ""
         state.kind = ""
@@ -413,13 +414,10 @@ async def _probe_one(
 
     headers = {"Accept": "application/json", "User-Agent": HTTP_USER_AGENT}
     headers["Authorization"] = f"Bearer {key}"
-    started = time.monotonic()
     try:
         async with session.get(base.rstrip("/") + "/models", headers=headers) as resp:
-            elapsed = time.monotonic() - started
             if resp.status == 200:
                 mark_probe_ok(name)
-                mark_latency(name, elapsed)
                 return True
             if resp.status == 404:
                 # Каталога может не быть — это не значит, что провайдер мёртв.
