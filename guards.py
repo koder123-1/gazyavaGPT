@@ -200,10 +200,115 @@ def looks_like_jailbreak(text: str) -> bool:
     return bool(_JAILBREAK_RE.search(text[:MAX_CHECK_CHARS]))
 
 
+# Модель иногда вместо ответа начинает «служебную» фразу о продолжении
+# разговора: это остатки контекста, а не ответ пользователю.
+_META_PREAMBLE_RE = re.compile(
+    r"^\s*(?:"
+    r"continuing\s+from\s+(?:the\s+)?(?:previous|prior|last|earlier)\s+"
+    r"(?:discussion|conversation|message|context|turn)"
+    r"|continuing\s+from\s+where"
+    r"|continuing\s+the\s+(?:previous|prior)"
+    r"|here(?:'|\u2019)?s\s+the\s+continuation"
+    r"|here\s+is\s+the\s+continuation"
+    r"|continuation\s+of\s+the\s+(?:previous|prior)"
+    r"|продолжаю\s+(?:с\s+того\s+места|предыдущ|прошл)"
+    r"|продолжение\s+(?:предыдущего|прошлого|ответа)"
+    r")",
+    re.IGNORECASE,
+)
+
+# Короткие строки не схлопываем: в коде подряд идут одинаковые `}` и `);`.
+_REPEAT_MIN_CHARS = 80
+_BLOCK_MIN_CHARS = 120
+
+
+def strip_meta_preamble(answer: str) -> str:
+    """Убирает служебные вступления вида «Continuing from the previous discussion».
+
+    Такие фразы занимают отдельный абзац, поэтому режем только ведущие абзацы
+    и не трогаем остальной текст.
+    """
+    if not answer:
+        return ""
+    text = answer.replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
+    while lines:
+        first = lines[0]
+        if not first.strip():
+            lines.pop(0)
+            continue
+        if not _META_PREAMBLE_RE.match(first):
+            break
+        # Служебное вступление может занимать несколько строк до пустой.
+        lines.pop(0)
+        while lines and lines[0].strip():
+            current = lines[0].strip()
+            # Продолжение того же предложения: строчная буква или знак
+            # препинания в начале. Новый абзац ответа так не начинается.
+            if current[0].islower() or current[0] in ",;:)]}":
+                lines.pop(0)
+                continue
+            break
+    return "\n".join(lines).strip()
+
+
+def _collapse_repeats(text: str) -> str:
+    """Схлопывает дословные повторы, когда модель зациклилась.
+
+    Повторяемость проверяем только на длинных блоках: в коде и таблицах
+    одинаковые короткие строки — норма, а повтор абзаца на 200 символов — сбой.
+    """
+    lines = text.split("\n")
+    # 1. Одинаковые длинные строки подряд: оставляем одну.
+    deduped: list[str] = []
+    for line in lines:
+        key = line.strip()
+        if (
+            key
+            and len(key) >= _REPEAT_MIN_CHARS
+            and deduped
+            and deduped[-1].strip() == key
+        ):
+            continue
+        deduped.append(line)
+
+    # 2. Весь ответ — один и тот же блок, повторённый N раз.
+    total = sum(len(line) for line in deduped)
+    if total < _BLOCK_MIN_CHARS:
+        return "\n".join(deduped).strip()
+    count = len(deduped)
+    for size in range(1, count // 2 + 1):
+        if count % size:
+            continue
+        block = deduped[:size]
+        if sum(len(line) for line in block) < _BLOCK_MIN_CHARS:
+            continue
+        if all(deduped[i : i + size] == block for i in range(0, count, size)):
+            return "\n".join(block).strip()
+    return "\n".join(deduped).strip()
+
+
+def clean_answer(answer: str) -> str:
+    """Приводит ответ модели к тому, что можно показать пользователю.
+
+    Идемпотентна: повторный вызов на уже очищенном тексте ничего не меняет.
+    Всегда возвращает строку.
+    """
+    if not isinstance(answer, str) or not answer:
+        return ""
+    cleaned = strip_meta_preamble(answer)
+    if not cleaned:
+        return ""
+    return _collapse_repeats(cleaned)
+
+
 def sanitize_answer(answer: str) -> str:
-    """Не даём модели выдать внутренние инструкции даже частично."""
-    lowered = answer.lower()
+    """Не даём модели выдать внутренние инструкции или служебный мусор."""
+    cleaned = clean_answer(answer)
+    if not cleaned:
+        return ""
+    lowered = cleaned.lower()
     for marker in _LEAK_MARKERS:
         if marker in lowered:
             return PROMPT_LEAK_REFUSAL
-    return answer
+    return cleaned

@@ -28,7 +28,7 @@ from config import (
     _specific_provider_key,
     normalize_providers,
 )
-from guards import build_system_prompt, sanitize_answer
+from guards import build_system_prompt, sanitize_answer, strip_meta_preamble
 
 log = logging.getLogger("ai")
 
@@ -48,7 +48,9 @@ VISION_FALLBACKS = [
 CONTINUE_PROMPT = (
     "Продолжи предыдущий ответ ровно с того места, где он оборвался. "
     "Не повторяй уже написанное, не начинай заново, не пиши вступление и не "
-    "извиняйся. Если оборвался блок кода — продолжай с той же строки и внутри "
+    "извиняйся. Никаких служебных фраз вида «Continuing from the previous "
+    "discussion» или «Продолжаю с того места» — сразу продолжай текст. "
+    "Если оборвался блок кода — продолжай с той же строки и внутри "
     "того же блока ```…```. Если оборвался текст — продолжай с того же слова."
 )
 
@@ -76,8 +78,13 @@ def _fallback_key(name: str, settings: Settings) -> str:
 def _merge_continuation(base: str, part: str) -> str:
     """Склеивает продолжение с ответом, убирая повтор уже написанного хвоста."""
     if not base:
-        return part.strip()
+        return strip_meta_preamble(part)
     part = (part or "").strip("\n")
+    if not part:
+        return base
+    # Модель часто начинает продолжение со служебной фразы «Continuing from
+    # the previous discussion …» — это не текст ответа, а остаток контекста.
+    part = strip_meta_preamble(part)
     if not part:
         return base
     for marker in ("Продолжение:", "Продолжение ответа:", "Continuation:"):
@@ -117,6 +124,7 @@ class AIError(Exception):
         fatal: bool = False,
         status: int = 0,
         raw: str = "",
+        model_level: bool = False,
     ) -> None:
         super().__init__(message)
         self.retryable = retryable
@@ -125,6 +133,9 @@ class AIError(Exception):
         # Сырой ответ провайдера: по нему видно «регион заблокирован» или
         # «ключ без скоупа», даже если пользователю показываем другой текст.
         self.raw = raw
+        # Сбой относится к одной модели (пустой ответ, странный формат),
+        # а не ко всему провайдеру: остальные модели пробуем дальше.
+        self.model_level = model_level
 
 
 class AIClient:
@@ -450,20 +461,33 @@ class AIClient:
                             prompt=prompt,
                             answer=answer,
                         )
+                    # Модель могла выдать только служебный мусор («Continuing
+                    # from the previous discussion …») — это не ответ. Тогда
+                    # пробуем следующую модель, а не отправляем пустоту.
+                    cleaned = sanitize_answer(answer)
+                    if not cleaned.strip():
+                        raise AIError(
+                            "Модель вернула пустой ответ. Попробуй ещё раз.",
+                            retryable=True,
+                            model_level=True,
+                        )
                     pool.mark_ok(candidate)
                     providerhealth.mark_ok(settings.ai_provider)
                     providerhealth.mark_model_ok(settings.ai_provider, candidate)
                     providerhealth.mark_latency(
                         settings.ai_provider, time.monotonic() - started
                     )
-                    return sanitize_answer(answer)
+                    return cleaned
                 except AIError as exc:
                     errors.append(exc)
                     # Классифицируем по сырому ответу: в тексте для пользователя
                     # нет слов «country or region» и «insufficient_scope».
                     raw_reason = exc.raw or str(exc)
-                    provider_level = providerhealth.is_provider_level(
-                        exc.status, raw_reason
+                    # Пустой ответ — вина одной модели, а не провайдера.
+                    provider_level = (
+                        False
+                        if exc.model_level
+                        else providerhealth.is_provider_level(exc.status, raw_reason)
                     )
                     # Сбой провайдера целиком (ключ, регион, лимит, 5xx) — остужаем
                     # его, чтобы следующий вопрос не ждал тот же таймаут.
@@ -758,6 +782,7 @@ class AIClient:
                     raise AIError(
                         "Модель думает слишком долго. Пробую другую.",
                         retryable=True,
+                        model_level=True,
                     ) from exc
                 except aiohttp.ClientError as exc:
                     log.warning("AI network error: %r", exc)
@@ -770,6 +795,7 @@ class AIClient:
                     raise AIError(
                         "Сервис ИИ ответил невнятно. Попробуй ещё раз.",
                         retryable=True,
+                        model_level=True,
                     ) from exc
                 break
 
@@ -895,19 +921,27 @@ class AIClient:
             raise AIError(
                 detail or "Сервис ИИ вернул ошибку. Попробуй ещё раз.",
                 retryable=True,
+                model_level=True,
             )
         if "candidates" in data:  # Gemini
             candidates = data.get("candidates") or []
             if not candidates:
                 blocked = (data.get("promptFeedback") or {}).get("blockReason")
                 hint = f" (причина: {blocked})" if blocked else ""
-                raise AIError(f"Модель отказалась отвечать{hint}. Попробуй переформулировать.")
+                raise AIError(
+                    f"Модель отказалась отвечать{hint}. Попробуй переформулировать.",
+                    model_level=True,
+                )
             parts = (candidates[0].get("content") or {}).get("parts") or []
             answer = "".join(p.get("text", "") for p in parts).strip()
         else:  # OpenAI-совместимые
             choices = data.get("choices") or []
             if not choices:
-                raise AIError("Модель вернула пустой ответ. Попробуй ещё раз.", retryable=True)
+                raise AIError(
+                    "Модель вернула пустой ответ. Попробуй ещё раз.",
+                    retryable=True,
+                    model_level=True,
+                )
             message = choices[0].get("message") or {}
             answer = (message.get("content") or "").strip()
             if not answer:
@@ -916,10 +950,15 @@ class AIClient:
                 raise AIError(
                     "Модель не дала готовый ответ. Попробуй ещё раз через минуту.",
                     retryable=True,
+                    model_level=True,
                 )
 
         if not answer:
-            raise AIError("Модель вернула пустой ответ. Попробуй переформулировать.", retryable=True)
+            raise AIError(
+                "Модель вернула пустой ответ. Попробуй переформулировать.",
+                retryable=True,
+                model_level=True,
+            )
         return answer
 
     @staticmethod
