@@ -22,6 +22,13 @@ DEFAULT_SYSTEM_PROMPT = (
     "скажи, чего именно не хватает. Если не уверен — честно признай вместо выдумывания."
 )
 
+# Некоторые шлюзы (CrowLLM, 100MilionSeek) стоят за Cloudflare, который режет
+# запросы без браузерного User-Agent ошибкой 1010 «Access denied».
+HTTP_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
 # Прозвища, на которые бот отзывается в группе (через запятую).
 DEFAULT_ALIASES = "gazyava,газява,газик,газировка,газяваgpt,газикgpt"
 # Команды, которые в группах молчат: их место — только в личке.
@@ -37,7 +44,10 @@ DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
     "openrouter": "openrouter/free",
     "coarena": "deepseek-v4-1-flash-1017",
-    "reformboss": "gpt-4o-mini",
+    "reformboss": "deepseek-v4.1-flash",
+    "crowllm": "glm-4.7-flash:free",
+    "unleashedapi": "deepseek-v4.1-flash-fast",
+    "milionseek": "deepseek-v4.1-flash-free",
 }
 
 DEFAULT_VISION_MODELS = {
@@ -45,7 +55,10 @@ DEFAULT_VISION_MODELS = {
     "openai": "gpt-4o-mini",
     "openrouter": "openrouter/free",
     "coarena": "gemini-3-8-flash",
-    "reformboss": "gpt-4o-mini",
+    "reformboss": "deepseek-v4.1-flash",
+    "crowllm": "nemotron-3.5-super-vl:free",
+    "unleashedapi": "deepseek-v4.1-flash-fast",
+    "milionseek": "deepseek-v4.1-flash-free",
 }
 
 DEFAULT_BASE_URLS = {
@@ -54,7 +67,27 @@ DEFAULT_BASE_URLS = {
     "openrouter": "https://openrouter.ai/api/v1",
     "coarena": "https://coarena.ai/api/v1",
     "reformboss": "https://api.reformboss.com/v1",
+    # Шлюзы, совместимые с [OI] API (/chat/completions и /models).
+    "crowllm": "https://crowllm.com/v1",
+    "unleashedapi": "https://api.unleashedapi.com/v1",
+    "milionseek": "https://100milionseek.top/v1",
 }
+
+# Названия для админки: по ним владелец выбирает провайдера кнопкой.
+PROVIDER_LABELS = {
+    "gemini": "Google Gemini",
+    "openai": "[OI]",
+    "openrouter": "OpenRouter",
+    "coarena": "Coarena",
+    "reformboss": "ReformBoss",
+    "crowllm": "CrowLLM",
+    "unleashedapi": "UnleashedAPI",
+    "milionseek": "100MilionSeek",
+}
+
+# Шлюзы, у которых список моделей приходит из /models: имя «auto» означает
+# «взять каталог у провайдера и ротировать модели».
+GATEWAY_PROVIDERS = frozenset({"coarena", "reformboss", "crowllm", "unleashedapi", "milionseek"})
 
 
 DEFAULT_WELCOME = (
@@ -183,6 +216,8 @@ class Settings:
     ai_vision_models: tuple[str, ...] = ()
     ai_model_rotate: bool = True
     ai_fallback_provider: str = ""
+    # Молча добавлять в конец резерва всех провайдеров со своим ключом.
+    ai_auto_fallback: bool = True
     ai_api_key: str = ""
     ai_base_url: str = ""
     # Сколько токенов разрешаем модели в одном ответе и сколько раз просим
@@ -407,6 +442,49 @@ def _provider_key(provider: str) -> str:
     return specific or os.getenv("AI_API_KEY", "").strip()
 
 
+def _specific_provider_key(provider: str) -> str:
+    """Только собственный ключ провайдера, без общего AI_API_KEY.
+
+    Нужно там, где общий ключ чужой: у каждого шлюза свой адрес, и ключ
+    ReformBoss на api.crowllm.com — это гарантированный 401.
+    """
+    return os.getenv(f"{provider.upper()}_API_KEY", "").strip()
+
+
+def provider_key_state(provider: str) -> str:
+    """Откуда возьмётся ключ провайдера: свой, общий AI_API_KEY или никакого."""
+    if os.getenv(f"{provider.upper()}_API_KEY", "").strip():
+        return "свой ключ"
+    if os.getenv("AI_API_KEY", "").strip():
+        return "общий AI_API_KEY"
+    return "нет ключа"
+
+
+def _provider_base(provider: str) -> str:
+    """Адрес API провайдера: <PROVIDER>_BASE_URL, затем AI_BASE_URL, затем стандарт."""
+    specific = os.getenv(f"{provider.upper()}_BASE_URL", "").strip().rstrip("/")
+    if specific:
+        return specific
+    common = os.getenv("AI_BASE_URL", "").strip().rstrip("/")
+    if common and provider == os.getenv("AI_PROVIDER", "").strip().lower():
+        return common
+    return DEFAULT_BASE_URLS.get(provider, "")
+
+
+def normalize_providers(raw: str) -> tuple[str, ...]:
+    """Разбирает список провайдеров через запятую/точку с запятой.
+
+    Неизвестные имена отбрасываются, повторы схлопываются: так строка из
+    админки не сможет уронить запуск бота.
+    """
+    result: list[str] = []
+    for chunk in (raw or "").replace(";", ",").split(","):
+        name = chunk.strip().lower()
+        if name in DEFAULT_MODELS and name not in result:
+            result.append(name)
+    return tuple(result)
+
+
 def load_settings() -> Settings:
     _load_dotenv()
     token = os.getenv("BOT_TOKEN", "").strip()
@@ -460,9 +538,12 @@ def load_settings() -> Settings:
         ai_models=_list_env("AI_MODELS", ""),
         ai_vision_models=_list_env("AI_VISION_MODELS", ""),
         ai_model_rotate=_bool_env("AI_MODEL_ROTATE", True),
-        ai_fallback_provider=(os.getenv("AI_FALLBACK_PROVIDER", "").strip().lower()),
+        ai_fallback_provider=",".join(
+            normalize_providers(os.getenv("AI_FALLBACK_PROVIDER", ""))
+        ),
+        ai_auto_fallback=_bool_env("AI_AUTO_FALLBACK", True),
         ai_api_key=_provider_key(provider),
-        ai_base_url=(os.getenv("AI_BASE_URL", "").strip().rstrip("/") or DEFAULT_BASE_URLS[provider]),
+        ai_base_url=(_provider_base(provider) or DEFAULT_BASE_URLS[provider]),
         ai_max_tokens=_int_env("AI_MAX_TOKENS", 8000, minimum=500, maximum=32000),
         ai_continue_rounds=_int_env("AI_CONTINUE_ROUNDS", 2, minimum=0, maximum=4),
         bot_name=os.getenv("BOT_NAME", "").strip() or "gazyavaGPT",

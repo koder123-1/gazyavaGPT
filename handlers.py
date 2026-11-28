@@ -1129,6 +1129,7 @@ async def answer_with_ai(
     )
 
     try:
+        await ai.use_provider(runtime.provider, runtime.fallback)
         async with keep_typing(bot, message.chat.id):
             answer = await ai.reply(
                 history,
@@ -2905,6 +2906,7 @@ async def cb_feedback(
     chosen_model = await user_model(store, settings, runtime, owner)
 
     try:
+        await ai.use_provider(runtime.provider, runtime.fallback)
         async with keep_typing(bot, call.message.chat.id):
             answer = await ai.reply(
                 history,

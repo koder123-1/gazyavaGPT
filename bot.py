@@ -37,6 +37,7 @@ from images import ImageClient
 from moderation import FloodMiddleware, PrivateOnlyMiddleware, SpamMiddleware
 from moderation import router as moderation_router
 from payments import router as payments_router
+import providerhealth
 from runtime import load_runtime
 from store import Store, create_store
 from subscription import SubscriptionMiddleware, probe_channel
@@ -185,6 +186,7 @@ async def on_startup(
     captcha.start_loop(bot, store)
     antiraid.start_loop(bot, store, settings)
     keepalive.start_loop(settings)
+    providerhealth.start_loop(settings)
     await bot.set_my_commands(COMMANDS)
     with contextlib.suppress(TelegramAPIError):
         await bot.set_my_commands(GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())
@@ -236,6 +238,8 @@ async def on_startup(
         log.info("RENDER_EXTERNAL_URL не задан -> режим polling")
 
     runtime = await load_runtime(store, settings)
+    # Провайдера могли переключить из админки: применяем до первого запроса.
+    await ai.use_provider(runtime.provider, runtime.fallback)
     if not await probe_channel(bot, runtime.required_channel) and settings.owner_id:
         with contextlib.suppress(TelegramAPIError):
             await bot.send_message(
@@ -255,6 +259,7 @@ async def on_shutdown(bot: Bot, store: Store, ai: AIClient, images: ImageClient)
     await captcha.stop_loop()
     await antiraid.stop_loop()
     await keepalive.stop_loop()
+    await providerhealth.stop_loop()
     await ai.close()
     await images.close()
     await store.close()

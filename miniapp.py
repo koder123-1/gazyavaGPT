@@ -39,7 +39,14 @@ import reminders
 import share
 import styles as style_catalog
 import toolbox
-from config import Settings
+from config import (
+    DEFAULT_MODELS,
+    PROVIDER_LABELS,
+    Settings,
+    _provider_key,
+    normalize_providers,
+    provider_key_state,
+)
 from i18n import LANGS, normalize_lang
 from roles import (
     ASSIGNABLE,
@@ -780,8 +787,11 @@ async def _admin_ctx(
 
 
 async def _settings_payload(store: Store, settings: Settings) -> dict[str, Any]:
+    import providerhealth
+
     rt = await load_runtime(store, settings)
     overrides = await store.all_settings()
+    health = providerhealth.snapshot()
     items = [
         {
             "key": "daily_limit",
@@ -802,6 +812,20 @@ async def _settings_payload(store: Store, settings: Settings) -> dict[str, Any]:
             "label": "Бесплатных картинок в день",
             "hint": "0 — без бесплатных",
             "value": str(rt.image_daily_limit),
+            "multiline": False,
+        },
+        {
+            "key": "ai_provider",
+            "label": "Провайдер ИИ",
+            "hint": "основной; удобнее выбрать кнопкой ниже",
+            "value": rt.provider,
+            "multiline": False,
+        },
+        {
+            "key": "ai_fallback_provider",
+            "label": "Резервные провайдеры",
+            "hint": "через запятую, в порядке попыток",
+            "value": rt.fallback,
             "multiline": False,
         },
         {
@@ -856,12 +880,39 @@ async def _settings_payload(store: Store, settings: Settings) -> dict[str, Any]:
     ]
     for item in items:
         item["override"] = item["key"] in overrides
+    providers = [
+        {
+            "id": name,
+            "label": label,
+            "active": name == rt.provider,
+            "reserve": name in normalize_providers(rt.fallback),
+            "has_key": bool(_provider_key(name)),
+            "key_state": provider_key_state(name),
+            "cooling": round(health.get(name, {}).get("left", 0.0)),
+            "kind": health.get(name, {}).get("kind", ""),
+        }
+        for name, label in PROVIDER_LABELS.items()
+    ]
     return {
         "items": items,
         "group_gate": bool(rt.group_gate),
         "group_gate_override": "group_gate" in overrides,
         "model": rt.model,
+        "provider": rt.provider,
+        "fallback": rt.fallback,
+        "providers": providers,
     }
+
+
+async def _apply_ai_provider(request: web.Request) -> None:
+    """Переключает живой клиент ИИ на провайдера из настроек."""
+    client = request.app.get("miniapp_ai")
+    if client is None:
+        return
+    settings: Settings = request.app["miniapp_settings"]
+    store: Store = request.app["miniapp_store"]
+    rt = await load_runtime(store, settings)
+    await client.use_provider(rt.provider, rt.fallback)
 
 
 async def _validate_setting(
@@ -886,6 +937,22 @@ async def _validate_setting(
         if key == "max_context" and number > 100:
             return "", "Слишком много. Поставь до 100."
         return str(number), ""
+
+    if key == "ai_provider":
+        name = value.strip().lower()
+        if name not in DEFAULT_MODELS:
+            return "", "Неизвестный провайдер."
+        return name, ""
+
+    if key == "ai_fallback_provider":
+        unknown = [
+            chunk.strip()
+            for chunk in value.replace(";", ",").split(",")
+            if chunk.strip() and chunk.strip().lower() not in DEFAULT_MODELS
+        ]
+        if unknown:
+            return "", f"Неизвестные провайдеры: {', '.join(unknown)}."
+        return ",".join(normalize_providers(value)), ""
 
     if key in {"ai_model", "ai_vision_model"}:
         if not value or len(value) > 120 or " " in value:
@@ -1754,6 +1821,12 @@ async def api_admin(request: web.Request) -> web.Response:
             if problem:
                 return _admin_fail(problem)
             await store.set_setting(key, value)
+            if key == "ai_provider":
+                # Модели у провайдеров разные: старые имена дадут 404.
+                await store.delete_setting("ai_model")
+                await store.delete_setting("ai_vision_model")
+            if key in {"ai_provider", "ai_fallback_provider"}:
+                await _apply_ai_provider(request)
             if key in {"required_channel", "required_channel_url"}:
                 from subscription import reset_cache
 
@@ -1782,10 +1855,27 @@ async def api_admin(request: web.Request) -> web.Response:
             from subscription import reset_cache
 
             reset_cache()
+            await _apply_ai_provider(request)
             return _admin_json(
                 {
                     "ok": True,
                     "notice": "Возвращены значения из env.",
+                    "settings": await _settings_payload(store, settings),
+                }
+            )
+
+        if op == "settings.provider":
+            name = str(body.get("provider") or "").strip().lower()
+            if name not in DEFAULT_MODELS:
+                return _admin_fail("Неизвестный провайдер.")
+            await store.set_setting("ai_provider", name)
+            await store.delete_setting("ai_model")
+            await store.delete_setting("ai_vision_model")
+            await _apply_ai_provider(request)
+            return _admin_json(
+                {
+                    "ok": True,
+                    "notice": f"Провайдер: {PROVIDER_LABELS.get(name, name)}",
                     "settings": await _settings_payload(store, settings),
                 }
             )

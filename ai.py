@@ -6,20 +6,27 @@ import asyncio
 import base64
 import json
 import logging
+import time
 from dataclasses import replace
 from typing import Any
 
 import aiohttp
 
 import alerts
+import providerhealth
 from aipool import ModelPool
 from config import (
     COARENA_MODELS,
     DEFAULT_BASE_URLS,
     DEFAULT_MODELS,
     DEFAULT_VISION_MODELS,
+    GATEWAY_PROVIDERS,
+    HTTP_USER_AGENT,
     Settings,
+    _provider_base,
     _provider_key,
+    _specific_provider_key,
+    normalize_providers,
 )
 from guards import build_system_prompt, sanitize_answer
 
@@ -44,6 +51,26 @@ CONTINUE_PROMPT = (
     "извиняйся. Если оборвался блок кода — продолжай с той же строки и внутри "
     "того же блока ```…```. Если оборвался текст — продолжай с того же слова."
 )
+
+
+def _fallback_key(name: str, settings: Settings) -> str:
+    """Ключ провайдера: свой, а общий AI_API_KEY — только когда он точно его.
+
+    У каждого шлюза свой адрес, и ключ ReformBoss на api.crowllm.com — это
+    гарантированный 401. Поэтому общий ключ берём лишь для провайдера из
+    AI_PROVIDER (там он и задан) или если адреса совпадают.
+    """
+    specific = _specific_provider_key(name)
+    if specific:
+        return specific
+    if name == settings.ai_provider:
+        return _provider_key(name)
+    common = (settings.ai_api_key or "").strip()
+    if not common:
+        return ""
+    own_base = DEFAULT_BASE_URLS.get(name, "").rstrip("/")
+    main_base = (settings.ai_base_url or "").rstrip("/")
+    return common if own_base and own_base == main_base else ""
 
 
 def _merge_continuation(base: str, part: str) -> str:
@@ -82,34 +109,61 @@ def _merge_continuation(base: str, part: str) -> str:
 class AIError(Exception):
     """Ошибка с текстом, который можно показать пользователю."""
 
-    def __init__(self, message: str, *, retryable: bool = False, fatal: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = False,
+        fatal: bool = False,
+        status: int = 0,
+        raw: str = "",
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
         self.fatal = fatal
+        self.status = status
+        # Сырой ответ провайдера: по нему видно «регион заблокирован» или
+        # «ключ без скоупа», даже если пользователю показываем другой текст.
+        self.raw = raw
 
 
 class AIClient:
     def __init__(self, settings: Settings) -> None:
-        self._settings = settings
+        self._base = settings
         self._session: aiohttp.ClientSession | None = None
         # Ограничиваем параллельные запросы: free-тарифы ИИ не любят шквал запросов.
         self._semaphore = asyncio.Semaphore(4)
+        self._settings = settings
+        self._pool: ModelPool
+        self._vision_pool: ModelPool
+        self._auto = False
+        self._fallbacks: list[AIClient] = []
+        self._build(settings)
+        self._build_fallbacks(settings)
 
+    # ------------------------------------------------------------- настройка
+    def _build(self, settings: Settings) -> None:
+        """Готовит пул моделей под выбранного провайдера."""
+        self._settings = settings
         models = list(settings.ai_models)
-        # Шлюзы вроде Coarena и ReformBoss сами отдают список моделей:
-        # AI_MODELS=auto подставляется по умолчанию.
-        if settings.ai_provider in {"coarena", "reformboss"} and not models:
+        # Шлюзы сами отдают список моделей: «auto» подставляется по умолчанию.
+        if not models and (
+            settings.ai_provider in GATEWAY_PROVIDERS
+            or (settings.ai_model or "").strip().lower() == "auto"
+        ):
             models = ["auto"]
-        self._auto = any(m.lower() == "auto" for m in models)
+        self._auto = any(m.lower() == "auto" for m in models) or (
+            settings.ai_model or ""
+        ).strip().lower() == "auto"
         seed = (
             [m.strip() for m in COARENA_MODELS.split(",") if m.strip()]
             if settings.ai_provider == "coarena"
             else []
         )
-        base = settings.ai_base_url.rstrip("/")
+        base = (settings.ai_base_url or "").rstrip("/")
         self._pool = ModelPool(
             seed + [m for m in models if m.lower() != "auto"],
-            discover_url=base + "/models" if self._auto else "",
+            discover_url=base + "/models" if self._auto and base else "",
             api_key=settings.ai_api_key,
             rotate=settings.ai_model_rotate,
         )
@@ -122,32 +176,124 @@ class AIClient:
             else self._pool
         )
 
-        # Резервный провайдер: если основной исчерпал дневной лимит или лёг,
-        # отвечаем через него. Настраивается одной строкой AI_FALLBACK_PROVIDER.
-        self._fallback: AIClient | None = None
-        fallback = (settings.ai_fallback_provider or "").strip().lower()
-        if fallback and fallback != settings.ai_provider and fallback in DEFAULT_MODELS:
-            self._fallback = AIClient(
-                replace(
-                    settings,
-                    ai_provider=fallback,
-                    ai_api_key=_provider_key(fallback),
-                    ai_base_url=DEFAULT_BASE_URLS[fallback],
-                    ai_model=DEFAULT_MODELS[fallback],
-                    ai_vision_model=DEFAULT_VISION_MODELS[fallback],
-                    ai_models=(),
-                    ai_fallback_provider="",
+    def _build_fallbacks(self, settings: Settings) -> None:
+        """Собирает цепочку резервных провайдеров из AI_FALLBACK_PROVIDER.
+
+        Если включён AI_AUTO_FALLBACK (по умолчанию), в конец цепочки молча
+        добавляются все остальные провайдеры, у которых есть свой ключ. Так
+        новый ключ в переменных окружения начинает работать сам, без правки
+        AI_FALLBACK_PROVIDER, а порядок из настройки остаётся приоритетным.
+        """
+        names = list(normalize_providers(settings.ai_fallback_provider))
+        if settings.ai_auto_fallback:
+            for name in DEFAULT_MODELS:
+                if name not in names and _fallback_key(name, settings):
+                    names.append(name)
+        chain: list[AIClient] = []
+        seen = {settings.ai_provider}
+        for name in names:
+            if name in seen:
+                continue
+            seen.add(name)
+            key = _fallback_key(name, settings)
+            if not key:
+                # Без ключа провайдер всё равно ответит 401 — не тратим запрос.
+                log.info("Резервный провайдер %s пропущен: нет ключа", name)
+                continue
+            chain.append(
+                AIClient(
+                    replace(
+                        settings,
+                        ai_provider=name,
+                        ai_api_key=key,
+                        ai_base_url=(
+                            _provider_base(name) or DEFAULT_BASE_URLS.get(name, "")
+                        ),
+                        ai_model=DEFAULT_MODELS[name],
+                        ai_vision_model=DEFAULT_VISION_MODELS[name],
+                        ai_models=(
+                            self._base.ai_models
+                            if name == self._base.ai_provider
+                            else ()
+                        ),
+                        ai_vision_models=(
+                            self._base.ai_vision_models
+                            if name == self._base.ai_provider
+                            else ()
+                        ),
+                        ai_fallback_provider="",
+                        ai_auto_fallback=False,
+                    )
                 )
             )
+        self._fallbacks = chain
+
+    async def use_provider(self, provider: str, fallback: str = "") -> None:
+        """Переключает провайдера на лету — из админки, без рестарта.
+
+        Модели и ключ берутся для нового провайдера, старые резервные клиенты
+        закрываются, чтобы не держать лишние соединения.
+        """
+        provider = (provider or "").strip().lower()
+        if provider not in DEFAULT_MODELS:
+            return
+        fallback = ",".join(normalize_providers(fallback or ""))
+        if (
+            provider == self._settings.ai_provider
+            and fallback == self._settings.ai_fallback_provider
+        ):
+            return
+        old_fallbacks = self._fallbacks
+        self._build(
+            replace(
+                self._base,
+                ai_provider=provider,
+                ai_api_key=_fallback_key(provider, self._base),
+                ai_base_url=(
+                    _provider_base(provider) or DEFAULT_BASE_URLS.get(provider, "")
+                ),
+                ai_model=DEFAULT_MODELS[provider],
+                ai_vision_model=DEFAULT_VISION_MODELS[provider],
+                ai_models=(
+                    self._base.ai_models if provider == self._base.ai_provider else ()
+                ),
+                ai_vision_models=(
+                    self._base.ai_vision_models
+                    if provider == self._base.ai_provider
+                    else ()
+                ),
+                ai_fallback_provider=fallback,
+            )
+        )
+        self._build_fallbacks(self._settings)
+        for client in old_fallbacks:
+            await client.close()
+        # Админ выбрал провайдера руками — пробуем его сразу, даже если он
+        # остывал после сбоя: возможно, ключ уже починили.
+        providerhealth.mark_ok(provider)
+        for client in self._fallbacks:
+            providerhealth.mark_ok(client._settings.ai_provider)
+        log.info(
+            "Провайдер ИИ переключён: %s (резерв: %s)",
+            provider,
+            fallback or "нет",
+        )
 
     @property
     def configured(self) -> bool:
         return bool(self._settings.ai_api_key)
 
+    @property
+    def _gateway(self) -> bool:
+        """Шлюз сам выдаёт каталог моделей — значит, можно ротировать их."""
+        return self._settings.ai_provider in GATEWAY_PROVIDERS
+
     async def start(self) -> None:
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=65, connect=15)
+                timeout=aiohttp.ClientTimeout(total=65, connect=15),
+                # Cloudflare у части шлюзов пропускает только браузерный UA.
+                headers={"User-Agent": HTTP_USER_AGENT},
             )
 
     async def close(self) -> None:
@@ -157,8 +303,9 @@ class AIClient:
             closer = getattr(session, "close", None)
             if closer is not None:
                 await closer()
-        if self._fallback is not None:
-            await self._fallback.close()
+        if self._fallbacks:
+            for client in self._fallbacks:
+                await client.close()
 
     async def reply(
         self,
@@ -180,29 +327,85 @@ class AIClient:
         Если передан image, запрос уходит в vision-модель (с запасными вариантами).
         """
         if not self.configured:
-            await self._alert_down("ИИ не настроен: нет AI_API_KEY.")
-            raise AIError("ИИ не настроен: администратору нужно добавить переменную AI_API_KEY.")
+            exc = AIError(
+                "ИИ не настроен: администратору нужно добавить ключ выбранного провайдера."
+            )
+            if self._fallbacks:
+                return await self._fallback_reply(
+                    exc,
+                    history,
+                    text,
+                    model=model,
+                    system_prompt=system_prompt,
+                    image=image,
+                    image_mime=image_mime,
+                    vision_model=vision_model,
+                    subject_note=subject_note,
+                    style_note=style_note,
+                    lang=lang,
+                    task_lang=task_lang,
+                )
+            await self._alert_down(exc)
+            raise exc
 
         settings = self._settings
-        # Coarena/OpenAI-совместимые провайдеры используют общий список моделей.
+        # Провайдер остывает после сбоя, а живой резерв есть — не ждём таймаут,
+        # сразу отвечаем через резерв. Пользователь разницы не заметит.
+        if (
+            self._fallbacks
+            and not providerhealth.available(settings.ai_provider)
+            and any(
+                providerhealth.available(client._settings.ai_provider)
+                for client in self._fallbacks
+            )
+        ):
+            log.info(
+                "Провайдер %s остывает (%.0f с) -> сразу резерв",
+                settings.ai_provider,
+                providerhealth.cooldown_left(settings.ai_provider),
+            )
+            return await self._fallback_reply(
+                AIError(
+                    f"Провайдер {settings.ai_provider} временно недоступен.",
+                    retryable=True,
+                ),
+                history,
+                text,
+                model=model,
+                system_prompt=system_prompt,
+                image=image,
+                image_mime=image_mime,
+                vision_model=vision_model,
+                subject_note=subject_note,
+                style_note=style_note,
+                lang=lang,
+                task_lang=task_lang,
+            )
+        # Шлюзы отдают список моделей через /models — подтягиваем его.
         if self._pool.needs_discovery:
             await self.start()
             assert self._session is not None
             await self._pool.discover(self._session)
 
         pool = self._vision_pool if image is not None else self._pool
-        if settings.ai_provider in {"coarena", "reformboss"}:
-            primary = (
+        if self._gateway:
+            wanted = (
                 (vision_model or settings.ai_vision_model)
                 if image is not None
                 else (model or settings.ai_model)
             )
+            primary = "" if (wanted or "").strip().lower() == "auto" else (wanted or "")
             ordered = pool.order(vision=image is not None)
             # Выбранная пользователем модель идёт первой, даже если её нет в пуле.
-            if model and image is None and primary:
+            if primary:
                 candidates = [primary] + [m for m in ordered if m != primary]
             else:
-                candidates = ordered or ([primary] if primary else [])
+                candidates = ordered
+            if not candidates and primary:
+                candidates = [primary]
+            # Модели, упёршиеся в регион/тариф, не зовём снова — но если
+            # все остыли, всё равно пробуем: пустой ответ хуже.
+            candidates = providerhealth.filter_models(settings.ai_provider, candidates)
         elif image is not None:
             candidates = [vision_model or settings.ai_vision_model]
             # VISION_FALLBACKS — id моделей OpenRouter; другим провайдерам они
@@ -229,6 +432,7 @@ class AIClient:
         for round_no in range(rounds):
             for candidate in candidates:
                 try:
+                    started = time.monotonic()
                     answer, truncated = await self._call(
                         model=candidate,
                         history=history,
@@ -236,6 +440,7 @@ class AIClient:
                         prompt=prompt,
                         image=image,
                         image_mime=image_mime,
+                        timeout=providerhealth.call_timeout(settings.ai_provider),
                     )
                     if truncated and image is None:
                         answer = await self._extend(
@@ -246,11 +451,43 @@ class AIClient:
                             answer=answer,
                         )
                     pool.mark_ok(candidate)
+                    providerhealth.mark_ok(settings.ai_provider)
+                    providerhealth.mark_model_ok(settings.ai_provider, candidate)
+                    providerhealth.mark_latency(
+                        settings.ai_provider, time.monotonic() - started
+                    )
                     return sanitize_answer(answer)
                 except AIError as exc:
                     errors.append(exc)
-                    # Ключ/скоуп или единственная модель: сразу пробуем резерв.
-                    if exc.fatal or (not exc.retryable and len(candidates) == 1):
+                    # Классифицируем по сырому ответу: в тексте для пользователя
+                    # нет слов «country or region» и «insufficient_scope».
+                    raw_reason = exc.raw or str(exc)
+                    provider_level = providerhealth.is_provider_level(
+                        exc.status, raw_reason
+                    )
+                    # Сбой провайдера целиком (ключ, регион, лимит, 5xx) — остужаем
+                    # его, чтобы следующий вопрос не ждал тот же таймаут.
+                    if provider_level:
+                        providerhealth.mark_failed(
+                            settings.ai_provider,
+                            status=exc.status,
+                            reason=raw_reason,
+                        )
+                    else:
+                        # Проблема одной модели: остальные модели провайдера живы.
+                        providerhealth.mark_model_failed(
+                            settings.ai_provider,
+                            candidate,
+                            status=exc.status,
+                            reason=raw_reason,
+                        )
+                    # Ключ/скоуп, сбой всего провайдера или единственная модель:
+                    # сразу пробуем резерв, не тратя время на другие модели.
+                    if (
+                        exc.fatal
+                        or provider_level
+                        or (not exc.retryable and len(candidates) == 1)
+                    ):
                         return await self._fallback_reply(
                             exc,
                             history,
@@ -346,22 +583,41 @@ class AIClient:
         text: str,
         **kwargs: Any,
     ) -> str:
-        """Отвечает через резервного провайдера или поднимает исходную ошибку."""
-        if self._fallback is None:
+        """Отвечает через цепочку резервных провайдеров или поднимает ошибку."""
+        if not self._fallbacks:
             await self._alert_down(exc)
             raise exc
         # Имена моделей у провайдеров разные: нельзя передавать резерву чужой
         # AI_MODEL/AI_VISION_MODEL, иначе гарантированный 404.
         kwargs.pop("model", None)
         kwargs.pop("vision_model", None)
-        log.warning("Основной провайдер не ответил (%s) -> резервный", exc)
-        try:
-            return await self._fallback.reply(history, text, **kwargs)
-        except AIError:
-            raise
-        except Exception as fallback_exc:  # noqa: BLE001
-            await self._alert_down(fallback_exc)
-            raise
+        last: AIError = exc
+        # Живые резервы первыми, быстрые — впереди медленных: пользователь
+        # ждёт ответ, а не порядок из настройки.
+        names = [client._settings.ai_provider for client in self._fallbacks]
+        ordered = providerhealth.fastest(providerhealth.order(names))
+        by_name = {client._settings.ai_provider: client for client in self._fallbacks}
+        for name in ordered:
+            client = by_name.get(name)
+            if client is None or not client.configured:
+                continue
+            log.warning(
+                "Провайдер %s не ответил (%s) -> резерв %s",
+                self._settings.ai_provider,
+                exc,
+                name,
+            )
+            try:
+                return await client.reply(history, text, **kwargs)
+            except AIError as fallback_exc:
+                last = fallback_exc
+                continue
+            except Exception as fallback_exc:  # noqa: BLE001
+                log.warning("Резервный провайдер упал: %r", fallback_exc)
+                last = AIError("Сервис ИИ сейчас недоступен. Попробуй через минуту.")
+                continue
+        await self._alert_down(exc)
+        raise last
 
     # ------------------------------------------------------------------ один запрос
     @staticmethod
@@ -404,6 +660,7 @@ class AIClient:
         image: bytes | None,
         image_mime: str,
         assistant_prefix: str | None = None,
+        timeout: float | None = None,
     ) -> tuple[str, bool]:
         settings = self._settings
         await self.start()
@@ -413,6 +670,13 @@ class AIClient:
         # Провайдер может не принять большой лимит: тогда повторяем с
         # проверенными 4000 токенами, а не роняем ответ целиком.
         limits = [budget] + ([4000] if budget > 4000 else [])
+        # Мёртвый провайдер должен отвалиться быстро: иначе пользователь ждёт
+        # впустую, пока живой резерв простаивает.
+        request_timeout = (
+            aiohttp.ClientTimeout(total=timeout, connect=min(15.0, timeout))
+            if timeout
+            else None
+        )
 
         data: dict[str, Any] | None = None
         async with self._semaphore:
@@ -441,7 +705,10 @@ class AIClient:
                     )
                 try:
                     async with self._session.post(
-                        url, json=payload, headers=headers
+                        url,
+                        json=payload,
+                        headers=headers,
+                        timeout=request_timeout,
                     ) as resp:
                         raw = await resp.text()
                         if resp.status != 200:
@@ -476,7 +743,13 @@ class AIClient:
                                     )
                                 )
                                 retryable = retryable or not fatal
-                            raise AIError(message, retryable=retryable, fatal=fatal)
+                            raise AIError(
+                                message,
+                                retryable=retryable,
+                                fatal=fatal,
+                                status=resp.status,
+                                raw=raw,
+                            )
                         data = json.loads(raw)
                 except TimeoutError as exc:
                     log.warning(
@@ -673,7 +946,9 @@ class AIClient:
             pass
         haystack = f"{lowered} {code}"
 
-        if "location is not supported" in lowered:
+        if "location is not supported" in lowered or (
+            "not available in your" in lowered and "region" in lowered
+        ):
             return (
                 "Провайдер ИИ блокирует запросы из этой страны. "
                 "Смените провайдера (AI_PROVIDER=openrouter) или запустите бота "

@@ -25,8 +25,18 @@ from aiogram.types import (
     Message,
 )
 
-from config import Settings, parse_packages
+from config import (
+    DEFAULT_MODELS,
+    PROVIDER_LABELS,
+    Settings,
+    _provider_key,
+    _specific_provider_key,
+    normalize_providers,
+    provider_key_state,
+    parse_packages,
+)
 from ai import AIClient, AIError
+import providerhealth
 import models as model_catalog
 from roles import (
     ASSIGNABLE,
@@ -416,6 +426,118 @@ async def render_model_access(
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def _provider_has_key(name: str) -> bool:
+    return bool(_provider_key(name))
+
+
+def _fallback_ready(name: str) -> bool:
+    """У провайдера есть собственный ключ — его можно ставить в авто-резерв."""
+    return bool(_specific_provider_key(name))
+
+
+def _providers_text(raw: str) -> str:
+    """«crowllm,openrouter» -> «CrowLLM → OpenRouter»."""
+    names = [PROVIDER_LABELS.get(name, name) for name in normalize_providers(raw)]
+    return " → ".join(names) if names else "не задан"
+
+
+async def render_providers(
+    store: Store, settings: Settings
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Выбор основного провайдера ИИ и порядка резервных."""
+    import providerhealth
+
+    rt = await load_runtime(store, settings)
+    overrides = await store.all_settings()
+
+    def mark(key: str) -> str:
+        return " ✏️" if key in overrides else ""
+
+    health = providerhealth.snapshot()
+    models_down = providerhealth.model_snapshot()
+
+    def health_note(name: str) -> str:
+        state = health.get(name) or {}
+        left = float(state.get("left") or 0.0)
+        if left > 0:
+            kind = state.get("kind") or "error"
+            icon = {
+                "geo": "🌍",
+                "auth": "🔑",
+                "limit": "⏳",
+                "down": "💤",
+                "error": "⚠️",
+            }.get(kind, "⚠️")
+            return f" {icon} остывает {int(left)} с"
+        # Провайдер жив, но отдельные модели упёрлись в регион или тариф.
+        blocked = [
+            item for item in models_down.values() if item.get("provider") == name
+        ]
+        if blocked:
+            return f" · 🚫 моделей: {len(blocked)}"
+        latency = float(state.get("latency") or 0.0)
+        if latency > 0:
+            return f" · {latency:.1f} с"
+        return ""
+
+    lines = [
+        "🔌 <b>Провайдеры ИИ</b>",
+        "<i>Выбранный провайдер отвечает первым, резервные — по порядку, "
+        "если основной упал, упёрся в лимит или не принял ключ.</i>",
+        "",
+    ]
+    for name, label in PROVIDER_LABELS.items():
+        active = " ✅" if name == rt.provider else ""
+        key_state = provider_key_state(name)
+        reserve = ""
+        if name in normalize_providers(rt.fallback):
+            reserve = " · 🛟 резерв"
+        elif name != rt.provider and settings.ai_auto_fallback and _fallback_ready(name):
+            reserve = " · 🛟 авто"
+        lines.append(
+            f"• <b>{escape(label)}</b>{active}{reserve} — <i>{key_state}</i>"
+            f"{health_note(name)}"
+        )
+    lines += [
+        "",
+        f"Текущий: <b>{escape(PROVIDER_LABELS.get(rt.provider, rt.provider))}</b>"
+        f"{mark('ai_provider')}",
+        f"Резерв: <b>{escape(_providers_text(rt.fallback))}</b>"
+        f"{mark('ai_fallback_provider')}",
+        "",
+        "<i>Ключи задаются в переменных окружения: "
+        "<code>CROWLLM_API_KEY</code>, <code>UNLEASHEDAPI_API_KEY</code>, "
+        "<code>MILIONSEEK_API_KEY</code>, <code>AI_API_KEY</code> и т. д. "
+        "Адрес API можно переопределить через <code>&lt;PROVIDER&gt;_BASE_URL</code>. "
+        "Упавший провайдер автоматически заменяется живым, переключать вручную "
+        "не нужно.</i>",
+    ]
+    buttons: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for name, label in PROVIDER_LABELS.items():
+        prefix = "✅ " if name == rt.provider else ""
+        row.append(
+            InlineKeyboardButton(
+                text=f"{prefix}{label}", callback_data=f"adm:set:provider:{name}"
+            )
+        )
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text="🛟 Порядок резерва",
+                callback_data="adm:set:edit:ai_fallback_provider",
+            )
+        ]
+    )
+    buttons.append([InlineKeyboardButton(text="⬅️ К настройкам", callback_data="adm:settings")])
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 async def render_settings(
     store: Store, settings: Settings, bot: Bot | None = None
 ) -> tuple[str, InlineKeyboardMarkup]:
@@ -455,6 +577,8 @@ async def render_settings(
         "<i>Изменения применяются сразу, рестарт не нужен.</i>\n\n"
         f"📏 Лимит в день: <b>{rt.daily_limit if rt.daily_limit > 0 else 'безлимит'}</b>{mark('daily_limit')}\n"
         f"🧾 Глубина контекста: <b>{rt.max_context}</b>{mark('max_context')}\n"
+        f"🔌 Провайдер: <b>{escape(PROVIDER_LABELS.get(rt.provider, rt.provider))}</b>{mark('ai_provider')}\n"
+        f"🛟 Резерв: <b>{escape(_providers_text(rt.fallback))}</b>{mark('ai_fallback_provider')}\n"
         f"🧠 Модель: <code>{escape(rt.model)}</code>{mark('ai_model')}\n"
         f"🖼 Модель для фото: <code>{escape(rt.vision_model)}</code>{mark('ai_vision_model')}\n"
         f"📝 Промпт: <i>{escape(prompt)}</i>{mark('system_prompt')}\n\n"
@@ -470,9 +594,16 @@ async def render_settings(
             InlineKeyboardButton(text="✏️ Лимит", callback_data="adm:set:edit:daily_limit"),
             InlineKeyboardButton(text="✏️ Контекст", callback_data="adm:set:edit:max_context"),
         ],
+        [InlineKeyboardButton(text="🔌 Провайдер ИИ", callback_data="adm:set:providers")],
         [
             InlineKeyboardButton(text="✏️ Модель", callback_data="adm:set:edit:ai_model"),
             InlineKeyboardButton(text="✏️ Модель фото", callback_data="adm:set:edit:ai_vision_model"),
+        ],
+        [
+            InlineKeyboardButton(
+                text="🛟 Резервные провайдеры",
+                callback_data="adm:set:edit:ai_fallback_provider",
+            )
         ],
         [InlineKeyboardButton(text="✏️ Промпт", callback_data="adm:set:edit:system_prompt")],
         [
@@ -653,6 +784,17 @@ async def render_role_card(
 HINTS = {
     "daily_limit": "Сколько сообщений в день разрешено одному пользователю. 0 — без ограничений.\n\nПришли число:",
     "max_context": "Сколько последних сообщений держать в контексте диалога. 0 — без памяти.\n\nПришли число:",
+    "ai_provider": (
+        "Основной провайдер ИИ. Удобнее выбирать кнопкой: "
+        "/admin → ⚙️ Настройки → 🔌 Провайдер ИИ.\n\nПришли имя провайдера:"
+    ),
+    "ai_fallback_provider": (
+        "Резервные провайдеры через запятую — в порядке попыток.\n"
+        "Пример: <code>crowllm,unleashedapi,milionseek,openrouter</code>\n"
+        "Пусто — резерва нет. Доступно: "
+        + ", ".join(f"<code>{name}</code>" for name in DEFAULT_MODELS)
+        + "\n\nПришли список:"
+    ),
     "ai_model": "Имя модели провайдера.\nПримеры: <code>openrouter/free</code>, <code>google/gemma-4-31b-it:free</code>, <code>gemini-3.8-flash</code>.\n\nПришли название:",
     "ai_vision_model": "Модель, которая читает изображения.\nПримеры: <code>openrouter/free</code>, <code>inclusionai/ling-3.2-flash:free</code>, <code>nvidia/nemotron-3.5-super-vl:free</code>.\nЕсли модель занята, бот сам пробует резервные.\n\nПришли название:",
     "system_prompt": "Новый системный промпт — характер и правила ассистента.\n\nПришли текст:",
@@ -871,6 +1013,7 @@ async def cb_ai_test(
     loop = asyncio.get_running_loop()
     started = loop.time()
     try:
+        await ai.use_provider(runtime.provider, runtime.fallback)
         answer = await ai.reply([], "Ответь одним словом: работает?")
         elapsed = loop.time() - started
         text = (
@@ -1484,6 +1627,41 @@ async def cb_settings(call: CallbackQuery, bot: Bot, store: Store, settings: Set
     await call.answer()
 
 
+@router.callback_query(F.data == "adm:set:providers")
+async def cb_set_providers(
+    call: CallbackQuery, store: Store, settings: Settings, state: FSMContext
+) -> None:
+    await state.clear()
+    text, kb = await render_providers(store, settings)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    await call.answer()
+
+@router.callback_query(F.data.startswith("adm:set:provider:"))
+async def cb_set_provider(
+    call: CallbackQuery, ai: AIClient, store: Store, settings: Settings, state: FSMContext
+) -> None:
+    name = call.data.rsplit(":", 1)[1]
+    if name not in DEFAULT_MODELS:
+        await call.answer("Неизвестный провайдер", show_alert=True)
+        return
+    await state.clear()
+    await store.set_setting("ai_provider", name)
+    # Модели у провайдеров разные: старые имена дадут 404, поэтому сбрасываем.
+    await store.delete_setting("ai_model")
+    await store.delete_setting("ai_vision_model")
+    rt = await load_runtime(store, settings)
+    await ai.use_provider(rt.provider, rt.fallback)
+    text, kb = await render_providers(store, settings)
+    with contextlib.suppress(TelegramAPIError):
+        await call.message.edit_text(text, reply_markup=kb)
+    note = "" if _provider_has_key(name) else (
+        f"\n⚠️ Ключ {name.upper()}_API_KEY не задан — добавь его в переменные окружения."
+    )
+    if _provider_has_key(name) and not providerhealth.available(name):
+        note += "\n🔄 Провайдер был в остывании — пробую его заново."
+    await call.answer(f"Провайдер: {PROVIDER_LABELS.get(name, name)}{note}", show_alert=bool(note))
+
 @router.callback_query(F.data.startswith("adm:set:edit:"))
 async def cb_set_edit(call: CallbackQuery, state: FSMContext) -> None:
     key = call.data.rsplit(":", 1)[1]
@@ -1512,7 +1690,12 @@ async def cb_set_cancel(
 
 @router.callback_query(F.data == "adm:set:reset")
 async def cb_set_reset(
-    call: CallbackQuery, bot: Bot, store: Store, settings: Settings, state: FSMContext
+    call: CallbackQuery,
+    bot: Bot,
+    ai: AIClient,
+    store: Store,
+    settings: Settings,
+    state: FSMContext,
 ) -> None:
     await state.clear()
     for key in EDITABLE:
@@ -1524,6 +1707,8 @@ async def cb_set_reset(
     from subscription import reset_cache
 
     reset_cache()
+    rt = await load_runtime(store, settings)
+    await ai.use_provider(rt.provider, rt.fallback)
     text, kb = await render_settings(store, settings, bot)
     with contextlib.suppress(TelegramAPIError):
         await call.message.edit_text(text, reply_markup=kb)
@@ -1548,7 +1733,12 @@ async def cb_set_gate(
 
 @router.message(Panel.edit, F.text)
 async def on_edit_value(
-    message: Message, bot: Bot, store: Store, settings: Settings, state: FSMContext
+    message: Message,
+    bot: Bot,
+    ai: AIClient,
+    store: Store,
+    settings: Settings,
+    state: FSMContext,
 ) -> None:
     data = await state.get_data()
     key = data.get("edit_key")
@@ -1573,6 +1763,31 @@ async def on_edit_value(
         if key == "max_context" and number > 100:
             await message.answer("Слишком много. Поставь до 100.")
             return
+    elif key == "ai_provider":
+        name = value.strip().lower()
+        if name not in DEFAULT_MODELS:
+            await message.answer(
+                "Неизвестный провайдер. Доступно: "
+                + ", ".join(f"<code>{item}</code>" for item in DEFAULT_MODELS)
+            )
+            return
+        value = name
+    elif key == "ai_fallback_provider":
+        names = normalize_providers(value)
+        unknown = [
+            chunk.strip()
+            for chunk in value.replace(";", ",").split(",")
+            if chunk.strip() and chunk.strip().lower() not in DEFAULT_MODELS
+        ]
+        if unknown:
+            await message.answer(
+                "Не понял: <code>"
+                + escape(", ".join(unknown))
+                + "</code>. Доступно: "
+                + ", ".join(f"<code>{item}</code>" for item in DEFAULT_MODELS)
+            )
+            return
+        value = ",".join(names)
     elif key in {"ai_model", "ai_vision_model"}:
         if not value or len(value) > 120 or " " in value:
             await message.answer("Имя модели — одно слово без пробелов, например <code>openrouter/free</code>.")
@@ -1627,6 +1842,13 @@ async def on_edit_value(
             return
 
     await store.set_setting(key, value)
+    if key in {"ai_provider", "ai_fallback_provider"}:
+        # Смена провайдера применяется сразу: модели у него свои.
+        if key == "ai_provider":
+            await store.delete_setting("ai_model")
+            await store.delete_setting("ai_vision_model")
+        rt = await load_runtime(store, settings)
+        await ai.use_provider(rt.provider, rt.fallback)
     if key in {"required_channel", "required_channel_url"}:
         from subscription import reset_cache
 

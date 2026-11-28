@@ -522,6 +522,8 @@ body.scrolled .topbar{background:linear-gradient(180deg,var(--dock-bg),rgba(0,0,
 .admin-danger{color:#f87171;border-color:rgba(248,113,113,.28)}
 .admin-value{margin-top:8px;padding:10px 12px;border-radius:12px;background:rgba(127,127,127,.08);
   border:1px solid var(--st);font-size:13px;line-height:1.45;word-break:break-word;white-space:pre-wrap}
+.admin-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip-active{color:var(--ink);border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.12)}
 .admin-setting{padding:12px 0;border-top:1px solid var(--st)}
 .admin-setting:first-child{border-top:0;padding-top:0}
 .admin-input{margin-top:8px;width:100%;box-sizing:border-box}

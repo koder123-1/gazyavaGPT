@@ -150,6 +150,7 @@ async def on_inline(
 
     model = runtime.model or None
     try:
+        await ai.use_provider(runtime.provider, runtime.fallback)
         answer = await asyncio.wait_for(
             ai.reply(
                 [],

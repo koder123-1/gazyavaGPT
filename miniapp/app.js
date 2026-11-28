@@ -2321,7 +2321,23 @@
       return html + "</div>";
     }).join("");
 
-    view.innerHTML = adminHead("Настройки") +
+    var providers = d.providers || [];
+    var providerChips = providers.map(function (p) {
+      var mark = p.active ? "✅ " : (p.reserve ? "🛟 " : "");
+      var cls = "chip" + (p.active ? " chip-active" : "");
+      var state = p.cooling > 0
+        ? " · 💤 " + p.cooling + " с"
+        : (p.key_state && p.key_state !== "свой ключ" ? " · " + p.key_state : "");
+      return '<button class="' + cls + '" data-action="admin-provider" data-value="' +
+        esc(p.id) + '">' + mark + esc(p.label) + state + "</button>";
+    }).join(" ");
+    var providerCard = providers.length
+      ? '<div class="card"><div class="row-title">🔌 Провайдер ИИ</div>' +
+        '<div class="row-sub">Выбранный отвечает первым, резервные (🛟) — по порядку</div>' +
+        '<div class="admin-chips">' + providerChips + "</div></div>"
+      : "";
+
+    view.innerHTML = adminHead("Настройки") + providerCard +
       '<div class="card"><div class="row"><div><div class="row-title">🔐 Гейт в чатах</div>' +
       '<div class="row-sub">' + (s.group_gate ? "включён" : "выключен") + "</div></div>" +
       '<button class="btn small secondary" data-action="admin-gate">' +
@@ -3071,6 +3087,11 @@
       }).then(function (data) {
         state.adminEdit = null;
         adminApply("settings", data);
+      }).catch(function (err) { toast(err.message || t("error_text")); });
+    } else if (action === "admin-provider") {
+      adminApi("settings.provider", { provider: value }).then(function (data) {
+        adminApply("settings", data);
+        toast((data && data.notice) || "Провайдер переключён");
       }).catch(function (err) { toast(err.message || t("error_text")); });
     } else if (action === "admin-setting-reset") {
       adminMutate("settings.reset", {}, "settings");

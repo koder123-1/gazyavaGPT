@@ -13,6 +13,8 @@ import logging
 import time
 from typing import Any, Callable
 
+from config import HTTP_USER_AGENT
+
 log = logging.getLogger("aipool")
 
 # Сколько секунд не трогаем модель после 429/5xx/таймаута.
@@ -52,6 +54,13 @@ def parse_model_list(payload: Any) -> tuple[list[str], set[str]]:
         models.append(name)
         if capabilities.get("vision"):
             vision.add(name)
+    if not vision:
+        # Часть шлюзов не помечает vision в каталоге: угадываем по имени,
+        # иначе на фото бот начнёт перебирать текстовые модели.
+        for name in models:
+            low = name.lower()
+            if any(marker in low for marker in ("-vl", "vision", "omni", "4v")):
+                vision.add(name)
     return models, vision
 
 
@@ -137,7 +146,7 @@ class ModelPool:
                 return
             if self._models and now - self._discovered_at < self._ttl:
                 return
-            headers = {"Accept": "application/json"}
+            headers = {"Accept": "application/json", "User-Agent": HTTP_USER_AGENT}
             if self._api_key:
                 headers["Authorization"] = f"Bearer {self._api_key}"
             try:

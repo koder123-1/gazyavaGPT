@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from config import Settings, parse_packages
+from config import (
+    DEFAULT_MODELS,
+    DEFAULT_VISION_MODELS,
+    Settings,
+    normalize_providers,
+    parse_packages,
+)
 from store import Store
 
 EDITABLE = {
     "daily_limit": "Лимит сообщений в день",
     "max_context": "Глубина контекста",
+    "ai_provider": "Провайдер ИИ",
+    "ai_fallback_provider": "Резервные провайдеры",
     "ai_model": "Модель ИИ",
     "ai_vision_model": "Модель для изображений",
     "system_prompt": "Системный промпт",
@@ -28,6 +36,8 @@ class Runtime:
     model: str
     vision_model: str
     system_prompt: str
+    provider: str = ""
+    fallback: str = ""
     star_packages: tuple[tuple[int, int], ...] = ()
     star_rate: int = 10
     image_daily_limit: int = 1
@@ -70,11 +80,35 @@ def _safe_bool(value: str | None, default: bool) -> bool:
 
 async def load_runtime(store: Store, settings: Settings) -> Runtime:
     overrides = await store.all_settings()
+    # Провайдера можно менять из админки: значение из БД важнее .env.
+    provider = (overrides.get("ai_provider") or settings.ai_provider).strip().lower()
+    if provider not in DEFAULT_MODELS:
+        provider = settings.ai_provider
+    fallback = (
+        overrides.get("ai_fallback_provider")
+        if overrides.get("ai_fallback_provider") is not None
+        else settings.ai_fallback_provider
+    )
+    fallback = ",".join(normalize_providers(fallback or ""))
+    # Модель по умолчанию зависит от провайдера: при смене провайдера
+    # подставляем его модель, а не чужую из .env.
+    default_model = (
+        settings.ai_model
+        if provider == settings.ai_provider
+        else DEFAULT_MODELS[provider]
+    )
+    default_vision = (
+        settings.ai_vision_model
+        if provider == settings.ai_provider
+        else DEFAULT_VISION_MODELS[provider]
+    )
     return Runtime(
         daily_limit=max(0, _safe_int(overrides.get("daily_limit"), settings.daily_limit)),
         max_context=max(0, _safe_int(overrides.get("max_context"), settings.max_context)),
-        model=(overrides.get("ai_model") or settings.ai_model).strip(),
-        vision_model=(overrides.get("ai_vision_model") or settings.ai_vision_model).strip(),
+        provider=provider,
+        fallback=fallback,
+        model=(overrides.get("ai_model") or default_model).strip(),
+        vision_model=(overrides.get("ai_vision_model") or default_vision).strip(),
         system_prompt=(overrides.get("system_prompt") or settings.system_prompt).strip(),
         star_packages=_safe_packages(overrides.get("star_packages"), settings.star_packages),
         star_rate=max(1, _safe_int(overrides.get("star_rate"), settings.star_rate)),
